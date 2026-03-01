@@ -1,0 +1,18 @@
+{
+  "name": "niahere",
+  "version": "0.1.0",
+  "description": "A simple AI sidekick.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "ai",
+    "assistant",
+    "sidekick",
+    "cli"
+  ],
+  "author": "Aman",
+  "license": "MIT",
+  "private": false
+}
