@@ -49,7 +49,7 @@ export function isRunning(workspace: string): boolean {
 export function startDaemon(workspace: string): number {
   const { daemonLog } = getPaths(workspace);
   mkdirSync(dirname(daemonLog), { recursive: true });
-  const logFd = openSync(daemonLog, "w");
+  const logFd = openSync(daemonLog, "a");
 
   const proc = Bun.spawn(["bun", "run", "src/cli.ts", "run"], {
     cwd: workspace,
