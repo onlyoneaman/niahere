@@ -9,7 +9,7 @@ export interface Config {
 }
 
 const DEFAULTS: Omit<Config, "workspace"> = {
-  model: "codex-mini-latest",
+  model: "default",
   activeHours: { start: "00:00", end: "23:59" },
 };
 

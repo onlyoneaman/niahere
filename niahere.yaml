@@ -1,4 +1,4 @@
-model: codex-mini-latest
+model: default
 active_hours:
   start: "00:00"
   end: "23:59"

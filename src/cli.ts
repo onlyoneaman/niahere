@@ -1,6 +1,9 @@
 import { resolve } from "path";
 import { isRunning, readPid, runDaemon, startDaemon, stopDaemon } from "./daemon";
 import { readState } from "./logger";
+import { parseJobs } from "./cron";
+import { loadConfig } from "./config";
+import { runJob } from "./runner";
 
 const workspace = resolve(import.meta.dir, "..");
 const command = process.argv[2];
@@ -49,7 +52,30 @@ switch (command) {
     break;
   }
 
+  case "job": {
+    const jobName = process.argv[3];
+    if (!jobName) {
+      console.log("Usage: niahere job <name>");
+      process.exit(1);
+    }
+    const config = loadConfig(workspace);
+    const jobs = parseJobs(workspace);
+    const job = jobs.find((j) => j.name === jobName);
+    if (!job) {
+      console.log(`Job not found: ${jobName}`);
+      console.log(`Available: ${jobs.map((j) => j.name).join(", ")}`);
+      process.exit(1);
+    }
+    console.log(`Running job: ${job.name} (model: ${config.model})`);
+    const result = await runJob(workspace, job, config.model);
+    console.log(`\nStatus: ${result.status}`);
+    console.log(`Duration: ${result.duration_ms}ms`);
+    if (result.result) console.log(`\nResult:\n${result.result}`);
+    if (result.error) console.log(`\nError: ${result.error}`);
+    break;
+  }
+
   default:
-    console.log("Usage: niahere <start|stop|status>");
+    console.log("Usage: niahere <start|stop|status|job>");
     process.exit(1);
 }

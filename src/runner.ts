@@ -20,14 +20,15 @@ export async function runJob(workspace: string, job: Job, model: string): Promis
   writeState(workspace, state);
 
   try {
-    const proc = Bun.spawn(
-      ["codex", "exec", job.prompt, "-m", model, "--skip-git-repo-check", "--ephemeral"],
-      {
-        stdout: "pipe",
-        stderr: "pipe",
-        env: { ...process.env },
-      }
-    );
+    const args = ["codex", "exec", job.prompt, "--skip-git-repo-check", "--ephemeral"];
+    if (model && model !== "default") {
+      args.splice(3, 0, "-m", model);
+    }
+    const proc = Bun.spawn(args, {
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { ...process.env },
+    });
 
     const stdout = await new Response(proc.stdout).text();
     const stderr = await new Response(proc.stderr).text();
