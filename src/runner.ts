@@ -1,5 +1,8 @@
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
 import type { Job } from "./cron";
 import { appendAudit, readState, writeState, type AuditEntry, type JobState } from "./logger";
+import { getPaths } from "./paths";
 
 export interface JobResult {
   job: string;
@@ -8,6 +11,41 @@ export interface JobResult {
   result: string;
   duration_ms: number;
   error?: string;
+}
+
+function loadIdentity(workspace: string): string {
+  const { selfDir } = getPaths(workspace);
+  const parts: string[] = [];
+
+  const identityPath = join(selfDir, "identity.md");
+  if (existsSync(identityPath)) {
+    parts.push(readFileSync(identityPath, "utf8").trim());
+  }
+
+  const soulPath = join(selfDir, "soul.md");
+  if (existsSync(soulPath)) {
+    parts.push(readFileSync(soulPath, "utf8").trim());
+  }
+
+  return parts.join("\n\n");
+}
+
+function buildPrompt(workspace: string, job: Job): string {
+  const identity = loadIdentity(workspace);
+  const timestamp = new Date().toISOString();
+
+  const parts: string[] = [];
+
+  if (identity) {
+    parts.push(identity);
+  }
+
+  parts.push(`Current UTC time: ${timestamp}`);
+  parts.push(`Job: ${job.name} (schedule: ${job.schedule})`);
+  parts.push(`---`);
+  parts.push(job.prompt);
+
+  return parts.join("\n\n");
 }
 
 export async function runJob(workspace: string, job: Job, model: string): Promise<JobResult> {
@@ -20,7 +58,8 @@ export async function runJob(workspace: string, job: Job, model: string): Promis
   writeState(workspace, state);
 
   try {
-    const args = ["codex", "exec", job.prompt, "--skip-git-repo-check", "--ephemeral"];
+    const fullPrompt = buildPrompt(workspace, job);
+    const args = ["codex", "exec", fullPrompt, "-C", workspace, "--ephemeral"];
     if (model && model !== "default") {
       args.splice(3, 0, "-m", model);
     }
