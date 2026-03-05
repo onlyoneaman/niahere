@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { dirname } from "path";
 import cron from "node-cron";
 import { getPaths } from "./paths";
@@ -47,9 +47,13 @@ export function isRunning(workspace: string): boolean {
 }
 
 export function startDaemon(workspace: string): number {
+  const { daemonLog } = getPaths(workspace);
+  mkdirSync(dirname(daemonLog), { recursive: true });
+  const logFd = openSync(daemonLog, "a");
+
   const proc = Bun.spawn(["bun", "run", "src/cli.ts", "run"], {
     cwd: workspace,
-    stdio: ["ignore", "ignore", "ignore"],
+    stdio: ["ignore", logFd, logFd],
     env: { ...process.env },
   });
 
