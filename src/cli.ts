@@ -5,6 +5,7 @@ import { readState } from "./logger";
 import { parseJobs } from "./cron";
 import { loadConfig } from "./config";
 import { runJob } from "./runner";
+import { localTime } from "./time";
 
 const workspace = resolve(import.meta.dir, "..");
 const command = process.argv[2];
@@ -41,9 +42,18 @@ switch (command) {
     if (entries.length > 0) {
       console.log("\nJobs:");
       for (const [name, info] of entries) {
-        console.log(`  ${name}: ${info.status} (last: ${info.lastRun}, ${info.duration_ms}ms)`);
+        console.log(`  ${name}: ${info.status} (last: ${localTime(new Date(info.lastRun))}, ${info.duration_ms}ms)`);
       }
     }
+    break;
+  }
+
+  case "restart": {
+    if (isRunning(workspace)) {
+      stopDaemon(workspace);
+    }
+    const newPid = startDaemon(workspace);
+    console.log(`nia restarted (pid: ${newPid})`);
     break;
   }
 
@@ -77,6 +87,6 @@ switch (command) {
   }
 
   default:
-    console.log("Usage: nia <start|stop|status|job>");
+    console.log("Usage: nia <start|stop|restart|status|job>");
     process.exit(1);
 }

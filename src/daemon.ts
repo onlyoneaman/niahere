@@ -5,6 +5,11 @@ import { getPaths } from "./paths";
 import { loadConfig } from "./config";
 import { parseJobs } from "./cron";
 import { runJob } from "./runner";
+import { localTime } from "./time";
+
+function log(msg: string): void {
+  console.log(`[${localTime()}] ${msg}`);
+}
 
 export function writePid(workspace: string, pid: number): void {
   const { pid: pidPath } = getPaths(workspace);
@@ -84,10 +89,10 @@ export async function runDaemon(workspace: string): Promise<void> {
 
   writePid(workspace, process.pid);
 
-  console.log(`[nia] daemon started (pid: ${process.pid}, jobs: ${jobs.length})`);
+  log(`[nia] daemon started (pid: ${process.pid}, jobs: ${jobs.length})`);
 
   const shutdown = () => {
-    console.log("[nia] shutting down...");
+    log("[nia] shutting down...");
     removePid(workspace);
     process.exit(0);
   };
@@ -96,11 +101,11 @@ export async function runDaemon(workspace: string): Promise<void> {
   process.on("SIGINT", shutdown);
 
   for (const job of jobs) {
-    console.log(`[nia] scheduling "${job.name}" → ${job.schedule}`);
+    log(`[nia] scheduling "${job.name}" → ${job.schedule}`);
     cron.schedule(job.schedule, async () => {
-      console.log(`[nia] running job: ${job.name}`);
+      log(`[nia] running job: ${job.name}`);
       const result = await runJob(workspace, job, config.model);
-      console.log(`[nia] job "${job.name}" ${result.status} (${result.duration_ms}ms)`);
+      log(`[nia] job "${job.name}" ${result.status} (${result.duration_ms}ms)`);
     });
   }
 

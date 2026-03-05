@@ -3,6 +3,7 @@ import { join } from "path";
 import type { Job } from "./cron";
 import { appendAudit, readState, writeState, type AuditEntry, type JobState } from "./logger";
 import { getPaths } from "./paths";
+import { localTime } from "./time";
 
 export interface JobResult {
   job: string;
@@ -32,15 +33,13 @@ function loadIdentity(workspace: string): string {
 
 function buildPrompt(workspace: string, job: Job): string {
   const identity = loadIdentity(workspace);
-  const timestamp = new Date().toISOString();
-
   const parts: string[] = [];
 
   if (identity) {
     parts.push(identity);
   }
 
-  parts.push(`Current UTC time: ${timestamp}`);
+  parts.push(`Current time: ${localTime()}`);
   parts.push(`Job: ${job.name} (schedule: ${job.schedule})`);
   parts.push(`---`);
   parts.push(job.prompt);
