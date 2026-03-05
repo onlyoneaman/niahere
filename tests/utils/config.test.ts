@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, writeFileSync, rmSync } from "fs";
-import { loadConfig } from "./config";
+import { loadConfig } from "../../src/utils/config";
 
 const TEST_DIR = "/tmp/test-nia-config";
 

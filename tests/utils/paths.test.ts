@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { resolve } from "path";
-import { getPaths } from "./paths";
+import { getPaths } from "../../src/utils/paths";
 
 describe("getPaths", () => {
   test("returns all expected path keys", () => {

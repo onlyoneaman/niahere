@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, writeFileSync, rmSync } from "fs";
-import { parseJobs } from "./cron";
+import { parseJobs } from "../../src/core/cron";
 
 const TEST_DIR = "/tmp/test-nia-cron";
 

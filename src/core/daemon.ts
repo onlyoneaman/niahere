@@ -1,11 +1,11 @@
 import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { dirname } from "path";
 import cron from "node-cron";
-import { getPaths } from "./paths";
-import { loadConfig } from "./config";
+import { getPaths } from "../utils/paths";
+import { loadConfig } from "../utils/config";
 import { parseJobs } from "./cron";
 import { runJob } from "./runner";
-import { localTime } from "./time";
+import { localTime } from "../utils/time";
 
 function log(msg: string): void {
   console.log(`[${localTime()}] ${msg}`);

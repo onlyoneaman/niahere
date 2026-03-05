@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { basename, join } from "path";
 import yaml from "js-yaml";
-import { getPaths } from "./paths";
+import { getPaths } from "../utils/paths";
 
 export interface Job {
   name: string;

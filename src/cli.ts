@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 import { resolve } from "path";
-import { isRunning, readPid, runDaemon, startDaemon, stopDaemon } from "./daemon";
-import { readState } from "./logger";
-import { parseJobs } from "./cron";
-import { loadConfig } from "./config";
-import { runJob } from "./runner";
-import { localTime } from "./time";
+import { isRunning, readPid, runDaemon, startDaemon, stopDaemon } from "./core/daemon";
+import { readState } from "./utils/logger";
+import { parseJobs } from "./core/cron";
+import { loadConfig } from "./utils/config";
+import { runJob } from "./core/runner";
+import { localTime } from "./utils/time";
 
 const workspace = resolve(import.meta.dir, "..");
 const command = process.argv[2];

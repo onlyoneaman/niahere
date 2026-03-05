@@ -1,9 +1,9 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import type { Job } from "./cron";
-import { appendAudit, readState, writeState, type AuditEntry, type JobState } from "./logger";
-import { getPaths } from "./paths";
-import { localTime } from "./time";
+import { appendAudit, readState, writeState, type AuditEntry, type JobState } from "../utils/logger";
+import { getPaths } from "../utils/paths";
+import { localTime } from "../utils/time";
 
 export interface JobResult {
   job: string;

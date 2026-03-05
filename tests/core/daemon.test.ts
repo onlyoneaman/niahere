@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, rmSync } from "fs";
-import { readPid, writePid, removePid, isRunning } from "./daemon";
+import { readPid, writePid, removePid, isRunning } from "../../src/core/daemon";
 
 const TEST_DIR = "/tmp/test-nia-daemon";
 
