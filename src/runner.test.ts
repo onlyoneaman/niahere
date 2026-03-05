@@ -3,7 +3,7 @@ import { mkdirSync, rmSync, readFileSync } from "fs";
 import { runJob } from "./runner";
 import type { Job } from "./cron";
 
-const TEST_DIR = "/tmp/test-niahere-runner";
+const TEST_DIR = "/tmp/test-nia-runner";
 
 beforeEach(() => {
   mkdirSync(`${TEST_DIR}/tmp`, { recursive: true });

@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, rmSync } from "fs";
 import { readPid, writePid, removePid, isRunning } from "./daemon";
 
-const TEST_DIR = "/tmp/test-niahere-daemon";
+const TEST_DIR = "/tmp/test-nia-daemon";
 
 beforeEach(() => {
   mkdirSync(`${TEST_DIR}/tmp`, { recursive: true });

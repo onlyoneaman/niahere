@@ -14,11 +14,11 @@ export interface Paths {
 export function getPaths(workspace: string): Paths {
   return {
     workspace,
-    pid: resolve(workspace, "tmp/niahere.pid"),
+    pid: resolve(workspace, "tmp/nia.pid"),
     daemonLog: resolve(workspace, "tmp/daemon.log"),
     cronState: resolve(workspace, "tmp/cron-state.json"),
     cronAudit: resolve(workspace, "tmp/cron-audit.jsonl"),
-    config: resolve(workspace, "niahere.yaml"),
+    config: resolve(workspace, "nia.yaml"),
     jobsDir: resolve(workspace, "jobs"),
     selfDir: resolve(workspace, "self"),
   };

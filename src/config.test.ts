@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, writeFileSync, rmSync } from "fs";
 import { loadConfig } from "./config";
 
-const TEST_DIR = "/tmp/test-niahere-config";
+const TEST_DIR = "/tmp/test-nia-config";
 
 beforeEach(() => {
   mkdirSync(TEST_DIR, { recursive: true });
@@ -13,9 +13,9 @@ afterEach(() => {
 });
 
 describe("loadConfig", () => {
-  test("loads valid config from niahere.yaml", () => {
+  test("loads valid config from nia.yaml", () => {
     writeFileSync(
-      `${TEST_DIR}/niahere.yaml`,
+      `${TEST_DIR}/nia.yaml`,
       `model: gpt-5.3-codex-spark\nactive_hours:\n  start: "09:00"\n  end: "22:00"\n`
     );
     const config = loadConfig(TEST_DIR);

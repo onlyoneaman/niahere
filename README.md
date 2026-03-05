@@ -1,9 +1,9 @@
-# NiaHere
+# nia
 
-NiaHere is a simple AI sidekick for getting quick help with everyday tasks and workflows.
+A simple AI sidekick that runs as a background agent, executing scheduled tasks via codex.
 
 - npm package: [`niahere`](https://www.npmjs.com/package/niahere)
-- Website: [https://niahere.com](https://niahere.com)
+- CLI command: `nia`
 
 ## Author
 

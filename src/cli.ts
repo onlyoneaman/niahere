@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import { resolve } from "path";
 import { isRunning, readPid, runDaemon, startDaemon, stopDaemon } from "./daemon";
 import { readState } from "./logger";
@@ -12,28 +13,28 @@ switch (command) {
   case "start": {
     if (isRunning(workspace)) {
       const pid = readPid(workspace);
-      console.log(`niahere is already running (pid: ${pid})`);
+      console.log(`nia is already running (pid: ${pid})`);
       process.exit(1);
     }
     const pid = startDaemon(workspace);
-    console.log(`niahere started (pid: ${pid})`);
+    console.log(`nia started (pid: ${pid})`);
     break;
   }
 
   case "stop": {
     if (!isRunning(workspace)) {
-      console.log("niahere is not running");
+      console.log("nia is not running");
       process.exit(1);
     }
     stopDaemon(workspace);
-    console.log("niahere stopped");
+    console.log("nia stopped");
     break;
   }
 
   case "status": {
     const running = isRunning(workspace);
     const pid = readPid(workspace);
-    console.log(`niahere: ${running ? `running (pid: ${pid})` : "stopped"}`);
+    console.log(`nia: ${running ? `running (pid: ${pid})` : "stopped"}`);
 
     const state = readState(workspace);
     const entries = Object.entries(state);
@@ -55,7 +56,7 @@ switch (command) {
   case "job": {
     const jobName = process.argv[3];
     if (!jobName) {
-      console.log("Usage: niahere job <name>");
+      console.log("Usage: nia job <name>");
       process.exit(1);
     }
     const config = loadConfig(workspace);
@@ -76,6 +77,6 @@ switch (command) {
   }
 
   default:
-    console.log("Usage: niahere <start|stop|status|job>");
+    console.log("Usage: nia <start|stop|status|job>");
     process.exit(1);
 }

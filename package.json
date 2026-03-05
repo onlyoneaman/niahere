@@ -17,6 +17,9 @@
     "agent",
     "cron"
   ],
+  "bin": {
+    "nia": "src/cli.ts"
+  },
   "author": "Aman",
   "license": "MIT",
   "private": false,

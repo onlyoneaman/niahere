@@ -80,10 +80,10 @@ export async function runDaemon(workspace: string): Promise<void> {
 
   writePid(workspace, process.pid);
 
-  console.log(`[niahere] daemon started (pid: ${process.pid}, jobs: ${jobs.length})`);
+  console.log(`[nia] daemon started (pid: ${process.pid}, jobs: ${jobs.length})`);
 
   const shutdown = () => {
-    console.log("[niahere] shutting down...");
+    console.log("[nia] shutting down...");
     removePid(workspace);
     process.exit(0);
   };
@@ -92,11 +92,11 @@ export async function runDaemon(workspace: string): Promise<void> {
   process.on("SIGINT", shutdown);
 
   for (const job of jobs) {
-    console.log(`[niahere] scheduling "${job.name}" → ${job.schedule}`);
+    console.log(`[nia] scheduling "${job.name}" → ${job.schedule}`);
     cron.schedule(job.schedule, async () => {
-      console.log(`[niahere] running job: ${job.name}`);
+      console.log(`[nia] running job: ${job.name}`);
       const result = await runJob(workspace, job, config.model);
-      console.log(`[niahere] job "${job.name}" ${result.status} (${result.duration_ms}ms)`);
+      console.log(`[nia] job "${job.name}" ${result.status} (${result.duration_ms}ms)`);
     });
   }
 
