@@ -1,0 +1,4 @@
+model: codex-mini-latest
+active_hours:
+  start: "00:00"
+  end: "23:59"

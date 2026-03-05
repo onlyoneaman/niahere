@@ -1,0 +1,5 @@
+schedule: "*/5 * * * *"
+enabled: true
+prompt: |
+  You are a heartbeat monitor. Write the current UTC timestamp
+  and a brief status message. This is a liveness check.

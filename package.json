@@ -2,17 +2,32 @@
   "name": "niahere",
   "version": "0.1.0",
   "description": "A simple AI sidekick.",
-  "main": "index.js",
+  "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "bun run src/cli.ts start",
+    "stop": "bun run src/cli.ts stop",
+    "status": "bun run src/cli.ts status",
+    "dev": "bun run src/cli.ts run",
+    "test": "bun test"
   },
   "keywords": [
     "ai",
     "assistant",
     "sidekick",
-    "cli"
+    "agent",
+    "cron"
   ],
   "author": "Aman",
   "license": "MIT",
-  "private": false
+  "private": false,
+  "dependencies": {
+    "js-yaml": "^4.1.1",
+    "node-cron": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.10",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node-cron": "^3.0.11",
+    "typescript": "^5.9.3"
+  }
 }
