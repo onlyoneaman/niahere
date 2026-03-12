@@ -8,7 +8,8 @@
     "stop": "bun run src/cli.ts stop",
     "status": "bun run src/cli.ts status",
     "dev": "bun run src/cli.ts run",
-    "test": "bun test"
+    "test": "bun test",
+    "seed": "bun run src/db/seed.ts"
   },
   "keywords": [
     "ai",

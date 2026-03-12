@@ -346,6 +346,11 @@ switch (command) {
     break;
   }
 
+  case "seed": {
+    await import("./db/seed");
+    break;
+  }
+
   case "chat": {
     await startRepl(workspace);
     break;
@@ -387,6 +392,6 @@ switch (command) {
   }
 
   default:
-    console.log("Usage: nia <start|stop|restart|reload|status|job|chat|telegram>");
+    console.log("Usage: nia <start|stop|restart|reload|status|seed|job|chat|telegram>");
     process.exit(1);
 }
