@@ -4,10 +4,18 @@ import { Session, Message, ActiveEngine } from "../db/models";
 
 const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 
+export interface SendResult {
+  result: string;
+  costUsd: number;
+  turns: number;
+}
+
+export type StreamCallback = (textSoFar: string) => void;
+
 export interface ChatEngine {
   sessionId: string | null;
   room: string;
-  send(userMessage: string): Promise<{ result: string; costUsd: number; turns: number }>;
+  send(userMessage: string, onStream?: StreamCallback): Promise<SendResult>;
   close(): void;
 }
 
@@ -64,7 +72,9 @@ class MessageStream {
 
 interface PendingResult {
   userMessage: string;
-  resolve: (value: { result: string; costUsd: number; turns: number }) => void;
+  onStream: StreamCallback | null;
+  accumulatedText: string;
+  resolve: (value: SendResult) => void;
   reject: (error: Error) => void;
 }
 
@@ -132,7 +142,6 @@ export async function createChatEngine(workspace: string, opts: EngineOptions): 
               await Session.create(sessionId, room);
             }
 
-            // Save user message on init
             if (pending) {
               await Message.save({
                 sessionId,
@@ -141,6 +150,15 @@ export async function createChatEngine(workspace: string, opts: EngineOptions): 
                 content: pending.userMessage,
                 isFromAgent: false,
               });
+            }
+          }
+
+          // Stream text deltas to caller
+          if (message.type === "stream_event" && pending?.onStream) {
+            const event = (message as any).event;
+            if (event?.type === "content_block_delta" && event.delta?.type === "text_delta" && event.delta.text) {
+              pending.accumulatedText += event.delta.text;
+              pending.onStream(pending.accumulatedText);
             }
           }
 
@@ -176,7 +194,6 @@ export async function createChatEngine(workspace: string, opts: EngineOptions): 
           }
         }
       } catch (err) {
-        // Query crashed — reject pending if any, mark as dead
         if (pending) {
           await ActiveEngine.unregister(room).catch(() => {});
           pending.reject(err instanceof Error ? err : new Error(String(err)));
@@ -199,15 +216,15 @@ export async function createChatEngine(workspace: string, opts: EngineOptions): 
       return room;
     },
 
-    async send(userMessage: string) {
+    async send(userMessage: string, onStream?: StreamCallback) {
       await ActiveEngine.register(room, channel);
 
       if (!alive || !stream) {
         startQuery();
       }
 
-      return new Promise<{ result: string; costUsd: number; turns: number }>((resolve, reject) => {
-        pending = { userMessage, resolve, reject };
+      return new Promise<SendResult>((resolve, reject) => {
+        pending = { userMessage, onStream: onStream || null, accumulatedText: "", resolve, reject };
         stream!.push(userMessage);
       });
     },

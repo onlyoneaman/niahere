@@ -12,35 +12,9 @@ interface ChatState {
   lock: Promise<void>;
 }
 
+const STREAM_EDIT_INTERVAL = 2000; // min ms between edits (Telegram rate limit)
 const MAX_RETRIES = 3;
 const BASE_RETRY_MS = 1000;
-
-async function replyWithRetry(ctx: any, text: string): Promise<void> {
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    try {
-      await ctx.reply(text, { parse_mode: "Markdown" });
-      return;
-    } catch (err) {
-      if (attempt === 0) {
-        try {
-          await ctx.reply(text);
-          return;
-        } catch {
-          // fall through to retry
-        }
-      }
-
-      if (attempt < MAX_RETRIES - 1) {
-        const delay = BASE_RETRY_MS * Math.pow(2, attempt);
-        log.warn({ attempt: attempt + 1, delay, chatId: ctx.chatId }, "telegram reply failed, retrying");
-        await new Promise((r) => setTimeout(r, delay));
-      } else {
-        log.error({ err, chatId: ctx.chatId }, "telegram reply failed after all retries");
-        throw err;
-      }
-    }
-  }
-}
 
 class TelegramChannel implements Channel {
   name = "telegram";
@@ -106,30 +80,88 @@ class TelegramChannel implements Channel {
       return chatId === allowedChatId;
     }
 
+    const bot = new Bot(token);
+
     async function processMessage(ctx: any, state: ChatState, text: string): Promise<void> {
       const chatId = ctx.chatId;
       log.info({ chatId, text: text.slice(0, 100) }, "telegram message received");
 
-      const typingInterval = setInterval(() => {
-        ctx.replyWithChatAction("typing").catch(() => {});
-      }, 4000);
-      ctx.replyWithChatAction("typing").catch(() => {});
+      // Send placeholder message
+      let sentMsg: any;
+      try {
+        sentMsg = await bot.api.sendMessage(chatId, "Thinking...");
+      } catch (err) {
+        log.error({ err, chatId }, "failed to send placeholder");
+        return;
+      }
+
+      const messageId = sentMsg.message_id;
+      let lastEditedText = "";
+      let lastEditTime = 0;
+      let pendingEdit: string | null = null;
+      let editTimer: ReturnType<typeof setTimeout> | null = null;
+
+      function scheduleEdit(newText: string): void {
+        // Truncate for Telegram's 4096 char limit, add ellipsis
+        const display = newText.length > 4000 ? newText.slice(-4000) + "..." : newText;
+        if (display === lastEditedText) return;
+
+        pendingEdit = display;
+        const now = Date.now();
+        const elapsed = now - lastEditTime;
+
+        if (elapsed >= STREAM_EDIT_INTERVAL && !editTimer) {
+          doEdit();
+        } else if (!editTimer) {
+          editTimer = setTimeout(doEdit, STREAM_EDIT_INTERVAL - elapsed);
+        }
+      }
+
+      function doEdit(): void {
+        editTimer = null;
+        if (!pendingEdit || pendingEdit === lastEditedText) return;
+
+        const text = pendingEdit;
+        pendingEdit = null;
+        lastEditedText = text;
+        lastEditTime = Date.now();
+
+        bot.api.editMessageText(chatId, messageId, text).catch(() => {});
+      }
 
       try {
-        const { result } = await state.engine.send(text);
-        clearInterval(typingInterval);
+        const { result } = await state.engine.send(text, (textSoFar) => {
+          const trimmed = textSoFar.trim();
+          if (trimmed) scheduleEdit(trimmed);
+        });
 
+        // Clear any pending edit timer
+        if (editTimer) {
+          clearTimeout(editTimer);
+          editTimer = null;
+        }
+
+        // Final edit with complete response
         const reply = result.trim() || "(no response)";
-        await replyWithRetry(ctx, reply);
+        try {
+          await bot.api.editMessageText(chatId, messageId, reply, { parse_mode: "Markdown" });
+        } catch {
+          // Markdown failed, try plain text
+          await bot.api.editMessageText(chatId, messageId, reply).catch(() => {});
+        }
+
         log.info({ chatId, chars: result.length }, "telegram reply sent");
       } catch (err) {
-        clearInterval(typingInterval);
+        if (editTimer) {
+          clearTimeout(editTimer);
+          editTimer = null;
+        }
+
+        const errMsg = err instanceof Error ? err.message : String(err);
         log.error({ err, chatId }, "telegram message processing failed");
-        await ctx.reply(`[error] ${err instanceof Error ? err.message : String(err)}`).catch(() => {});
+        await bot.api.editMessageText(chatId, messageId, `[error] ${errMsg}`).catch(() => {});
       }
     }
-
-    const bot = new Bot(token);
 
     bot.command("start", async (ctx) => {
       if (!isAllowed(ctx.chatId)) return;
@@ -175,7 +207,6 @@ class TelegramChannel implements Channel {
   }
 }
 
-// Self-register: returns null if no token configured
 registerChannel(() => {
   if (!process.env.TELEGRAM_BOT_TOKEN) return null;
   return new TelegramChannel();
