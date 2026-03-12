@@ -29,5 +29,32 @@ describe("loadConfig", () => {
     expect(config.model).toBe("default");
     expect(config.activeHours.start).toBe("00:00");
     expect(config.activeHours.end).toBe("23:59");
+    expect(config.timezone).toBeTruthy();
+  });
+
+  test("loads valid timezone", () => {
+    writeFileSync(`${TEST_DIR}/nia.yaml`, `timezone: America/New_York\n`);
+    const config = loadConfig(TEST_DIR);
+    expect(config.timezone).toBe("America/New_York");
+  });
+
+  test("falls back to system timezone on invalid timezone", () => {
+    writeFileSync(`${TEST_DIR}/nia.yaml`, `timezone: Not/A/Timezone\n`);
+    const config = loadConfig(TEST_DIR);
+    expect(config.timezone).not.toBe("Not/A/Timezone");
+    expect(config.timezone).toBeTruthy();
+  });
+
+  test("falls back on invalid YAML", () => {
+    writeFileSync(`${TEST_DIR}/nia.yaml`, `{{{invalid yaml`);
+    const config = loadConfig(TEST_DIR);
+    expect(config.model).toBe("default");
+  });
+
+  test("falls back on invalid active_hours format", () => {
+    writeFileSync(`${TEST_DIR}/nia.yaml`, `active_hours:\n  start: "9am"\n  end: "10pm"\n`);
+    const config = loadConfig(TEST_DIR);
+    expect(config.activeHours.start).toBe("00:00");
+    expect(config.activeHours.end).toBe("23:59");
   });
 });

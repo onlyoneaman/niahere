@@ -47,4 +47,19 @@ describe("parseJobs", () => {
     const jobs = parseJobs(TEST_DIR);
     expect(jobs).toEqual([]);
   });
+
+  test("skips jobs with invalid cron schedule", () => {
+    writeFileSync(
+      `${TEST_DIR}/jobs/badcron.yaml`,
+      `schedule: "not a cron"\nprompt: do stuff\n`
+    );
+    const jobs = parseJobs(TEST_DIR);
+    expect(jobs).toHaveLength(0);
+  });
+
+  test("skips jobs with invalid YAML syntax", () => {
+    writeFileSync(`${TEST_DIR}/jobs/broken.yaml`, `{{{nope`);
+    const jobs = parseJobs(TEST_DIR);
+    expect(jobs).toHaveLength(0);
+  });
 });

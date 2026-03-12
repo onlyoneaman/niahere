@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, rmSync, readFileSync } from "fs";
 import { runJob } from "../../src/core/runner";
-import type { Job } from "../../src/core/cron";
+import type { JobInput } from "../../src/core/runner";
 
 const TEST_DIR = "/tmp/test-nia-runner";
 
@@ -15,10 +15,9 @@ afterEach(() => {
 
 describe("runJob", () => {
   test("executes codex exec and returns result", async () => {
-    const job: Job = {
+    const job: JobInput = {
       name: "test-echo",
       schedule: "*/5 * * * *",
-      enabled: true,
       prompt: "Say hello",
     };
 
