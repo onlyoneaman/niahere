@@ -3,17 +3,17 @@ import { createChatEngine } from "./engine";
 import { runMigrations } from "../db/migrate";
 import { closeDb } from "../db/connection";
 
-export async function startRepl(workspace: string): Promise<void> {
+export async function startRepl(): Promise<void> {
   try {
     await runMigrations();
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`Failed to connect to postgres: ${msg}`);
-    console.error(`Set DATABASE_URL in .env (default: postgres://localhost:5432/niahere)`);
+    console.error(`Set database_url in ~/.niahere/config.yaml or run \`nia init\``);
     process.exit(1);
   }
 
-  const engine = await createChatEngine(workspace, { room: "terminal", channel: "terminal", resume: false });
+  const engine = await createChatEngine({ room: "terminal", channel: "terminal", resume: false });
 
   console.log("New chat session started.");
   console.log('Type your message and press Enter. Type "exit" or Ctrl+C to quit.\n');

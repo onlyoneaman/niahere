@@ -1,59 +1,82 @@
 #!/usr/bin/env bun
-import { resolve } from "path";
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { isRunning, readPid, runDaemon, startDaemon, stopDaemon } from "./core/daemon";
 import { readState } from "./utils/logger";
 import { parseJobs } from "./core/cron";
-import { loadConfig } from "./utils/config";
+import { getConfig, resetConfig } from "./utils/config";
 import { runJob } from "./core/runner";
 import { localTime } from "./utils/time";
 import { startRepl } from "./chat/repl";
 import { runMigrations } from "./db/migrate";
 import { Message, ActiveEngine, Job } from "./db/models";
 import { closeDb } from "./db/connection";
+import { getNiaHome, getPaths } from "./utils/paths";
 import cron from "node-cron";
+import yaml from "js-yaml";
 
-const workspace = resolve(import.meta.dir, "..");
+// Set LOG_LEVEL from config before anything else logs
+try {
+  const config = getConfig();
+  if (config.log_level) {
+    process.env.LOG_LEVEL = config.log_level;
+  }
+} catch {
+  // config.yaml may not exist yet (e.g. before `nia init`)
+}
+
 const command = process.argv[2];
+
+// Ensure ~/.niahere/ exists for commands that need it
+if (command && command !== "init" && command !== "help") {
+  const home = getNiaHome();
+  mkdirSync(home, { recursive: true });
+}
 
 switch (command) {
   case "start": {
-    if (isRunning(workspace)) {
-      const pid = readPid(workspace);
-      console.log(`nia is already running (pid: ${pid})`);
-      process.exit(1);
+    const useService = process.argv[3] === "--service";
+    if (useService) {
+      const { installService } = await import("./commands/service");
+      await installService();
+    } else {
+      if (isRunning()) {
+        const pid = readPid();
+        console.log(`nia is already running (pid: ${pid})`);
+        process.exit(1);
+      }
+      const pid = startDaemon();
+      console.log(`nia started (pid: ${pid})`);
     }
-    const pid = startDaemon(workspace);
-    console.log(`nia started (pid: ${pid})`);
     break;
   }
 
   case "stop": {
-    if (!isRunning(workspace)) {
-      console.log("nia is not running");
-      process.exit(1);
+    const useService = process.argv[3] === "--service";
+    if (useService) {
+      const { uninstallService } = await import("./commands/service");
+      await uninstallService();
+    } else {
+      if (!isRunning()) {
+        console.log("nia is not running");
+        process.exit(1);
+      }
+      stopDaemon();
+      console.log("nia stopped");
     }
-    stopDaemon(workspace);
-    console.log("nia stopped");
     break;
   }
 
   case "status": {
-    const running = isRunning(workspace);
-    const pid = readPid(workspace);
+    const running = isRunning();
+    const pid = readPid();
     console.log(`nia: ${running ? `running (pid: ${pid})` : "stopped"}`);
 
     // Telegram status
-    const envPath = resolve(workspace, ".env");
+    const config = getConfig();
     let telegramStatus = "not configured";
-    if (existsSync(envPath)) {
-      const env = readFileSync(envPath, "utf8");
-      const tokenLine = env.split("\n").find((l) => l.startsWith("TELEGRAM_BOT_TOKEN="));
-      if (tokenLine) {
-        const token = tokenLine.split("=")[1]?.trim();
-        const masked = token ? `...${token.slice(-6)}` : "";
-        telegramStatus = running ? `active (${masked})` : `configured (${masked}, daemon stopped)`;
-      }
+    if (config.telegram_bot_token) {
+      const masked = `...${config.telegram_bot_token.slice(-6)}`;
+      telegramStatus = running ? `active (${masked})` : `configured (${masked}, daemon stopped)`;
     }
     console.log(`telegram: ${telegramStatus}`);
 
@@ -64,7 +87,7 @@ switch (command) {
       const jobs = await Job.list();
       if (jobs.length > 0) {
         console.log("\nJobs:");
-        const state = readState(workspace);
+        const state = readState();
         for (const job of jobs) {
           const info = state[job.name];
           const status = info ? `${info.status} (last: ${localTime(new Date(info.lastRun))}, ${info.duration_ms}ms)` : "never run";
@@ -92,7 +115,7 @@ switch (command) {
       await closeDb();
     } catch {
       // postgres not available — show file-based job state
-      const state = readState(workspace);
+      const state = readState();
       const entries = Object.entries(state);
       if (entries.length > 0) {
         console.log("\nJobs (from state file):");
@@ -105,17 +128,17 @@ switch (command) {
   }
 
   case "restart": {
-    if (isRunning(workspace)) {
-      stopDaemon(workspace);
+    if (isRunning()) {
+      stopDaemon();
     }
-    const newPid = startDaemon(workspace);
+    const newPid = startDaemon();
     console.log(`nia restarted (pid: ${newPid})`);
     break;
   }
 
   case "reload": {
-    const pid = readPid(workspace);
-    if (!pid || !isRunning(workspace)) {
+    const pid = readPid();
+    if (!pid || !isRunning()) {
       console.log("nia is not running");
       process.exit(1);
     }
@@ -131,7 +154,7 @@ switch (command) {
 
   case "run": {
     // Foreground mode — used by daemon's child process
-    await runDaemon(workspace);
+    await runDaemon();
     break;
   }
 
@@ -256,7 +279,7 @@ switch (command) {
       }
 
       case "import": {
-        const yamlJobs = parseJobs(workspace);
+        const yamlJobs = parseJobs();
         if (yamlJobs.length === 0) {
           console.log("No YAML job files found in jobs/");
           break;
@@ -309,7 +332,7 @@ switch (command) {
 
         // Fall back to YAML
         if (!job) {
-          const yamlJobs = parseJobs(workspace);
+          const yamlJobs = parseJobs();
           const found = yamlJobs.find((j) => j.name === name);
           if (found) job = found;
         }
@@ -319,9 +342,9 @@ switch (command) {
           process.exit(1);
         }
 
-        const config = loadConfig(workspace);
+        const config = getConfig();
         console.log(`Running job: ${job.name} (model: ${config.model})`);
-        const result = await runJob(workspace, job, config.model);
+        const result = await runJob(job);
         console.log(`\nStatus: ${result.status}`);
         console.log(`Duration: ${result.duration_ms}ms`);
         if (result.result) console.log(`\nResult:\n${result.result}`);
@@ -352,46 +375,62 @@ switch (command) {
   }
 
   case "chat": {
-    await startRepl(workspace);
+    await startRepl();
     break;
   }
 
   case "telegram": {
     const token = process.argv[3];
-    const envPath = resolve(workspace, ".env");
+    const chatId = process.argv[4];
+    const paths = getPaths();
 
     if (!token) {
-      if (existsSync(envPath)) {
-        const env = readFileSync(envPath, "utf8");
-        const hasToken = env.split("\n").some((l) => l.startsWith("TELEGRAM_BOT_TOKEN="));
-        console.log(hasToken ? "Telegram: configured" : "Telegram: not configured");
+      const config = getConfig();
+      if (config.telegram_bot_token) {
+        const masked = `...${config.telegram_bot_token.slice(-6)}`;
+        console.log(`Telegram: configured (${masked})`);
       } else {
         console.log("Telegram: not configured");
       }
-      console.log("\nUsage: nia telegram <bot-token>");
+      console.log("\nUsage: nia telegram <bot-token> [chat-id]");
       break;
     }
 
-    let lines: string[] = [];
-    if (existsSync(envPath)) {
-      lines = readFileSync(envPath, "utf8").split("\n");
+    // Read existing config.yaml, update telegram fields, write back
+    let raw: Record<string, unknown> = {};
+    if (existsSync(paths.config)) {
+      try {
+        const parsed = yaml.load(readFileSync(paths.config, "utf8"));
+        if (parsed && typeof parsed === "object") {
+          raw = parsed as Record<string, unknown>;
+        }
+      } catch {
+        // corrupt config — start fresh
+      }
     }
 
-    const idx = lines.findIndex((l) => l.startsWith("TELEGRAM_BOT_TOKEN="));
-    const entry = `TELEGRAM_BOT_TOKEN=${token}`;
-    if (idx >= 0) {
-      lines[idx] = entry;
-    } else {
-      lines.push(entry);
+    raw.telegram_bot_token = token;
+    if (chatId) {
+      raw.telegram_chat_id = Number(chatId);
     }
 
-    writeFileSync(envPath, lines.filter((l) => l !== "").join("\n") + "\n");
-    console.log("Telegram bot token saved to .env");
+    mkdirSync(getNiaHome(), { recursive: true });
+    writeFileSync(paths.config, yaml.dump(raw, { lineWidth: -1 }));
+    resetConfig();
+
+    console.log("Telegram bot token saved to ~/.niahere/config.yaml");
+    if (chatId) console.log(`Chat ID: ${chatId}`);
     console.log("Run `nia restart` to activate.");
     break;
   }
 
+  case "init": {
+    const { runInit } = await import("./commands/init");
+    await runInit();
+    break;
+  }
+
   default:
-    console.log("Usage: nia <start|stop|restart|reload|status|seed|job|chat|telegram>");
-    process.exit(1);
+    console.log("Usage: nia <start|stop|restart|reload|status|init|seed|job|chat|telegram>");
+    process.exit(command ? 1 : 0);
 }

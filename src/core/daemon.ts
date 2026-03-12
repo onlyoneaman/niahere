@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSyn
 import { dirname } from "path";
 import cron from "node-cron";
 import { getPaths } from "../utils/paths";
-import { loadConfig } from "../utils/config";
+import { getConfig } from "../utils/config";
 import { runJob } from "./runner";
 import { log } from "../utils/log";
 import { ActiveEngine, Job as JobModel } from "../db/models";
@@ -11,14 +11,14 @@ import { closeDb } from "../db/connection";
 import { startChannels, stopChannels, type Channel } from "../channels";
 import "../channels/telegram"; // side-effect: registers channel factory
 
-export function writePid(workspace: string, pid: number): void {
-  const { pid: pidPath } = getPaths(workspace);
+export function writePid(pid: number): void {
+  const { pid: pidPath } = getPaths();
   mkdirSync(dirname(pidPath), { recursive: true });
   writeFileSync(pidPath, String(pid));
 }
 
-export function readPid(workspace: string): number | null {
-  const { pid: pidPath } = getPaths(workspace);
+export function readPid(): number | null {
+  const { pid: pidPath } = getPaths();
   if (!existsSync(pidPath)) return null;
 
   try {
@@ -28,8 +28,8 @@ export function readPid(workspace: string): number | null {
   }
 }
 
-export function removePid(workspace: string): void {
-  const { pid: pidPath } = getPaths(workspace);
+export function removePid(): void {
+  const { pid: pidPath } = getPaths();
   try {
     unlinkSync(pidPath);
   } catch {
@@ -37,39 +37,41 @@ export function removePid(workspace: string): void {
   }
 }
 
-export function isRunning(workspace: string): boolean {
-  const pid = readPid(workspace);
+export function isRunning(): boolean {
+  const pid = readPid();
   if (pid === null) return false;
 
   try {
     process.kill(pid, 0);
     return true;
   } catch {
-    // Process not found — stale PID
-    removePid(workspace);
+    removePid();
     return false;
   }
 }
 
-export function startDaemon(workspace: string): number {
-  const { daemonLog } = getPaths(workspace);
+export function startDaemon(): number {
+  const { daemonLog } = getPaths();
   mkdirSync(dirname(daemonLog), { recursive: true });
   const logFd = openSync(daemonLog, "a");
 
-  const proc = Bun.spawn(["bun", "run", "src/cli.ts", "run"], {
-    cwd: workspace,
+  // Use the same executable and script that invoked us
+  const execPath = process.execPath;
+  const scriptPath = process.argv[1];
+
+  const proc = Bun.spawn([execPath, scriptPath, "run"], {
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env },
   });
 
   proc.unref();
   const pid = proc.pid;
-  writePid(workspace, pid);
+  writePid(pid);
   return pid;
 }
 
-export function stopDaemon(workspace: string): boolean {
-  const pid = readPid(workspace);
+export function stopDaemon(): boolean {
+  const pid = readPid();
   if (pid === null) return false;
 
   try {
@@ -78,14 +80,14 @@ export function stopDaemon(workspace: string): boolean {
     // Already dead
   }
 
-  removePid(workspace);
+  removePid();
   return true;
 }
 
-export async function runDaemon(workspace: string): Promise<void> {
-  const config = loadConfig(workspace);
+export async function runDaemon(): Promise<void> {
+  const config = getConfig();
 
-  writePid(workspace, process.pid);
+  writePid(process.pid);
   log.info({ pid: process.pid }, "daemon started");
 
   // Startup recovery
@@ -99,7 +101,7 @@ export async function runDaemon(workspace: string): Promise<void> {
 
   // Clear stale "running" job states
   const { readState, writeState } = await import("../utils/logger");
-  const state = readState(workspace);
+  const state = readState();
   let recovered = 0;
   for (const [name, info] of Object.entries(state)) {
     if (info.status === "running") {
@@ -108,17 +110,16 @@ export async function runDaemon(workspace: string): Promise<void> {
     }
   }
   if (recovered > 0) {
-    writeState(workspace, state);
+    writeState(state);
     log.info({ recovered }, "recovered stale running jobs");
   }
 
   // Start channels (telegram, etc.)
   let channels: Channel[] = [];
-  channels = await startChannels(workspace);
+  channels = await startChannels();
 
   // Schedule jobs from DB
   async function scheduleJobs() {
-    // Stop all existing cron tasks
     const tasks = cron.getTasks();
     for (const [, task] of tasks) {
       task.stop();
@@ -128,9 +129,8 @@ export async function runDaemon(workspace: string): Promise<void> {
     try {
       jobs = await JobModel.listEnabled();
     } catch {
-      // DB unavailable — fall back to YAML
       const { parseJobs } = await import("./cron");
-      jobs = parseJobs(workspace).filter((j) => j.enabled);
+      jobs = parseJobs().filter((j) => j.enabled);
     }
 
     for (const job of jobs) {
@@ -139,7 +139,7 @@ export async function runDaemon(workspace: string): Promise<void> {
         job.schedule,
         async () => {
           log.info({ job: job.name }, "running job");
-          const result = await runJob(workspace, job, config.model);
+          const result = await runJob(job);
           log.info({ job: job.name, status: result.status, duration: result.duration_ms }, "job completed");
         },
         { timezone: config.timezone },
@@ -151,7 +151,6 @@ export async function runDaemon(workspace: string): Promise<void> {
 
   await scheduleJobs();
 
-  // SIGHUP reloads jobs from DB
   process.on("SIGHUP", async () => {
     log.info("received SIGHUP, reloading jobs");
     await scheduleJobs();
@@ -165,10 +164,8 @@ export async function runDaemon(workspace: string): Promise<void> {
 
     log.info("shutting down...");
 
-    // Stop channels
     await stopChannels(channels);
 
-    // Drain active engines (wait up to 30s)
     try {
       const engines = await ActiveEngine.list();
       if (engines.length > 0) {
@@ -185,7 +182,6 @@ export async function runDaemon(workspace: string): Promise<void> {
       // postgres may be gone
     }
 
-    // Stop all cron tasks
     const tasks = cron.getTasks();
     for (const [, task] of tasks) {
       task.stop();
@@ -197,7 +193,7 @@ export async function runDaemon(workspace: string): Promise<void> {
       // ignore
     }
 
-    removePid(workspace);
+    removePid();
     log.info("shutdown complete");
     process.exit(0);
   };
@@ -205,6 +201,5 @@ export async function runDaemon(workspace: string): Promise<void> {
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
 
-  // Keep process alive
   await new Promise(() => {});
 }

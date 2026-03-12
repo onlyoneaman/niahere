@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
+import { homedir } from "os";
 export interface JobInput {
   name: string;
   schedule: string;
@@ -7,6 +8,7 @@ export interface JobInput {
 }
 import { appendAudit, readState, writeState, type AuditEntry, type JobState } from "../utils/logger";
 import { getPaths } from "../utils/paths";
+import { getConfig } from "../utils/config";
 import { localTime } from "../utils/time";
 
 export interface JobResult {
@@ -18,8 +20,8 @@ export interface JobResult {
   error?: string;
 }
 
-function loadIdentity(workspace: string): string {
-  const { selfDir } = getPaths(workspace);
+function loadIdentity(): string {
+  const { selfDir } = getPaths();
   const parts: string[] = [];
 
   const identityPath = join(selfDir, "identity.md");
@@ -35,8 +37,8 @@ function loadIdentity(workspace: string): string {
   return parts.join("\n\n");
 }
 
-function buildPrompt(workspace: string, job: JobInput): string {
-  const identity = loadIdentity(workspace);
+function buildPrompt(job: JobInput): string {
+  const identity = loadIdentity();
   const parts: string[] = [];
 
   if (identity) {
@@ -51,18 +53,21 @@ function buildPrompt(workspace: string, job: JobInput): string {
   return parts.join("\n\n");
 }
 
-export async function runJob(workspace: string, job: JobInput, model: string): Promise<JobResult> {
+export async function runJob(job: JobInput): Promise<JobResult> {
+  const config = getConfig();
+  const model = config.model;
   const timestamp = new Date().toISOString();
   const startMs = performance.now();
 
   // Update state: running
-  const state = readState(workspace);
+  const state = readState();
   state[job.name] = { lastRun: timestamp, status: "running", duration_ms: 0 };
-  writeState(workspace, state);
+  writeState(state);
 
   try {
-    const fullPrompt = buildPrompt(workspace, job);
-    const args = ["codex", "exec", fullPrompt, "-C", workspace, "--ephemeral"];
+    const fullPrompt = buildPrompt(job);
+    const cwd = homedir();
+    const args = ["codex", "exec", fullPrompt, "-C", cwd, "--ephemeral"];
     if (model && model !== "default") {
       args.splice(3, 0, "-m", model);
     }
@@ -87,7 +92,6 @@ export async function runJob(workspace: string, job: JobInput, model: string): P
       error: ok ? undefined : stderr.trim() || `exit code ${exitCode}`,
     };
 
-    // Log audit
     const auditEntry: AuditEntry = {
       job: result.job,
       timestamp: result.timestamp,
@@ -96,16 +100,15 @@ export async function runJob(workspace: string, job: JobInput, model: string): P
       duration_ms: result.duration_ms,
       error: result.error,
     };
-    appendAudit(workspace, auditEntry);
+    appendAudit(auditEntry);
 
-    // Update state
     state[job.name] = {
       lastRun: timestamp,
       status: result.status,
       duration_ms: result.duration_ms,
       error: result.error,
     };
-    writeState(workspace, state);
+    writeState(state);
 
     return result;
   } catch (err) {
@@ -121,7 +124,7 @@ export async function runJob(workspace: string, job: JobInput, model: string): P
       error: errorMsg,
     };
 
-    appendAudit(workspace, {
+    appendAudit({
       job: result.job,
       timestamp: result.timestamp,
       status: "error",
@@ -136,7 +139,7 @@ export async function runJob(workspace: string, job: JobInput, model: string): P
       duration_ms,
       error: errorMsg,
     };
-    writeState(workspace, state);
+    writeState(state);
 
     return result;
   }

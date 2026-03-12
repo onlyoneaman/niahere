@@ -1,11 +1,18 @@
 import postgres from "postgres";
+import { getConfig } from "../utils/config";
 
-const DATABASE_URL = process.env.DATABASE_URL || "postgres://localhost:5432/niahere";
+let _sql: ReturnType<typeof postgres> | null = null;
 
-export const sql = postgres(DATABASE_URL, {
-  onnotice: () => {},
-});
+export function getSql(): ReturnType<typeof postgres> {
+  if (!_sql) {
+    _sql = postgres(getConfig().database_url, { onnotice: () => {} });
+  }
+  return _sql;
+}
 
 export async function closeDb(): Promise<void> {
-  await sql.end();
+  if (_sql) {
+    await _sql.end();
+    _sql = null;
+  }
 }

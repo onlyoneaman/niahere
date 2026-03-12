@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
-import { sql } from "../../src/db/connection";
+import { getSql, closeDb } from "../../src/db/connection";
 import { runMigrations } from "../../src/db/migrate";
 import * as Session from "../../src/db/models/session";
 import * as Message from "../../src/db/models/message";
@@ -13,9 +13,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  const sql = getSql();
   await sql`DELETE FROM messages WHERE room = ${TEST_ROOM}`;
   await sql`DELETE FROM sessions WHERE room = ${TEST_ROOM}`;
-  await sql.end();
+  await closeDb();
 });
 
 describe("Session model", () => {
@@ -45,6 +46,7 @@ describe("Session model", () => {
   });
 
   test("touch updates updated_at", async () => {
+    const sql = getSql();
     const id = `test-touch-${Date.now()}`;
     await Session.create(id, TEST_ROOM);
 
@@ -59,6 +61,7 @@ describe("Session model", () => {
 
 describe("Message model", () => {
   test("save stores a user message", async () => {
+    const sql = getSql();
     const sessionId = `test-msg-${Date.now()}`;
     await Session.create(sessionId, TEST_ROOM);
 
@@ -81,6 +84,7 @@ describe("Message model", () => {
   });
 
   test("save stores an agent message", async () => {
+    const sql = getSql();
     const sessionId = `test-agent-${Date.now()}`;
     await Session.create(sessionId, TEST_ROOM);
 
@@ -102,6 +106,7 @@ describe("Message model", () => {
   });
 
   test("messages are ordered by created_at", async () => {
+    const sql = getSql();
     const sessionId = `test-order-${Date.now()}`;
     await Session.create(sessionId, TEST_ROOM);
 
@@ -165,6 +170,7 @@ describe("Job model", () => {
   const TEST_JOB = `test-job-${Date.now()}`;
 
   afterAll(async () => {
+    const sql = getSql();
     await sql`DELETE FROM jobs WHERE name LIKE ${TEST_JOB + "%"}`;
   });
 

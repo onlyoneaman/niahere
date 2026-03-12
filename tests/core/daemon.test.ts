@@ -6,37 +6,39 @@ const TEST_DIR = "/tmp/test-nia-daemon";
 
 beforeEach(() => {
   mkdirSync(`${TEST_DIR}/tmp`, { recursive: true });
+  process.env.NIA_HOME = TEST_DIR;
 });
 
 afterEach(() => {
   rmSync(TEST_DIR, { recursive: true, force: true });
+  delete process.env.NIA_HOME;
 });
 
 describe("PID management", () => {
   test("writes and reads PID", () => {
-    writePid(TEST_DIR, 12345);
-    expect(readPid(TEST_DIR)).toBe(12345);
+    writePid(12345);
+    expect(readPid()).toBe(12345);
   });
 
   test("returns null when no PID file", () => {
-    expect(readPid(TEST_DIR)).toBeNull();
+    expect(readPid()).toBeNull();
   });
 
   test("removes PID file", () => {
-    writePid(TEST_DIR, 12345);
-    removePid(TEST_DIR);
-    expect(readPid(TEST_DIR)).toBeNull();
+    writePid(12345);
+    removePid();
+    expect(readPid()).toBeNull();
   });
 });
 
 describe("isRunning", () => {
   test("returns false when no PID file", () => {
-    expect(isRunning(TEST_DIR)).toBe(false);
+    expect(isRunning()).toBe(false);
   });
 
   test("returns false for stale PID and cleans up", () => {
-    writePid(TEST_DIR, 99999999);
-    expect(isRunning(TEST_DIR)).toBe(false);
-    expect(readPid(TEST_DIR)).toBeNull();
+    writePid(99999999);
+    expect(isRunning()).toBe(false);
+    expect(readPid()).toBeNull();
   });
 });

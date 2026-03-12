@@ -1,6 +1,7 @@
-import { sql } from "../connection";
+import { getSql } from "../connection";
 
 export async function getLatest(room: string): Promise<string | null> {
+  const sql = getSql();
   const rows = await sql`
     SELECT id FROM sessions
     WHERE room = ${room}
@@ -11,14 +12,17 @@ export async function getLatest(room: string): Promise<string | null> {
 }
 
 export async function create(id: string, room: string): Promise<void> {
+  const sql = getSql();
   await sql`INSERT INTO sessions (id, room) VALUES (${id}, ${room})`;
 }
 
 export async function touch(id: string): Promise<void> {
+  const sql = getSql();
   await sql`UPDATE sessions SET updated_at = NOW() WHERE id = ${id}`;
 }
 
 export async function getLatestRoomIndex(prefix: string): Promise<number> {
+  const sql = getSql();
   const rows = await sql`
     SELECT room FROM sessions
     WHERE room LIKE ${prefix + "-%"}

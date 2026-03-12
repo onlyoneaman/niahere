@@ -1,16 +1,22 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdirSync, rmSync, readFileSync } from "fs";
+import { mkdirSync, rmSync, writeFileSync, readFileSync } from "fs";
 import { runJob } from "../../src/core/runner";
+import { resetConfig } from "../../src/utils/config";
 import type { JobInput } from "../../src/core/runner";
 
 const TEST_DIR = "/tmp/test-nia-runner";
 
 beforeEach(() => {
   mkdirSync(`${TEST_DIR}/tmp`, { recursive: true });
+  process.env.NIA_HOME = TEST_DIR;
+  writeFileSync(`${TEST_DIR}/config.yaml`, `model: codex-mini-latest\n`);
+  resetConfig();
 });
 
 afterEach(() => {
   rmSync(TEST_DIR, { recursive: true, force: true });
+  delete process.env.NIA_HOME;
+  resetConfig();
 });
 
 describe("runJob", () => {
@@ -29,7 +35,7 @@ describe("runJob", () => {
       return;
     }
 
-    const result = await runJob(TEST_DIR, job, "codex-mini-latest");
+    const result = await runJob(job);
 
     expect(result.job).toBe("test-echo");
     expect(result.status).toBeDefined();

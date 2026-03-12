@@ -1,10 +1,10 @@
 import { readdirSync } from "fs";
 import { join, basename } from "path";
-import { sql } from "./connection";
+import { getSql } from "./connection";
 
 interface Migration {
   name: string;
-  up: (sql: typeof import("./connection").sql) => Promise<void>;
+  up: (sql: ReturnType<typeof getSql>) => Promise<void>;
 }
 
 const migrationsDir = join(import.meta.dir, "migrations");
@@ -26,6 +26,7 @@ async function loadMigrations(): Promise<Migration[]> {
 }
 
 export async function runMigrations(): Promise<void> {
+  const sql = getSql();
   await sql`
     CREATE TABLE IF NOT EXISTS _migrations (
       id         SERIAL PRIMARY KEY,

@@ -20,14 +20,14 @@ export interface JobState {
 
 export type CronState = Record<string, JobState>;
 
-export function appendAudit(workspace: string, entry: AuditEntry): void {
-  const { cronAudit } = getPaths(workspace);
+export function appendAudit(entry: AuditEntry): void {
+  const { cronAudit } = getPaths();
   mkdirSync(dirname(cronAudit), { recursive: true });
   appendFileSync(cronAudit, JSON.stringify(entry) + "\n");
 }
 
-export function readState(workspace: string): CronState {
-  const { cronState } = getPaths(workspace);
+export function readState(): CronState {
+  const { cronState } = getPaths();
   if (!existsSync(cronState)) return {};
 
   try {
@@ -37,8 +37,8 @@ export function readState(workspace: string): CronState {
   }
 }
 
-export function writeState(workspace: string, state: CronState): void {
-  const { cronState } = getPaths(workspace);
+export function writeState(state: CronState): void {
+  const { cronState } = getPaths();
   mkdirSync(dirname(cronState), { recursive: true });
   writeFileSync(cronState, JSON.stringify(state, null, 2));
 }

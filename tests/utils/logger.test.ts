@@ -6,10 +6,12 @@ const TEST_DIR = "/tmp/test-nia-logger";
 
 beforeEach(() => {
   mkdirSync(`${TEST_DIR}/tmp`, { recursive: true });
+  process.env.NIA_HOME = TEST_DIR;
 });
 
 afterEach(() => {
   rmSync(TEST_DIR, { recursive: true, force: true });
+  delete process.env.NIA_HOME;
 });
 
 describe("appendAudit", () => {
@@ -22,8 +24,8 @@ describe("appendAudit", () => {
       duration_ms: 123,
     };
 
-    appendAudit(TEST_DIR, entry);
-    appendAudit(TEST_DIR, { ...entry, result: "still alive" });
+    appendAudit(entry);
+    appendAudit({ ...entry, result: "still alive" });
 
     const lines = readFileSync(`${TEST_DIR}/tmp/cron-audit.jsonl`, "utf8")
       .trim()
@@ -44,13 +46,13 @@ describe("cronState", () => {
       },
     };
 
-    writeState(TEST_DIR, state);
-    const loaded = readState(TEST_DIR);
+    writeState(state);
+    const loaded = readState();
     expect(loaded.heartbeat.status).toBe("ok");
   });
 
   test("returns empty object when no state file", () => {
-    const state = readState(TEST_DIR);
+    const state = readState();
     expect(state).toEqual({});
   });
 });

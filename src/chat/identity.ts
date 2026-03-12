@@ -3,8 +3,8 @@ import { join } from "path";
 import { homedir } from "os";
 import { getPaths } from "../utils/paths";
 
-export function loadIdentity(workspace: string): string {
-  const { selfDir } = getPaths(workspace);
+export function loadIdentity(): string {
+  const { selfDir } = getPaths();
   const parts: string[] = [];
 
   const identityPath = join(selfDir, "identity.md");
@@ -70,8 +70,8 @@ export function loadSkillsSummary(): string {
   return `Available skills:\n${lines.join("\n")}`;
 }
 
-export function buildSystemPrompt(workspace: string): string {
-  const identity = loadIdentity(workspace);
+export function buildSystemPrompt(): string {
+  const identity = loadIdentity();
   const parts: string[] = [];
 
   if (identity) {

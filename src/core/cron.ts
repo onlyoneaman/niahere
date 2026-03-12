@@ -12,8 +12,8 @@ export interface Job {
   prompt: string;
 }
 
-export function parseJobs(workspace: string): Job[] {
-  const { jobsDir } = getPaths(workspace);
+export function parseJobs(): Job[] {
+  const { jobsDir } = getPaths();
   if (!existsSync(jobsDir)) return [];
 
   const files = readdirSync(jobsDir).filter((f) => f.endsWith(".yaml")).sort();

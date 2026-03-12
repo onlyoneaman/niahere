@@ -1,6 +1,6 @@
 export interface Channel {
   name: string;
-  start(workspace: string): Promise<void>;
+  start(): Promise<void>;
   stop(): Promise<void>;
 }
 

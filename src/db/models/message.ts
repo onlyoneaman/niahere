@@ -1,4 +1,4 @@
-import { sql } from "../connection";
+import { getSql } from "../connection";
 
 export interface SaveMessageParams {
   sessionId: string;
@@ -9,6 +9,7 @@ export interface SaveMessageParams {
 }
 
 export async function save(params: SaveMessageParams): Promise<void> {
+  const sql = getSql();
   await sql`
     INSERT INTO messages (session_id, room, sender, content, is_from_agent)
     VALUES (${params.sessionId}, ${params.room}, ${params.sender}, ${params.content}, ${params.isFromAgent})
@@ -23,6 +24,7 @@ export interface RoomStats {
 }
 
 export async function getRoomStats(): Promise<RoomStats[]> {
+  const sql = getSql();
   const rows = await sql`
     SELECT
       s.room,

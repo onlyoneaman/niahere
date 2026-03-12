@@ -6,10 +6,12 @@ const TEST_DIR = "/tmp/test-nia-identity";
 
 beforeEach(() => {
   mkdirSync(`${TEST_DIR}/self`, { recursive: true });
+  process.env.NIA_HOME = TEST_DIR;
 });
 
 afterEach(() => {
   rmSync(TEST_DIR, { recursive: true, force: true });
+  delete process.env.NIA_HOME;
 });
 
 describe("loadIdentity", () => {
@@ -17,7 +19,7 @@ describe("loadIdentity", () => {
     writeFileSync(`${TEST_DIR}/self/identity.md`, "I am nia");
     writeFileSync(`${TEST_DIR}/self/soul.md`, "Be helpful");
 
-    const result = loadIdentity(TEST_DIR);
+    const result = loadIdentity();
     expect(result).toContain("I am nia");
     expect(result).toContain("Be helpful");
   });
@@ -25,19 +27,19 @@ describe("loadIdentity", () => {
   test("loads only identity.md when soul.md is missing", () => {
     writeFileSync(`${TEST_DIR}/self/identity.md`, "I am nia");
 
-    const result = loadIdentity(TEST_DIR);
+    const result = loadIdentity();
     expect(result).toBe("I am nia");
   });
 
   test("loads only soul.md when identity.md is missing", () => {
     writeFileSync(`${TEST_DIR}/self/soul.md`, "Be helpful");
 
-    const result = loadIdentity(TEST_DIR);
+    const result = loadIdentity();
     expect(result).toBe("Be helpful");
   });
 
   test("returns empty string when neither file exists", () => {
-    const result = loadIdentity(TEST_DIR);
+    const result = loadIdentity();
     expect(result).toBe("");
   });
 
@@ -45,7 +47,7 @@ describe("loadIdentity", () => {
     writeFileSync(`${TEST_DIR}/self/identity.md`, "  I am nia  \n\n");
     writeFileSync(`${TEST_DIR}/self/soul.md`, "\n  Be helpful  \n");
 
-    const result = loadIdentity(TEST_DIR);
+    const result = loadIdentity();
     expect(result).toContain("I am nia");
     expect(result).toContain("Be helpful");
     expect(result).not.toMatch(/^\s/);
@@ -58,14 +60,14 @@ describe("buildSystemPrompt", () => {
     writeFileSync(`${TEST_DIR}/self/identity.md`, "I am nia");
     writeFileSync(`${TEST_DIR}/self/soul.md`, "Be helpful");
 
-    const prompt = buildSystemPrompt(TEST_DIR);
+    const prompt = buildSystemPrompt();
     expect(prompt).toContain("I am nia");
     expect(prompt).toContain("Be helpful");
     expect(prompt).toContain("live chat session");
   });
 
   test("includes chat instructions even without identity files", () => {
-    const prompt = buildSystemPrompt(TEST_DIR);
+    const prompt = buildSystemPrompt();
     expect(prompt).toContain("live chat session");
   });
 });

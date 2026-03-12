@@ -1,4 +1,4 @@
-import { sql } from "../connection";
+import { getSql } from "../connection";
 
 export interface Job {
   name: string;
@@ -10,6 +10,7 @@ export interface Job {
 }
 
 export async function create(name: string, schedule: string, prompt: string): Promise<void> {
+  const sql = getSql();
   await sql`
     INSERT INTO jobs (name, schedule, prompt)
     VALUES (${name}, ${schedule}, ${prompt})
@@ -17,6 +18,7 @@ export async function create(name: string, schedule: string, prompt: string): Pr
 }
 
 export async function list(): Promise<Job[]> {
+  const sql = getSql();
   const rows = await sql`SELECT name, schedule, prompt, enabled, created_at, updated_at FROM jobs ORDER BY name`;
   return rows.map((r) => ({
     name: r.name,
@@ -29,6 +31,7 @@ export async function list(): Promise<Job[]> {
 }
 
 export async function get(name: string): Promise<Job | null> {
+  const sql = getSql();
   const rows = await sql`SELECT name, schedule, prompt, enabled, created_at, updated_at FROM jobs WHERE name = ${name}`;
   if (rows.length === 0) return null;
   const r = rows[0];
@@ -46,6 +49,7 @@ export async function update(
   name: string,
   fields: Partial<{ schedule: string; prompt: string; enabled: boolean }>,
 ): Promise<boolean> {
+  const sql = getSql();
   const existing = await get(name);
   if (!existing) return false;
 
@@ -62,11 +66,13 @@ export async function update(
 }
 
 export async function remove(name: string): Promise<boolean> {
+  const sql = getSql();
   const result = await sql`DELETE FROM jobs WHERE name = ${name}`;
   return result.count > 0;
 }
 
 export async function listEnabled(): Promise<Job[]> {
+  const sql = getSql();
   const rows = await sql`SELECT name, schedule, prompt, enabled, created_at, updated_at FROM jobs WHERE enabled = TRUE ORDER BY name`;
   return rows.map((r) => ({
     name: r.name,

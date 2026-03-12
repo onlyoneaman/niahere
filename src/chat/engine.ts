@@ -1,4 +1,5 @@
 import { query, type Query } from "@anthropic-ai/claude-agent-sdk";
+import { homedir } from "os";
 import { buildSystemPrompt } from "./identity";
 import { Session, Message, ActiveEngine } from "../db/models";
 
@@ -105,8 +106,8 @@ function formatToolInput(tool: string, input: any): string {
   return truncate(String(val), 60);
 }
 
-export async function createChatEngine(workspace: string, opts: EngineOptions): Promise<ChatEngine> {
-  const systemPrompt = buildSystemPrompt(workspace);
+export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine> {
+  const systemPrompt = buildSystemPrompt();
   const { room, channel, resume } = opts;
 
   let sessionId = resume ? await Session.getLatest(room) : null;
@@ -145,7 +146,7 @@ export async function createChatEngine(workspace: string, opts: EngineOptions): 
 
     const options: Record<string, unknown> = {
       systemPrompt,
-      cwd: workspace,
+      cwd: homedir(),
       permissionMode: "bypassPermissions",
       includePartialMessages: true,
       settingSources: ["project", "user"],

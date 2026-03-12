@@ -7,7 +7,7 @@ export function registerChannel(factory: ChannelFactory): void {
   factories.push(factory);
 }
 
-export async function startChannels(workspace: string): Promise<Channel[]> {
+export async function startChannels(): Promise<Channel[]> {
   const channels: Channel[] = [];
 
   for (const factory of factories) {
@@ -15,7 +15,7 @@ export async function startChannels(workspace: string): Promise<Channel[]> {
     if (!channel) continue;
 
     try {
-      await channel.start(workspace);
+      await channel.start();
       channels.push(channel);
       log.info({ channel: channel.name }, "channel started");
     } catch (err) {

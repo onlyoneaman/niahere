@@ -1,7 +1,8 @@
 import { resolve } from "path";
+import { homedir } from "os";
 
 export interface Paths {
-  workspace: string;
+  home: string;
   pid: string;
   daemonLog: string;
   cronState: string;
@@ -11,15 +12,20 @@ export interface Paths {
   selfDir: string;
 }
 
-export function getPaths(workspace: string): Paths {
+export function getNiaHome(): string {
+  return process.env.NIA_HOME || resolve(homedir(), ".niahere");
+}
+
+export function getPaths(): Paths {
+  const home = getNiaHome();
   return {
-    workspace,
-    pid: resolve(workspace, "tmp/nia.pid"),
-    daemonLog: resolve(workspace, "tmp/daemon.log"),
-    cronState: resolve(workspace, "tmp/cron-state.json"),
-    cronAudit: resolve(workspace, "tmp/cron-audit.jsonl"),
-    config: resolve(workspace, "nia.yaml"),
-    jobsDir: resolve(workspace, "jobs"),
-    selfDir: resolve(workspace, "self"),
+    home,
+    pid: resolve(home, "tmp/nia.pid"),
+    daemonLog: resolve(home, "tmp/daemon.log"),
+    cronState: resolve(home, "tmp/cron-state.json"),
+    cronAudit: resolve(home, "tmp/cron-audit.jsonl"),
+    config: resolve(home, "config.yaml"),
+    jobsDir: resolve(home, "jobs"),
+    selfDir: resolve(home, "self"),
   };
 }

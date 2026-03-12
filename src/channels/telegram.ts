@@ -2,6 +2,7 @@ import { Bot } from "grammy";
 import type { Channel } from "./channel";
 import { registerChannel } from "./index";
 import { createChatEngine, type ChatEngine } from "../chat/engine";
+import { getConfig } from "../utils/config";
 import { runMigrations } from "../db/migrate";
 import { Session } from "../db/models";
 import { log } from "../utils/log";
@@ -18,14 +19,13 @@ class TelegramChannel implements Channel {
   name = "telegram";
   private bot: Bot | null = null;
 
-  async start(workspace: string): Promise<void> {
-    const token = process.env.TELEGRAM_BOT_TOKEN!;
+  async start(): Promise<void> {
+    const config = getConfig();
+    const token = config.telegram_bot_token!;
 
     await runMigrations();
 
-    const allowedChatId = process.env.TELEGRAM_CHAT_ID
-      ? Number(process.env.TELEGRAM_CHAT_ID)
-      : null;
+    const allowedChatId = config.telegram_chat_id;
 
     const chats = new Map<number, ChatState>();
 
@@ -43,7 +43,7 @@ class TelegramChannel implements Channel {
         const prefix = roomPrefix(chatId);
         const idx = await Session.getLatestRoomIndex(prefix);
         const room = roomName(chatId, idx);
-        const engine = await createChatEngine(workspace, { room, channel: "telegram", resume: true });
+        const engine = await createChatEngine({ room, channel: "telegram", resume: true });
         state = { engine, roomIndex: idx, lock: Promise.resolve() };
         chats.set(chatId, state);
       }
@@ -58,7 +58,7 @@ class TelegramChannel implements Channel {
       const prevIdx = await Session.getLatestRoomIndex(prefix);
       const newIdx = prevIdx + 1;
       const room = roomName(chatId, newIdx);
-      const engine = await createChatEngine(workspace, { room, channel: "telegram", resume: false });
+      const engine = await createChatEngine({ room, channel: "telegram", resume: false });
       const state: ChatState = { engine, roomIndex: newIdx, lock: Promise.resolve() };
       chats.set(chatId, state);
       return state;
@@ -107,7 +107,6 @@ class TelegramChannel implements Channel {
       let editTimer: ReturnType<typeof setTimeout> | null = null;
 
       function scheduleEdit(newText: string): void {
-        // Truncate for Telegram's 4096 char limit, add ellipsis
         const display = newText.length > 4000 ? newText.slice(-4000) + "..." : newText;
         if (display === lastEditedText) return;
 
@@ -144,13 +143,11 @@ class TelegramChannel implements Channel {
 
         clearInterval(typingInterval);
 
-        // Clear any pending edit timer
         if (editTimer) {
           clearTimeout(editTimer);
           editTimer = null;
         }
 
-        // Final edit — try MarkdownV2, fall back to plain text
         const reply = result.trim() || "(no response)";
         try {
           await bot.api.editMessageText(chatId, messageId, reply, { parse_mode: "MarkdownV2" });
@@ -195,7 +192,7 @@ class TelegramChannel implements Channel {
       }
 
       if (!allowedChatId) {
-        log.info({ chatId }, "message from unregistered chat (set TELEGRAM_CHAT_ID to restrict)");
+        log.info({ chatId }, "message from unregistered chat (set telegram_chat_id to restrict)");
       }
 
       const state = await getState(chatId);
@@ -218,6 +215,6 @@ class TelegramChannel implements Channel {
 }
 
 registerChannel(() => {
-  if (!process.env.TELEGRAM_BOT_TOKEN) return null;
+  if (!getConfig().telegram_bot_token) return null;
   return new TelegramChannel();
 });
