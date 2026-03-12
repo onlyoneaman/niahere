@@ -14,13 +14,6 @@ interface ChatState {
 
 const STREAM_EDIT_INTERVAL = 2000; // min ms between edits (Telegram rate limit)
 
-// Characters that must be escaped outside of MarkdownV2 entities
-const MDV2_ESCAPE = /([_*\[\]()~`>#+\-=|{}.!\\])/g;
-
-function escapeMarkdownV2(text: string): string {
-  return text.replace(MDV2_ESCAPE, "\\$1");
-}
-
 class TelegramChannel implements Channel {
   name = "telegram";
   private bot: Bot | null = null;
@@ -155,12 +148,12 @@ class TelegramChannel implements Channel {
           editTimer = null;
         }
 
-        // Final edit — try MarkdownV2, fall back to escaped plain text
+        // Final edit — try MarkdownV2, fall back to plain text
         const reply = result.trim() || "(no response)";
         try {
           await bot.api.editMessageText(chatId, messageId, reply, { parse_mode: "MarkdownV2" });
         } catch {
-          await bot.api.editMessageText(chatId, messageId, escapeMarkdownV2(reply)).catch(() => {});
+          await bot.api.editMessageText(chatId, messageId, reply).catch(() => {});
         }
 
         log.info({ chatId, chars: result.length }, "telegram reply sent");
