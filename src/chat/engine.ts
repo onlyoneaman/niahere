@@ -121,6 +121,7 @@ export async function createChatEngine(workspace: string, opts: EngineOptions): 
       cwd: workspace,
       permissionMode: "bypassPermissions",
       includePartialMessages: true,
+      settingSources: ["project", "user"],
     };
 
     if (sessionId) {
