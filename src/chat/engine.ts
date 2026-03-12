@@ -120,6 +120,7 @@ export async function createChatEngine(workspace: string, opts: EngineOptions): 
       systemPrompt,
       cwd: workspace,
       permissionMode: "bypassPermissions",
+      includePartialMessages: true,
     };
 
     if (sessionId) {

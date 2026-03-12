@@ -13,8 +13,6 @@ interface ChatState {
 }
 
 const STREAM_EDIT_INTERVAL = 2000; // min ms between edits (Telegram rate limit)
-const MAX_RETRIES = 3;
-const BASE_RETRY_MS = 1000;
 
 class TelegramChannel implements Channel {
   name = "telegram";
@@ -86,11 +84,18 @@ class TelegramChannel implements Channel {
       const chatId = ctx.chatId;
       log.info({ chatId, text: text.slice(0, 100) }, "telegram message received");
 
+      // Keep typing indicator active throughout
+      const typingInterval = setInterval(() => {
+        bot.api.sendChatAction(chatId, "typing").catch(() => {});
+      }, 4000);
+      bot.api.sendChatAction(chatId, "typing").catch(() => {});
+
       // Send placeholder message
       let sentMsg: any;
       try {
         sentMsg = await bot.api.sendMessage(chatId, "Thinking...");
       } catch (err) {
+        clearInterval(typingInterval);
         log.error({ err, chatId }, "failed to send placeholder");
         return;
       }
@@ -135,23 +140,22 @@ class TelegramChannel implements Channel {
           if (trimmed) scheduleEdit(trimmed);
         });
 
+        clearInterval(typingInterval);
+
         // Clear any pending edit timer
         if (editTimer) {
           clearTimeout(editTimer);
           editTimer = null;
         }
 
-        // Final edit with complete response
+        // Final edit with complete response (plain text — markdown breaks too often)
         const reply = result.trim() || "(no response)";
-        try {
-          await bot.api.editMessageText(chatId, messageId, reply, { parse_mode: "Markdown" });
-        } catch {
-          // Markdown failed, try plain text
-          await bot.api.editMessageText(chatId, messageId, reply).catch(() => {});
-        }
+        await bot.api.editMessageText(chatId, messageId, reply).catch(() => {});
 
         log.info({ chatId, chars: result.length }, "telegram reply sent");
       } catch (err) {
+        clearInterval(typingInterval);
+
         if (editTimer) {
           clearTimeout(editTimer);
           editTimer = null;
