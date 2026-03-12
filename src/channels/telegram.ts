@@ -135,9 +135,11 @@ class TelegramChannel implements Channel {
       }
 
       try {
-        const { result } = await state.engine.send(text, (textSoFar) => {
-          const trimmed = textSoFar.trim();
-          if (trimmed) scheduleEdit(trimmed);
+        const { result } = await state.engine.send(text, {
+          onStream(textSoFar) {
+            const trimmed = textSoFar.trim();
+            if (trimmed) scheduleEdit(trimmed);
+          },
         });
 
         clearInterval(typingInterval);

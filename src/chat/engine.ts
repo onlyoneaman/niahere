@@ -11,11 +11,17 @@ export interface SendResult {
 }
 
 export type StreamCallback = (textSoFar: string) => void;
+export type ActivityCallback = (status: string) => void;
+
+export interface SendCallbacks {
+  onStream?: StreamCallback;
+  onActivity?: ActivityCallback;
+}
 
 export interface ChatEngine {
   sessionId: string | null;
   room: string;
-  send(userMessage: string, onStream?: StreamCallback): Promise<SendResult>;
+  send(userMessage: string, callbacks?: SendCallbacks): Promise<SendResult>;
   close(): void;
 }
 
@@ -73,9 +79,30 @@ class MessageStream {
 interface PendingResult {
   userMessage: string;
   onStream: StreamCallback | null;
+  onActivity: ActivityCallback | null;
   accumulatedText: string;
   resolve: (value: SendResult) => void;
   reject: (error: Error) => void;
+}
+
+function truncate(s: string, max: number): string {
+  const oneline = s.replace(/\n/g, " ").trim();
+  return oneline.length > max ? oneline.slice(0, max) + "…" : oneline;
+}
+
+function formatToolInput(tool: string, input: any): string {
+  if (!input || typeof input !== "object") return "";
+  // Pick the most relevant param per tool
+  const val =
+    input.command ||
+    input.pattern ||
+    input.query ||
+    input.file_path ||
+    input.content?.slice?.(0, 60) ||
+    input.description ||
+    "";
+  if (!val) return "";
+  return truncate(String(val), 60);
 }
 
 export async function createChatEngine(workspace: string, opts: EngineOptions): Promise<ChatEngine> {
@@ -155,13 +182,30 @@ export async function createChatEngine(workspace: string, opts: EngineOptions): 
             }
           }
 
-          // Stream text deltas to caller
-          if (message.type === "stream_event" && pending?.onStream) {
+          // Stream events: text deltas + block lifecycle
+          if (message.type === "stream_event" && pending) {
             const event = (message as any).event;
             if (event?.type === "content_block_delta" && event.delta?.type === "text_delta" && event.delta.text) {
               pending.accumulatedText += event.delta.text;
-              pending.onStream(pending.accumulatedText);
+              pending.onStream?.(pending.accumulatedText);
             }
+            if (event?.type === "content_block_start") {
+              const blockType = event.content_block?.type;
+              if (blockType === "thinking") pending.onActivity?.("thinking");
+              if (blockType === "text") pending.onActivity?.("writing");
+            }
+          }
+
+          if (message.type === "tool_use_summary" && pending) {
+            const msg = message as any;
+            const name = msg.tool_name || "tool";
+            const detail = formatToolInput(name, msg.tool_input);
+            pending.onActivity?.(detail ? `${name} ${detail}` : name);
+          }
+
+          if (message.type === "tool_progress" && pending) {
+            const content = (message as any).content;
+            if (content) pending.onActivity?.(content.slice(0, 80));
           }
 
           if (message.type === "result" && pending) {
@@ -218,7 +262,7 @@ export async function createChatEngine(workspace: string, opts: EngineOptions): 
       return room;
     },
 
-    async send(userMessage: string, onStream?: StreamCallback) {
+    async send(userMessage: string, callbacks?: SendCallbacks) {
       await ActiveEngine.register(room, channel);
 
       if (!alive || !stream) {
@@ -226,7 +270,14 @@ export async function createChatEngine(workspace: string, opts: EngineOptions): 
       }
 
       return new Promise<SendResult>((resolve, reject) => {
-        pending = { userMessage, onStream: onStream || null, accumulatedText: "", resolve, reject };
+        pending = {
+          userMessage,
+          onStream: callbacks?.onStream || null,
+          onActivity: callbacks?.onActivity || null,
+          accumulatedText: "",
+          resolve,
+          reject,
+        };
         stream!.push(userMessage);
       });
     },

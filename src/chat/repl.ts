@@ -40,11 +40,14 @@ export async function startRepl(workspace: string): Promise<void> {
       return;
     }
 
-    process.stdout.write("\n  thinking...");
+    process.stdout.write("\n");
 
     try {
-      const { result, costUsd, turns } = await engine.send(input);
-      process.stdout.write("\x1b[2K\r");
+      const { result, costUsd, turns } = await engine.send(input, {
+        onActivity(status) {
+          process.stdout.write(`\x1b[2m  ${status}\x1b[0m\n`);
+        },
+      });
       console.log(`nia > ${result.trim()}`);
       if (costUsd > 0) {
         console.log(`  [$${costUsd.toFixed(4)} | ${turns} turn${turns !== 1 ? "s" : ""}]\n`);
@@ -52,7 +55,6 @@ export async function startRepl(workspace: string): Promise<void> {
         console.log();
       }
     } catch (err) {
-      process.stdout.write("\x1b[2K\r");
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[error] ${msg}\n`);
     }
