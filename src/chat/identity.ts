@@ -20,11 +20,7 @@ export function loadIdentity(): string {
   return parts.join("\n\n");
 }
 
-/**
- * Scan skill directories for SKILL.md files and extract name + description
- * from YAML frontmatter. Returns a summary string for the system prompt.
- */
-export function loadSkillsSummary(): string {
+function scanSkills(): { name: string; description: string }[] {
   const home = homedir();
   const skillDirs = [
     join(home, ".shared", "skills"),
@@ -62,6 +58,15 @@ export function loadSkillsSummary(): string {
     }
   }
 
+  return skills;
+}
+
+export function loadSkillNames(): string[] {
+  return scanSkills().map((s) => s.name);
+}
+
+export function loadSkillsSummary(): string {
+  const skills = scanSkills();
   if (skills.length === 0) return "";
 
   const lines = skills.map((s) =>

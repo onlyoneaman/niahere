@@ -379,6 +379,17 @@ switch (command) {
     break;
   }
 
+  case "skills": {
+    const { loadSkillNames } = await import("./chat/identity");
+    const names = loadSkillNames();
+    if (names.length === 0) {
+      console.log("No skills found.");
+    } else {
+      for (const name of names) console.log(`  ${name}`);
+    }
+    break;
+  }
+
   case "telegram": {
     const token = process.argv[3];
     const chatId = process.argv[4];
@@ -431,6 +442,6 @@ switch (command) {
   }
 
   default:
-    console.log("Usage: nia <start|stop|restart|reload|status|init|seed|job|chat|telegram>");
+    console.log("Usage: nia <start|stop|restart|reload|status|init|seed|job|chat|skills|telegram>");
     process.exit(command ? 1 : 0);
 }
