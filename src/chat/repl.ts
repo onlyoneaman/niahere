@@ -40,17 +40,10 @@ export async function startRepl(workspace: string): Promise<void> {
       return;
     }
 
-    process.stdout.write("\nnia > ");
-    let streaming = false;
+    process.stdout.write("\n  thinking...");
 
     try {
-      const { result, costUsd, turns } = await engine.send(input, (textSoFar) => {
-        if (!streaming) {
-          streaming = true;
-          process.stdout.write("\x1b[2K\rnia > ");
-        }
-        process.stdout.write("\x1b[2K\rnia > " + textSoFar.trim().split("\n").pop());
-      });
+      const { result, costUsd, turns } = await engine.send(input);
       process.stdout.write("\x1b[2K\r");
       console.log(`nia > ${result.trim()}`);
       if (costUsd > 0) {
