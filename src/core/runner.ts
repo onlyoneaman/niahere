@@ -1,6 +1,10 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
-import type { Job } from "./cron";
+export interface JobInput {
+  name: string;
+  schedule: string;
+  prompt: string;
+}
 import { appendAudit, readState, writeState, type AuditEntry, type JobState } from "../utils/logger";
 import { getPaths } from "../utils/paths";
 import { localTime } from "../utils/time";
@@ -31,7 +35,7 @@ function loadIdentity(workspace: string): string {
   return parts.join("\n\n");
 }
 
-function buildPrompt(workspace: string, job: Job): string {
+function buildPrompt(workspace: string, job: JobInput): string {
   const identity = loadIdentity(workspace);
   const parts: string[] = [];
 
@@ -47,7 +51,7 @@ function buildPrompt(workspace: string, job: Job): string {
   return parts.join("\n\n");
 }
 
-export async function runJob(workspace: string, job: Job, model: string): Promise<JobResult> {
+export async function runJob(workspace: string, job: JobInput, model: string): Promise<JobResult> {
   const timestamp = new Date().toISOString();
   const startMs = performance.now();
 
