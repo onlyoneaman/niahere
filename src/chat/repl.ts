@@ -3,7 +3,7 @@ import { createChatEngine } from "./engine";
 import { runMigrations } from "../db/migrate";
 import { closeDb } from "../db/connection";
 
-export async function startRepl(): Promise<void> {
+export async function startRepl(resume = false): Promise<void> {
   try {
     await runMigrations();
   } catch (err) {
@@ -13,9 +13,9 @@ export async function startRepl(): Promise<void> {
     process.exit(1);
   }
 
-  const engine = await createChatEngine({ room: "terminal", channel: "terminal", resume: false });
+  const engine = await createChatEngine({ room: "terminal", channel: "terminal", resume });
 
-  console.log("New chat session started.");
+  console.log(resume && engine.sessionId ? "Resumed previous session." : "New chat session started.");
   console.log('Type your message and press Enter. Type "exit" or Ctrl+C to quit.\n');
 
   const rl = readline.createInterface({

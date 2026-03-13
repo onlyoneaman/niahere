@@ -80,6 +80,10 @@ export function buildSystemPrompt(): string {
 
   parts.push("You are in a live chat session. Be conversational, helpful, and concise.");
 
+  // Memory path for the agent to write to
+  const memoryPath = join(getPaths().selfDir, "memory.md");
+  parts.push(`If you learn something non-obvious that would save time in future sessions (a gotcha, a preference, a correction), append it to ${memoryPath} using a shell command. Keep entries short — one line per learning.`);
+
   const skills = loadSkillsSummary();
   if (skills) {
     parts.push(skills);

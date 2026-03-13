@@ -153,8 +153,20 @@ switch (command) {
   }
 
   case "run": {
-    // Foreground mode — used by daemon's child process
-    await runDaemon();
+    // No args = foreground daemon mode (used by daemon's child process)
+    // With args = one-shot prompt execution
+    const prompt = process.argv.slice(3).join(" ");
+    if (prompt) {
+      const { createChatEngine } = await import("./chat/engine");
+      await runMigrations();
+      const engine = await createChatEngine({ room: "cli-run", channel: "terminal", resume: false });
+      const { result } = await engine.send(prompt);
+      console.log(result.trim());
+      engine.close();
+      await closeDb();
+    } else {
+      await runDaemon();
+    }
     break;
   }
 
@@ -369,13 +381,51 @@ switch (command) {
     break;
   }
 
+  case "history": {
+    const room = process.argv[3]; // optional room filter
+    try {
+      await runMigrations();
+      const messages = await Message.getRecent(20, room);
+      if (messages.length === 0) {
+        console.log("No messages yet.");
+      } else {
+        for (const m of messages) {
+          const time = localTime(new Date(m.createdAt));
+          const prefix = m.sender === "user" ? "you" : m.sender;
+          const roomTag = room ? "" : `[${m.room}] `;
+          const snippet = m.content.length > 120 ? m.content.slice(0, 120) + "..." : m.content;
+          console.log(`  ${roomTag}${time}  ${prefix} > ${snippet.replace(/\n/g, " ")}`);
+        }
+      }
+      await closeDb();
+    } catch (err) {
+      console.log(`Failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+    break;
+  }
+
+  case "logs": {
+    const { daemonLog } = getPaths();
+    if (!existsSync(daemonLog)) {
+      console.log("No daemon log found. Is nia running?");
+      process.exit(1);
+    }
+    const follow = process.argv[3] === "-f" || process.argv[3] === "--follow";
+    const args = follow ? ["tail", "-f", daemonLog] : ["tail", "-50", daemonLog];
+    const proc = Bun.spawn(args, { stdio: ["ignore", "inherit", "inherit"] });
+    await proc.exited;
+    break;
+  }
+
   case "seed": {
     await import("./db/seed");
     break;
   }
 
   case "chat": {
-    await startRepl();
+    const resume = process.argv[3] === "--resume" || process.argv[3] === "-r";
+    await startRepl(resume);
     break;
   }
 
@@ -442,6 +492,16 @@ switch (command) {
   }
 
   default:
-    console.log("Usage: nia <start|stop|restart|reload|status|init|seed|job|chat|skills|telegram>");
+    console.log("Usage: nia <command>\n");
+    console.log("  init                — setup nia");
+    console.log("  start / stop        — daemon control");
+    console.log("  status              — show daemon, jobs, channels");
+    console.log("  chat [-r|--resume]  — interactive chat");
+    console.log("  run <prompt>        — one-shot execution");
+    console.log("  history [room]      — recent messages");
+    console.log("  logs [-f]           — daemon logs");
+    console.log("  job <sub>           — manage jobs");
+    console.log("  skills              — list available skills");
+    console.log("  telegram <token>    — configure telegram");
     process.exit(command ? 1 : 0);
 }

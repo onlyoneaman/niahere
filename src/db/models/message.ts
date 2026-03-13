@@ -23,6 +23,33 @@ export interface RoomStats {
   lastActivity: string | null;
 }
 
+export interface RecentMessage {
+  room: string;
+  sender: string;
+  content: string;
+  createdAt: string;
+}
+
+export async function getRecent(limit = 20, room?: string): Promise<RecentMessage[]> {
+  const sql = getSql();
+  const rows = room
+    ? await sql`
+        SELECT room, sender, content, created_at
+        FROM messages WHERE room = ${room}
+        ORDER BY created_at DESC LIMIT ${limit}
+      `
+    : await sql`
+        SELECT room, sender, content, created_at
+        FROM messages ORDER BY created_at DESC LIMIT ${limit}
+      `;
+  return rows.reverse().map((r) => ({
+    room: r.room,
+    sender: r.sender,
+    content: r.content,
+    createdAt: String(r.created_at),
+  }));
+}
+
 export async function getRoomStats(): Promise<RoomStats[]> {
   const sql = getSql();
   const rows = await sql`
