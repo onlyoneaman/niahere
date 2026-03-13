@@ -7,6 +7,11 @@ description: Create or improve reusable agent skills that are framework-agnostic
 
 Create skills that any AI assistant can follow, not just one vendor or runtime.
 
+## Default Location
+
+New skills go in `~/.niahere/skills/<skill-name>/SKILL.md`. This directory is scanned automatically by nia.
+When updating an existing skill, edit it in place wherever it lives.
+
 ## Goals
 
 - Make the skill portable across tools and agent frameworks.

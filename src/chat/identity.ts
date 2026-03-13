@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "fs";
 import { join, resolve } from "path";
 import { homedir } from "os";
 import yaml from "js-yaml";
-import { getPaths } from "../utils/paths";
+import { getNiaHome, getPaths } from "../utils/paths";
 import { getConfig } from "../utils/config";
 import { localTime } from "../utils/time";
 
@@ -24,11 +24,14 @@ export function loadIdentity(): string {
 function scanSkills(): { name: string; description: string }[] {
   const home = homedir();
   const cwd = process.cwd();
+  const niaHome = getNiaHome();
   const skillDirs = [
     // Project/cwd skills first (most specific)
     join(cwd, "skills"),
     // niahere bundled skills
     join(PROJECT_ROOT, "skills"),
+    // User-installed skills
+    join(niaHome, "skills"),
     // User-level skills
     join(home, ".shared", "skills"),
     join(home, ".claude", "skills"),

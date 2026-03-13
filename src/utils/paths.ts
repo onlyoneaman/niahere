@@ -11,6 +11,7 @@ export interface Paths {
   jobsDir: string;
   selfDir: string;
   beadsDir: string;
+  skillsDir: string;
 }
 
 export function getNiaHome(): string {
@@ -29,5 +30,6 @@ export function getPaths(): Paths {
     jobsDir: resolve(home, "jobs"),
     selfDir: resolve(home, "self"),
     beadsDir: resolve(home, "beads"),
+    skillsDir: resolve(home, "skills"),
   };
 }
