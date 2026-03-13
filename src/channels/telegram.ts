@@ -93,36 +93,25 @@ class TelegramChannel implements Channel {
       }, 4000);
       bot.api.sendChatAction(chatId, "typing").catch(() => {});
 
-      let messageId: number | null = null;
-      let sendingFirst = false;
+      // Send placeholder upfront — avoids async race conditions
+      let sentMsg: any;
+      try {
+        sentMsg = await bot.api.sendMessage(chatId, "...");
+      } catch (err) {
+        clearInterval(typingInterval);
+        log.error({ err, chatId }, "failed to send placeholder");
+        return;
+      }
+
+      const messageId = sentMsg.message_id;
       let lastEditedText = "";
       let lastEditTime = 0;
       let pendingEdit: string | null = null;
       let editTimer: ReturnType<typeof setTimeout> | null = null;
 
-      async function scheduleEdit(newText: string): Promise<void> {
+      function scheduleEdit(newText: string): void {
         const display = newText.length > 4000 ? newText.slice(-4000) + "..." : newText;
         if (display === lastEditedText) return;
-
-        // Send first message on first stream content
-        if (!messageId) {
-          if (sendingFirst) {
-            pendingEdit = display;
-            return;
-          }
-          sendingFirst = true;
-          try {
-            const msg = await bot.api.sendMessage(chatId, display);
-            messageId = msg.message_id;
-            lastEditedText = display;
-            lastEditTime = Date.now();
-            // Flush any content that arrived while sending
-            if (pendingEdit && pendingEdit !== display) {
-              doEdit();
-            }
-          } catch { /* ignore */ }
-          return;
-        }
 
         pendingEdit = display;
         const now = Date.now();
@@ -163,18 +152,10 @@ class TelegramChannel implements Channel {
         }
 
         const reply = result.trim() || "(no response)";
-        if (messageId) {
-          try {
-            await bot.api.editMessageText(chatId, messageId, reply, { parse_mode: "MarkdownV2" });
-          } catch {
-            await bot.api.editMessageText(chatId, messageId, reply).catch(() => {});
-          }
-        } else {
-          try {
-            await bot.api.sendMessage(chatId, reply, { parse_mode: "MarkdownV2" });
-          } catch {
-            await bot.api.sendMessage(chatId, reply).catch(() => {});
-          }
+        try {
+          await bot.api.editMessageText(chatId, messageId, reply, { parse_mode: "MarkdownV2" });
+        } catch {
+          await bot.api.editMessageText(chatId, messageId, reply).catch(() => {});
         }
 
         log.info({ chatId, chars: result.length }, "telegram reply sent");
@@ -188,12 +169,7 @@ class TelegramChannel implements Channel {
 
         const errText = err instanceof Error ? err.message : String(err);
         log.error({ err, chatId }, "telegram message processing failed");
-        const errorReply = `[error] ${errText}`;
-        if (messageId) {
-          await bot.api.editMessageText(chatId, messageId, errorReply).catch(() => {});
-        } else {
-          await bot.api.sendMessage(chatId, errorReply).catch(() => {});
-        }
+        await bot.api.editMessageText(chatId, messageId, `[error] ${errText}`).catch(() => {});
       }
     }
 
