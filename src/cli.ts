@@ -7,7 +7,7 @@ import { getConfig, updateRawConfig } from "./utils/config";
 import { runJob } from "./core/runner";
 import { localTime } from "./utils/time";
 import { startRepl } from "./chat/repl";
-import { Message, ActiveEngine, Job } from "./db/models";
+import { Message, ActiveEngine, Job, Session } from "./db/models";
 import { withDb } from "./db/connection";
 import { getNiaHome, getPaths } from "./utils/paths";
 import { errMsg } from "./utils/errors";
@@ -403,6 +403,22 @@ switch (command) {
       });
       const data = await res.json() as { ok: boolean; description?: string };
       if (!data.ok) fail(`Telegram API error: ${data.description || "unknown"}`);
+
+      // Store in latest telegram session
+      try {
+        await withDb(async () => {
+          const room = `tg-${chatId}`;
+          const idx = await Session.getLatestRoomIndex(room);
+          const fullRoom = `${room}-${idx}`;
+          const sessionId = await Session.getLatest(fullRoom);
+          if (sessionId) {
+            await Message.save({ sessionId, room: fullRoom, sender: "nia", content: message, isFromAgent: true });
+          }
+        });
+      } catch {
+        // DB unavailable — message still sent
+      }
+
       console.log("Sent.");
     } catch (err) {
       fail(`Failed to send: ${errMsg(err)}`);
