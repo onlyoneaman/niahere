@@ -92,6 +92,7 @@ You have access to a PostgreSQL database with a \`jobs\` table. To manage jobs, 
 
 \`\`\`bash
 nia job list                              # list all jobs
+nia job status <name>                     # show job details + last run status
 nia job add <name> "<schedule>" <prompt>   # add a cron job
 nia job remove <name>                     # delete a job
 nia job enable <name>                     # enable a disabled job

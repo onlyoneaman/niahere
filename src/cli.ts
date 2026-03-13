@@ -234,6 +234,37 @@ switch (command) {
         break;
       }
 
+      case "status": {
+        const name = process.argv[4];
+        if (!name) fail("Usage: nia job status <name>");
+
+        try {
+          await withDb(async () => {
+            const job = await Job.get(name);
+            if (!job) fail(`Job not found: ${name}`);
+
+            console.log(`  ${job.enabled ? "●" : "○"} ${job.name}`);
+            console.log(`  schedule: ${job.schedule}`);
+            console.log(`  enabled:  ${job.enabled}`);
+            console.log(`  prompt:   ${job.prompt}`);
+
+            const state = readState();
+            const info = state[job.name];
+            if (info) {
+              console.log(`\n  last run: ${localTime(new Date(info.lastRun))}`);
+              console.log(`  status:   ${info.status}`);
+              console.log(`  duration: ${info.duration_ms}ms`);
+              if (info.error) console.log(`  error:    ${info.error}`);
+            } else {
+              console.log("\n  never run");
+            }
+          });
+        } catch (err) {
+          fail(`Failed: ${errMsg(err)}`);
+        }
+        break;
+      }
+
       case "run": {
         const name = process.argv[4];
         if (!name) fail("Usage: nia job run <name>");
@@ -259,12 +290,13 @@ switch (command) {
       }
 
       default:
-        console.log("Usage: nia job <list|add|remove|enable|disable|run|import>\n");
+        console.log("Usage: nia job <list|add|remove|enable|disable|status|run|import>\n");
         console.log("  list                          — list all jobs");
         console.log("  add <name> <schedule> <prompt> — add a new job");
         console.log("  remove <name>                 — delete a job");
         console.log("  enable <name>                 — enable a job");
         console.log("  disable <name>                — disable a job");
+        console.log("  status <name>                 — show job details + last run");
         console.log("  run <name>                    — run a job once");
         console.log("  import                        — import YAML jobs to DB");
         process.exit(subcommand ? 1 : 0);
@@ -352,6 +384,14 @@ switch (command) {
     break;
   }
 
+  case "test": {
+    const proc = Bun.spawn(["bun", "test", ...process.argv.slice(3)], {
+      stdio: ["ignore", "inherit", "inherit"],
+      cwd: import.meta.dir + "/..",
+    });
+    process.exit(await proc.exited);
+  }
+
   case "init": {
     const { runInit } = await import("./commands/init");
     await runInit();
@@ -371,5 +411,6 @@ switch (command) {
     console.log("  job <sub>           — manage jobs");
     console.log("  skills              — list available skills");
     console.log("  telegram <token>    — configure telegram");
+    console.log("  test                — run tests");
     process.exit(command ? 1 : 0);
 }
