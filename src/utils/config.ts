@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { dirname } from "path";
 import yaml from "js-yaml";
 import { getPaths } from "./paths";
 import { log } from "./log";
@@ -105,4 +106,25 @@ export function loadConfig(): Config {
     telegram_chat_id,
     log_level,
   };
+}
+
+/** Read raw config.yaml as a plain object. Returns {} if missing or corrupt. */
+export function readRawConfig(): Record<string, unknown> {
+  const { config } = getPaths();
+  if (!existsSync(config)) return {};
+  try {
+    const parsed = yaml.load(readFileSync(config, "utf8"));
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Merge fields into config.yaml and write back. */
+export function updateRawConfig(fields: Record<string, unknown>): void {
+  const { config } = getPaths();
+  const raw = { ...readRawConfig(), ...fields };
+  mkdirSync(dirname(config), { recursive: true });
+  writeFileSync(config, yaml.dump(raw, { lineWidth: -1 }));
+  resetConfig();
 }

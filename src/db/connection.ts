@@ -16,3 +16,14 @@ export async function closeDb(): Promise<void> {
     _sql = null;
   }
 }
+
+/** Run migrations, execute fn, then close DB. */
+export async function withDb<T>(fn: () => Promise<T>): Promise<T> {
+  const { runMigrations } = await import("./migrate");
+  await runMigrations();
+  try {
+    return await fn();
+  } finally {
+    await closeDb();
+  }
+}

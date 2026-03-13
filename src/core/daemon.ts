@@ -84,6 +84,12 @@ export function stopDaemon(): boolean {
   return true;
 }
 
+function stopAllCronTasks(): void {
+  for (const [, task] of cron.getTasks()) {
+    task.stop();
+  }
+}
+
 export async function runDaemon(): Promise<void> {
   const config = getConfig();
 
@@ -120,10 +126,7 @@ export async function runDaemon(): Promise<void> {
 
   // Schedule jobs from DB
   async function scheduleJobs() {
-    const tasks = cron.getTasks();
-    for (const [, task] of tasks) {
-      task.stop();
-    }
+    stopAllCronTasks();
 
     let jobs: { name: string; schedule: string; prompt: string }[];
     try {
@@ -182,10 +185,7 @@ export async function runDaemon(): Promise<void> {
       // postgres may be gone
     }
 
-    const tasks = cron.getTasks();
-    for (const [, task] of tasks) {
-      task.stop();
-    }
+    stopAllCronTasks();
 
     try {
       await closeDb();

@@ -1,18 +1,17 @@
 #!/usr/bin/env bun
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync } from "fs";
 import { isRunning, readPid, runDaemon, startDaemon, stopDaemon } from "./core/daemon";
 import { readState } from "./utils/logger";
 import { parseJobs } from "./core/cron";
-import { getConfig, resetConfig } from "./utils/config";
+import { getConfig, updateRawConfig } from "./utils/config";
 import { runJob } from "./core/runner";
 import { localTime } from "./utils/time";
 import { startRepl } from "./chat/repl";
-import { runMigrations } from "./db/migrate";
 import { Message, ActiveEngine, Job } from "./db/models";
-import { closeDb } from "./db/connection";
+import { withDb } from "./db/connection";
 import { getNiaHome, getPaths } from "./utils/paths";
+import { errMsg } from "./utils/errors";
 import cron from "node-cron";
-import yaml from "js-yaml";
 
 // Set LOG_LEVEL from config before anything else logs
 try {
@@ -28,38 +27,33 @@ const command = process.argv[2];
 
 // Ensure ~/.niahere/ exists for commands that need it
 if (command && command !== "init" && command !== "help") {
-  const home = getNiaHome();
-  mkdirSync(home, { recursive: true });
+  mkdirSync(getNiaHome(), { recursive: true });
+}
+
+/** Print error and exit. */
+function fail(msg: string): never {
+  console.log(msg);
+  process.exit(1);
 }
 
 switch (command) {
   case "start": {
-    const useService = process.argv[3] === "--service";
-    if (useService) {
+    if (process.argv[3] === "--service") {
       const { installService } = await import("./commands/service");
       await installService();
     } else {
-      if (isRunning()) {
-        const pid = readPid();
-        console.log(`nia is already running (pid: ${pid})`);
-        process.exit(1);
-      }
-      const pid = startDaemon();
-      console.log(`nia started (pid: ${pid})`);
+      if (isRunning()) fail(`nia is already running (pid: ${readPid()})`);
+      console.log(`nia started (pid: ${startDaemon()})`);
     }
     break;
   }
 
   case "stop": {
-    const useService = process.argv[3] === "--service";
-    if (useService) {
+    if (process.argv[3] === "--service") {
       const { uninstallService } = await import("./commands/service");
       await uninstallService();
     } else {
-      if (!isRunning()) {
-        console.log("nia is not running");
-        process.exit(1);
-      }
+      if (!isRunning()) fail("nia is not running");
       stopDaemon();
       console.log("nia stopped");
     }
@@ -71,50 +65,43 @@ switch (command) {
     const pid = readPid();
     console.log(`nia: ${running ? `running (pid: ${pid})` : "stopped"}`);
 
-    // Telegram status
     const config = getConfig();
-    let telegramStatus = "not configured";
     if (config.telegram_bot_token) {
       const masked = `...${config.telegram_bot_token.slice(-6)}`;
-      telegramStatus = running ? `active (${masked})` : `configured (${masked}, daemon stopped)`;
+      console.log(`telegram: ${running ? `active (${masked})` : `configured (${masked}, daemon stopped)`}`);
+    } else {
+      console.log("telegram: not configured");
     }
-    console.log(`telegram: ${telegramStatus}`);
 
-    // Jobs from DB
     try {
-      await runMigrations();
-
-      const jobs = await Job.list();
-      if (jobs.length > 0) {
-        console.log("\nJobs:");
-        const state = readState();
-        for (const job of jobs) {
-          const info = state[job.name];
-          const status = info ? `${info.status} (last: ${localTime(new Date(info.lastRun))}, ${info.duration_ms}ms)` : "never run";
-          console.log(`  ${job.name}: ${job.enabled ? "enabled" : "disabled"} [${job.schedule}] — ${status}`);
+      await withDb(async () => {
+        const jobs = await Job.list();
+        if (jobs.length > 0) {
+          console.log("\nJobs:");
+          const state = readState();
+          for (const job of jobs) {
+            const info = state[job.name];
+            const status = info ? `${info.status} (last: ${localTime(new Date(info.lastRun))}, ${info.duration_ms}ms)` : "never run";
+            console.log(`  ${job.name}: ${job.enabled ? "enabled" : "disabled"} [${job.schedule}] — ${status}`);
+          }
         }
-      }
 
-      // Active engines
-      const engines = await ActiveEngine.list();
-      console.log(`\nActive engines: ${engines.length === 0 ? "none" : ""}`);
-      for (const e of engines) {
-        const since = localTime(new Date(e.startedAt));
-        console.log(`  ${e.room} (${e.channel}) since ${since}`);
-      }
-
-      // Chat rooms
-      const rooms = await Message.getRoomStats();
-      if (rooms.length > 0) {
-        console.log("\nChat rooms:");
-        for (const r of rooms) {
-          const last = r.lastActivity ? localTime(new Date(r.lastActivity)) : "never";
-          console.log(`  ${r.room}: ${r.messages} msgs, ${r.sessions} session${r.sessions !== 1 ? "s" : ""} (last: ${last})`);
+        const engines = await ActiveEngine.list();
+        console.log(`\nActive engines: ${engines.length === 0 ? "none" : ""}`);
+        for (const e of engines) {
+          console.log(`  ${e.room} (${e.channel}) since ${localTime(new Date(e.startedAt))}`);
         }
-      }
-      await closeDb();
+
+        const rooms = await Message.getRoomStats();
+        if (rooms.length > 0) {
+          console.log("\nChat rooms:");
+          for (const r of rooms) {
+            const last = r.lastActivity ? localTime(new Date(r.lastActivity)) : "never";
+            console.log(`  ${r.room}: ${r.messages} msgs, ${r.sessions} session${r.sessions !== 1 ? "s" : ""} (last: ${last})`);
+          }
+        }
+      });
     } catch {
-      // postgres not available — show file-based job state
       const state = readState();
       const entries = Object.entries(state);
       if (entries.length > 0) {
@@ -128,26 +115,19 @@ switch (command) {
   }
 
   case "restart": {
-    if (isRunning()) {
-      stopDaemon();
-    }
-    const newPid = startDaemon();
-    console.log(`nia restarted (pid: ${newPid})`);
+    if (isRunning()) stopDaemon();
+    console.log(`nia restarted (pid: ${startDaemon()})`);
     break;
   }
 
   case "reload": {
     const pid = readPid();
-    if (!pid || !isRunning()) {
-      console.log("nia is not running");
-      process.exit(1);
-    }
+    if (!pid || !isRunning()) fail("nia is not running");
     try {
       process.kill(pid, "SIGHUP");
       console.log("reload signal sent");
     } catch {
-      console.log("failed to send reload signal");
-      process.exit(1);
+      fail("failed to send reload signal");
     }
     break;
   }
@@ -158,12 +138,12 @@ switch (command) {
     const prompt = process.argv.slice(3).join(" ");
     if (prompt) {
       const { createChatEngine } = await import("./chat/engine");
-      await runMigrations();
-      const engine = await createChatEngine({ room: "cli-run", channel: "terminal", resume: false });
-      const { result } = await engine.send(prompt);
-      console.log(result.trim());
-      engine.close();
-      await closeDb();
+      await withDb(async () => {
+        const engine = await createChatEngine({ room: "cli-run", channel: "terminal", resume: false });
+        const { result } = await engine.send(prompt);
+        console.log(result.trim());
+        engine.close();
+      });
     } else {
       await runDaemon();
     }
@@ -176,19 +156,18 @@ switch (command) {
     switch (subcommand) {
       case "list": {
         try {
-          await runMigrations();
-          const jobs = await Job.list();
-          if (jobs.length === 0) {
-            console.log("No jobs configured. Use `nia job add` or `nia job import`.");
-          } else {
-            for (const job of jobs) {
-              console.log(`  ${job.enabled ? "●" : "○"} ${job.name}  ${job.schedule}  ${job.prompt.slice(0, 60)}${job.prompt.length > 60 ? "..." : ""}`);
+          await withDb(async () => {
+            const jobs = await Job.list();
+            if (jobs.length === 0) {
+              console.log("No jobs configured. Use `nia job add` or `nia job import`.");
+            } else {
+              for (const job of jobs) {
+                console.log(`  ${job.enabled ? "●" : "○"} ${job.name}  ${job.schedule}  ${job.prompt.slice(0, 60)}${job.prompt.length > 60 ? "..." : ""}`);
+              }
             }
-          }
-          await closeDb();
+          });
         } catch (err) {
-          console.log(`Failed to list jobs: ${err instanceof Error ? err.message : String(err)}`);
-          process.exit(1);
+          fail(`Failed to list jobs: ${errMsg(err)}`);
         }
         break;
       }
@@ -200,92 +179,49 @@ switch (command) {
 
         if (!name || !schedule || !prompt) {
           console.log('Usage: nia job add <name> <schedule> <prompt>');
-          console.log('Example: nia job add heartbeat "*/10 * * * *" Check system health');
-          process.exit(1);
+          fail('Example: nia job add heartbeat "*/10 * * * *" Check system health');
         }
-
-        if (!cron.validate(schedule)) {
-          console.log(`Invalid cron schedule: ${schedule}`);
-          process.exit(1);
-        }
+        if (!cron.validate(schedule)) fail(`Invalid cron schedule: ${schedule}`);
 
         try {
-          await runMigrations();
-          await Job.create(name, schedule, prompt);
-          console.log(`Job "${name}" added. Run \`nia reload\` to activate.`);
-          await closeDb();
+          await withDb(async () => {
+            await Job.create(name, schedule, prompt);
+            console.log(`Job "${name}" added. Run \`nia reload\` to activate.`);
+          });
         } catch (err) {
-          console.log(`Failed to add job: ${err instanceof Error ? err.message : String(err)}`);
-          process.exit(1);
+          fail(`Failed to add job: ${errMsg(err)}`);
         }
         break;
       }
 
       case "remove": {
         const name = process.argv[4];
-        if (!name) {
-          console.log("Usage: nia job remove <name>");
-          process.exit(1);
-        }
+        if (!name) fail("Usage: nia job remove <name>");
 
         try {
-          await runMigrations();
-          const removed = await Job.remove(name);
-          if (removed) {
-            console.log(`Job "${name}" removed. Run \`nia reload\` to apply.`);
-          } else {
-            console.log(`Job not found: ${name}`);
-          }
-          await closeDb();
+          await withDb(async () => {
+            const removed = await Job.remove(name);
+            console.log(removed ? `Job "${name}" removed. Run \`nia reload\` to apply.` : `Job not found: ${name}`);
+          });
         } catch (err) {
-          console.log(`Failed to remove job: ${err instanceof Error ? err.message : String(err)}`);
-          process.exit(1);
+          fail(`Failed to remove job: ${errMsg(err)}`);
         }
         break;
       }
 
-      case "enable": {
-        const name = process.argv[4];
-        if (!name) {
-          console.log("Usage: nia job enable <name>");
-          process.exit(1);
-        }
-
-        try {
-          await runMigrations();
-          const updated = await Job.update(name, { enabled: true });
-          if (updated) {
-            console.log(`Job "${name}" enabled. Run \`nia reload\` to apply.`);
-          } else {
-            console.log(`Job not found: ${name}`);
-          }
-          await closeDb();
-        } catch (err) {
-          console.log(`Failed: ${err instanceof Error ? err.message : String(err)}`);
-          process.exit(1);
-        }
-        break;
-      }
-
+      case "enable":
       case "disable": {
         const name = process.argv[4];
-        if (!name) {
-          console.log("Usage: nia job disable <name>");
-          process.exit(1);
-        }
+        if (!name) fail(`Usage: nia job ${subcommand} <name>`);
+        const enabled = subcommand === "enable";
 
         try {
-          await runMigrations();
-          const updated = await Job.update(name, { enabled: false });
-          if (updated) {
-            console.log(`Job "${name}" disabled. Run \`nia reload\` to apply.`);
-          } else {
-            console.log(`Job not found: ${name}`);
-          }
-          await closeDb();
+          await withDb(async () => {
+            const updated = await Job.update(name, { enabled });
+            console.log(updated ? `Job "${name}" ${subcommand}d. Run \`nia reload\` to apply.` : `Job not found: ${name}`);
+          });
         } catch (err) {
-          console.log(`Failed: ${err instanceof Error ? err.message : String(err)}`);
-          process.exit(1);
+          fail(`Failed: ${errMsg(err)}`);
         }
         break;
       }
@@ -298,76 +234,50 @@ switch (command) {
         }
 
         try {
-          await runMigrations();
-          let imported = 0;
-          let skipped = 0;
-          for (const job of yamlJobs) {
-            const existing = await Job.get(job.name);
-            if (existing) {
-              skipped++;
-              continue;
+          await withDb(async () => {
+            let imported = 0;
+            let skipped = 0;
+            for (const job of yamlJobs) {
+              if (await Job.get(job.name)) { skipped++; continue; }
+              await Job.create(job.name, job.schedule, job.prompt);
+              if (!job.enabled) await Job.update(job.name, { enabled: false });
+              imported++;
             }
-            await Job.create(job.name, job.schedule, job.prompt);
-            if (!job.enabled) {
-              await Job.update(job.name, { enabled: false });
-            }
-            imported++;
-          }
-          console.log(`Imported ${imported} job${imported !== 1 ? "s" : ""}${skipped > 0 ? ` (${skipped} already exist)` : ""}`);
-          if (imported > 0) {
-            console.log("Run `nia reload` to activate.");
-          }
-          await closeDb();
+            console.log(`Imported ${imported} job${imported !== 1 ? "s" : ""}${skipped > 0 ? ` (${skipped} already exist)` : ""}`);
+            if (imported > 0) console.log("Run `nia reload` to activate.");
+          });
         } catch (err) {
-          console.log(`Failed to import: ${err instanceof Error ? err.message : String(err)}`);
-          process.exit(1);
+          fail(`Failed to import: ${errMsg(err)}`);
         }
         break;
       }
 
       case "run": {
         const name = process.argv[4];
-        if (!name) {
-          console.log("Usage: nia job run <name>");
-          process.exit(1);
-        }
+        if (!name) fail("Usage: nia job run <name>");
 
         let job: { name: string; schedule: string; prompt: string } | null = null;
-
-        // Try DB first
         try {
-          await runMigrations();
-          job = await Job.get(name);
-        } catch {
-          // DB unavailable
-        }
+          await withDb(async () => { job = await Job.get(name); });
+        } catch { /* DB unavailable */ }
 
-        // Fall back to YAML
         if (!job) {
-          const yamlJobs = parseJobs();
-          const found = yamlJobs.find((j) => j.name === name);
+          const found = parseJobs().find((j) => j.name === name);
           if (found) job = found;
         }
+        if (!job) fail(`Job not found: ${name}`);
 
-        if (!job) {
-          console.log(`Job not found: ${name}`);
-          process.exit(1);
-        }
-
-        const config = getConfig();
-        console.log(`Running job: ${job.name} (model: ${config.model})`);
+        console.log(`Running job: ${job.name} (model: ${getConfig().model})`);
         const result = await runJob(job);
         console.log(`\nStatus: ${result.status}`);
         console.log(`Duration: ${result.duration_ms}ms`);
         if (result.result) console.log(`\nResult:\n${result.result}`);
         if (result.error) console.log(`\nError: ${result.error}`);
-        try { await closeDb(); } catch {}
         break;
       }
 
-      default: {
-        console.log("Usage: nia job <list|add|remove|enable|disable|run|import>");
-        console.log("");
+      default:
+        console.log("Usage: nia job <list|add|remove|enable|disable|run|import>\n");
         console.log("  list                          — list all jobs");
         console.log("  add <name> <schedule> <prompt> — add a new job");
         console.log("  remove <name>                 — delete a job");
@@ -376,41 +286,36 @@ switch (command) {
         console.log("  run <name>                    — run a job once");
         console.log("  import                        — import YAML jobs to DB");
         process.exit(subcommand ? 1 : 0);
-      }
     }
     break;
   }
 
   case "history": {
-    const room = process.argv[3]; // optional room filter
+    const room = process.argv[3];
     try {
-      await runMigrations();
-      const messages = await Message.getRecent(20, room);
-      if (messages.length === 0) {
-        console.log("No messages yet.");
-      } else {
-        for (const m of messages) {
-          const time = localTime(new Date(m.createdAt));
-          const prefix = m.sender === "user" ? "you" : m.sender;
-          const roomTag = room ? "" : `[${m.room}] `;
-          const snippet = m.content.length > 120 ? m.content.slice(0, 120) + "..." : m.content;
-          console.log(`  ${roomTag}${time}  ${prefix} > ${snippet.replace(/\n/g, " ")}`);
+      await withDb(async () => {
+        const messages = await Message.getRecent(20, room);
+        if (messages.length === 0) {
+          console.log("No messages yet.");
+        } else {
+          for (const m of messages) {
+            const time = localTime(new Date(m.createdAt));
+            const prefix = m.sender === "user" ? "you" : m.sender;
+            const roomTag = room ? "" : `[${m.room}] `;
+            const snippet = m.content.length > 120 ? m.content.slice(0, 120) + "..." : m.content;
+            console.log(`  ${roomTag}${time}  ${prefix} > ${snippet.replace(/\n/g, " ")}`);
+          }
         }
-      }
-      await closeDb();
+      });
     } catch (err) {
-      console.log(`Failed: ${err instanceof Error ? err.message : String(err)}`);
-      process.exit(1);
+      fail(`Failed: ${errMsg(err)}`);
     }
     break;
   }
 
   case "logs": {
     const { daemonLog } = getPaths();
-    if (!existsSync(daemonLog)) {
-      console.log("No daemon log found. Is nia running?");
-      process.exit(1);
-    }
+    if (!existsSync(daemonLog)) fail("No daemon log found. Is nia running?");
     const follow = process.argv[3] === "-f" || process.argv[3] === "--follow";
     const args = follow ? ["tail", "-f", daemonLog] : ["tail", "-50", daemonLog];
     const proc = Bun.spawn(args, { stdio: ["ignore", "inherit", "inherit"] });
@@ -443,13 +348,11 @@ switch (command) {
   case "telegram": {
     const token = process.argv[3];
     const chatId = process.argv[4];
-    const paths = getPaths();
 
     if (!token) {
       const config = getConfig();
       if (config.telegram_bot_token) {
-        const masked = `...${config.telegram_bot_token.slice(-6)}`;
-        console.log(`Telegram: configured (${masked})`);
+        console.log(`Telegram: configured (...${config.telegram_bot_token.slice(-6)})`);
       } else {
         console.log("Telegram: not configured");
       }
@@ -457,27 +360,9 @@ switch (command) {
       break;
     }
 
-    // Read existing config.yaml, update telegram fields, write back
-    let raw: Record<string, unknown> = {};
-    if (existsSync(paths.config)) {
-      try {
-        const parsed = yaml.load(readFileSync(paths.config, "utf8"));
-        if (parsed && typeof parsed === "object") {
-          raw = parsed as Record<string, unknown>;
-        }
-      } catch {
-        // corrupt config — start fresh
-      }
-    }
-
-    raw.telegram_bot_token = token;
-    if (chatId) {
-      raw.telegram_chat_id = Number(chatId);
-    }
-
-    mkdirSync(getNiaHome(), { recursive: true });
-    writeFileSync(paths.config, yaml.dump(raw, { lineWidth: -1 }));
-    resetConfig();
+    const fields: Record<string, unknown> = { telegram_bot_token: token };
+    if (chatId) fields.telegram_chat_id = Number(chatId);
+    updateRawConfig(fields);
 
     console.log("Telegram bot token saved to ~/.niahere/config.yaml");
     if (chatId) console.log(`Chat ID: ${chatId}`);
