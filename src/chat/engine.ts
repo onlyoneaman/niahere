@@ -93,19 +93,38 @@ function truncate(s: string, max: number): string {
   return oneline.length > max ? oneline.slice(0, max) + "…" : oneline;
 }
 
-function formatToolInput(tool: string, input: any): string {
-  if (!input || typeof input !== "object") return "";
-  // Pick the most relevant param per tool
-  const val =
-    input.command ||
-    input.pattern ||
-    input.query ||
-    input.file_path ||
-    input.content?.slice?.(0, 60) ||
-    input.description ||
-    "";
-  if (!val) return "";
-  return truncate(String(val), 60);
+function formatToolUse(tool: string, input: any): string {
+  if (!input || typeof input !== "object") return tool;
+
+  switch (tool) {
+    case "Bash":
+      return input.command ? `$ ${truncate(input.command, 50)}` : "running command";
+    case "Read":
+      return input.file_path ? `reading ${basename(input.file_path)}` : "reading file";
+    case "Edit":
+      return input.file_path ? `editing ${basename(input.file_path)}` : "editing file";
+    case "Write":
+      return input.file_path ? `writing ${basename(input.file_path)}` : "writing file";
+    case "Grep":
+      return input.pattern ? `searching: ${truncate(input.pattern, 40)}` : "searching";
+    case "Glob":
+      return input.pattern ? `finding: ${truncate(input.pattern, 40)}` : "finding files";
+    case "Agent":
+    case "Task":
+      return input.description || input.prompt?.slice(0, 40) || "running agent";
+    case "WebFetch":
+      return input.url ? `fetching ${truncate(input.url, 50)}` : "fetching";
+    case "WebSearch":
+      return input.query ? `searching: ${truncate(input.query, 40)}` : "searching web";
+    default: {
+      const val = input.command || input.pattern || input.query || input.file_path || input.description || "";
+      return val ? `${tool} ${truncate(String(val), 50)}` : tool;
+    }
+  }
+}
+
+function basename(path: string): string {
+  return path.split("/").pop() || path;
 }
 
 function sessionFileExists(sessionId: string, cwd: string): boolean {
@@ -215,13 +234,29 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
           if (message.type === "tool_use_summary" && pending) {
             const msg = message as any;
             const name = msg.tool_name || "tool";
-            const detail = formatToolInput(name, msg.tool_input);
-            pending.onActivity?.(detail ? `${name} ${detail}` : name);
+            pending.onActivity?.(formatToolUse(name, msg.tool_input));
           }
 
           if (message.type === "tool_progress" && pending) {
-            const content = (message as any).content;
-            if (content) pending.onActivity?.(content.slice(0, 80));
+            const msg = message as any;
+            const toolName = msg.tool_name;
+            const content = msg.content;
+            if (toolName === "Bash" && content) {
+              pending.onActivity?.(`$ ${truncate(content, 60)}`);
+            } else if (content) {
+              pending.onActivity?.(truncate(content, 70));
+            }
+          }
+
+          // Task/agent lifecycle
+          if (message.type === "system" && pending) {
+            const msg = message as any;
+            if (msg.subtype === "task_started" && msg.description) {
+              pending.onActivity?.(truncate(msg.description, 60));
+            }
+            if (msg.subtype === "task_progress" && msg.last_tool_name) {
+              pending.onActivity?.(msg.summary || msg.last_tool_name);
+            }
           }
 
           if (message.type === "result" && pending) {

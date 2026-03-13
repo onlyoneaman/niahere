@@ -144,11 +144,20 @@ class TelegramChannel implements Channel {
         bot.api.editMessageText(chatId, messageId, text).catch(() => {});
       }
 
+      let lastActivity = "";
+
       try {
         const { result } = await state.engine.send(text, {
           onStream(textSoFar) {
             const trimmed = textSoFar.trim();
             if (trimmed) scheduleEdit(trimmed);
+          },
+          onActivity(status) {
+            lastActivity = status;
+            // Show activity as italic status line while no text has streamed yet
+            if (!lastEditedText || lastEditedText.startsWith("_")) {
+              scheduleEdit(`_${status}_`);
+            }
           },
         });
 
