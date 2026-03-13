@@ -111,10 +111,22 @@ Active hours: ${config.activeHours.start}–${config.activeHours.end} (${config.
 
 ## Managing Config
 
-Config file: ${paths.config}
-To view: \`cat ${paths.config}\`
-To update a field: edit the YAML file directly.
-After config changes, run \`nia restart\` to apply.
+Config file: \`${paths.config}\`
+
+Current config:
+- model: ${config.model}
+- timezone: ${config.timezone}
+- active_hours: ${config.activeHours.start}–${config.activeHours.end}
+- log_level: ${config.log_level}
+
+You can read and edit this file directly to change settings. Examples:
+\`\`\`bash
+cat ${paths.config}                          # view config
+sed -i '' 's/model: .*/model: claude-sonnet-4-5-20250514/' ${paths.config}  # change model
+\`\`\`
+
+After config changes, run \`nia restart\` to apply. Available config keys:
+\`model\`, \`timezone\`, \`active_hours\` (start/end HH:MM), \`log_level\`, \`telegram_bot_token\`, \`telegram_chat_id\`, \`telegram_open\`.
 
 ## Persona & Memory
 

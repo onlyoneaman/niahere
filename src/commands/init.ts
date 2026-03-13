@@ -123,6 +123,14 @@ export async function runInit(): Promise<void> {
     const ownerLocation = await ask(rl, "Location", readExisting("owner.md", "Location"));
     const ownerInterests = await ask(rl, "Interests", readExisting("owner.md", "Interests"));
 
+    // Active hours
+    const existingHours = existing.active_hours as Record<string, string> | undefined;
+    const defaultStart = existingHours?.start || "00:00";
+    const defaultEnd = existingHours?.end || "23:59";
+    console.log("\nActive hours (jobs run only during this window, crons run 24/7):");
+    const activeStart = await ask(rl, "Start (HH:MM)", defaultStart);
+    const activeEnd = await ask(rl, "End (HH:MM)", defaultEnd);
+
     // Agent name
     const agentName = await ask(rl, "\nAgent name", readExistingName("identity.md") || "nia");
 
@@ -139,7 +147,7 @@ export async function runInit(): Promise<void> {
       model: (existing.model as string) || "default",
       timezone: (existing.timezone as string) || Intl.DateTimeFormat().resolvedOptions().timeZone,
       log_level: (existing.log_level as string) || "info",
-      active_hours: (existing.active_hours as Record<string, string>) || { start: "00:00", end: "23:59" },
+      active_hours: { start: activeStart, end: activeEnd },
     };
 
     if (telegramToken) {
