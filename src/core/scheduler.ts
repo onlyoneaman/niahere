@@ -56,7 +56,11 @@ function isWithinActiveHours(): boolean {
     timeZone: config.timezone,
   });
   const current = formatter.format(now).replace(/\u200e/g, "");
-  return current >= start && current <= end;
+  // Handle midnight-crossing windows (e.g. 09:00–02:00)
+  if (start <= end) {
+    return current >= start && current <= end;
+  }
+  return current >= start || current <= end;
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
