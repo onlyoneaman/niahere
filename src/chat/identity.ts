@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import yaml from "js-yaml";
 import { getPaths } from "../utils/paths";
 
 function loadFile(dir: string, name: string): string {
@@ -36,19 +37,19 @@ function scanSkills(): { name: string; description: string }[] {
       if (!existsSync(skillFile)) continue;
 
       const content = readFileSync(skillFile, "utf8");
-      const frontmatter = content.match(/^---\n([\s\S]*?)\n---/);
-      if (!frontmatter) continue;
+      const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+      if (!fmMatch) continue;
 
-      const nameMatch = frontmatter[1].match(/^name:\s*(.+)$/m);
-      const descMatch = frontmatter[1].match(/^description:\s*"?(.+?)"?\s*$/m);
-      const name = nameMatch?.[1]?.trim() || entry.name;
+      let meta: Record<string, unknown> = {};
+      try { meta = (yaml.load(fmMatch[1]) as Record<string, unknown>) || {}; } catch { continue; }
+      const name = (typeof meta.name === "string" ? meta.name : "") || entry.name;
 
       if (seen.has(name)) continue;
       seen.add(name);
 
       skills.push({
         name,
-        description: descMatch?.[1]?.trim() || "",
+        description: typeof meta.description === "string" ? meta.description : "",
       });
     }
   }
