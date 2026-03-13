@@ -242,9 +242,10 @@ switch (command) {
         break;
       }
 
+      case "show":
       case "status": {
         const name = process.argv[4];
-        if (!name) fail("Usage: nia job status <name>");
+        if (!name) fail(`Usage: nia job ${subcommand} <name>`);
 
         try {
           await withDb(async () => {
@@ -265,6 +266,19 @@ switch (command) {
               if (info.error) console.log(`  error:    ${info.error}`);
             } else {
               console.log("\n  never run");
+            }
+
+            // Recent run history
+            const entries = readAudit(job.name, 5);
+            if (entries.length > 0) {
+              console.log("\n  recent runs:");
+              for (const e of entries) {
+                const time = localTime(new Date(e.timestamp));
+                const dur = `${e.duration_ms}ms`;
+                const icon = e.status === "ok" ? "\u2713" : "\u2717";
+                const summary = e.error || e.result.slice(0, 60).replace(/\n/g, " ") || "-";
+                console.log(`    ${icon} ${time}  ${dur.padStart(8)}  ${summary}`);
+              }
             }
           });
         } catch (err) {
@@ -315,13 +329,13 @@ switch (command) {
       }
 
       default:
-        console.log("Usage: nia job <list|add|remove|enable|disable|status|run|log|import>\n");
+        console.log("Usage: nia job <list|show|add|remove|enable|disable|run|log|import>\n");
         console.log("  list                          — list all jobs");
+        console.log("  show <name>                   — full job details + recent runs");
         console.log("  add <name> <schedule> <prompt> — add a new job");
         console.log("  remove <name>                 — delete a job");
         console.log("  enable <name>                 — enable a job");
         console.log("  disable <name>                — disable a job");
-        console.log("  status <name>                 — show job details + last run");
         console.log("  run <name>                    — run a job once");
         console.log("  log [name]                    — show recent run history");
         console.log("  import                        — import YAML jobs to DB");
