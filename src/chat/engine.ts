@@ -85,7 +85,7 @@ interface PendingResult {
   onActivity: ActivityCallback | null;
   accumulatedText: string;
   accumulatedThinking: string;
-  currentToolName: string;
+  lastThinkingLine: string;
   resolve: (value: SendResult) => void;
   reject: (error: Error) => void;
 }
@@ -231,11 +231,15 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
               }
               if (delta?.type === "thinking_delta" && delta.thinking) {
                 pending.accumulatedThinking += delta.thinking;
-                // Show last line of thinking as activity
-                const lines = pending.accumulatedThinking.trim().split("\n");
-                const lastLine = lines[lines.length - 1]?.trim();
-                if (lastLine) {
-                  pending.onActivity?.(truncate(lastLine, 70));
+                // Only update on complete lines (newline boundary)
+                const lines = pending.accumulatedThinking.split("\n");
+                if (lines.length > 1) {
+                  // Show the last complete line (not the partial one being typed)
+                  const completeLine = lines[lines.length - 2]?.trim();
+                  if (completeLine && completeLine !== pending.lastThinkingLine) {
+                    pending.lastThinkingLine = completeLine;
+                    pending.onActivity?.(truncate(completeLine, 70));
+                  }
                 }
               }
             }
@@ -244,19 +248,15 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
               const block = event.content_block;
               if (block?.type === "thinking") {
                 pending.accumulatedThinking = "";
+                pending.lastThinkingLine = "";
                 pending.onActivity?.("thinking...");
               }
-              if (block?.type === "text") pending.onActivity?.("writing");
-              if (block?.type === "tool_use") {
-                pending.currentToolName = block.name || "tool";
-                pending.onActivity?.(formatToolUse(pending.currentToolName, {}));
-              }
+              // tool_use: don't show here — wait for tool_use_summary with full input
             }
 
             if (event?.type === "content_block_stop") {
-              if (pending.accumulatedThinking) {
-                pending.accumulatedThinking = "";
-              }
+              pending.accumulatedThinking = "";
+              pending.lastThinkingLine = "";
             }
           }
 
@@ -356,7 +356,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
           onActivity: callbacks?.onActivity || null,
           accumulatedText: "",
           accumulatedThinking: "",
-          currentToolName: "",
+          lastThinkingLine: "",
           resolve,
           reject,
         };
