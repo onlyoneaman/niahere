@@ -94,6 +94,7 @@ class TelegramChannel implements Channel {
       bot.api.sendChatAction(chatId, "typing").catch(() => {});
 
       let messageId: number | null = null;
+      let sendingFirst = false;
       let lastEditedText = "";
       let lastEditTime = 0;
       let pendingEdit: string | null = null;
@@ -105,11 +106,20 @@ class TelegramChannel implements Channel {
 
         // Send first message on first stream content
         if (!messageId) {
+          if (sendingFirst) {
+            pendingEdit = display;
+            return;
+          }
+          sendingFirst = true;
           try {
             const msg = await bot.api.sendMessage(chatId, display);
             messageId = msg.message_id;
             lastEditedText = display;
             lastEditTime = Date.now();
+            // Flush any content that arrived while sending
+            if (pendingEdit && pendingEdit !== display) {
+              doEdit();
+            }
           } catch { /* ignore */ }
           return;
         }
