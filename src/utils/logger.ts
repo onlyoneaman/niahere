@@ -42,3 +42,24 @@ export function writeState(state: CronState): void {
   mkdirSync(dirname(cronState), { recursive: true });
   writeFileSync(cronState, JSON.stringify(state, null, 2));
 }
+
+export function readAudit(jobName?: string, limit = 10): AuditEntry[] {
+  const { cronAudit } = getPaths();
+  if (!existsSync(cronAudit)) return [];
+
+  const lines = readFileSync(cronAudit, "utf8").trim().split("\n").filter(Boolean);
+  let entries: AuditEntry[] = [];
+  for (const line of lines) {
+    try {
+      entries.push(JSON.parse(line));
+    } catch {
+      // skip malformed
+    }
+  }
+
+  if (jobName) {
+    entries = entries.filter((e) => e.job === jobName);
+  }
+
+  return entries.slice(-limit);
+}

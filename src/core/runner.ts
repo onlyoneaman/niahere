@@ -1,4 +1,5 @@
 import { homedir } from "os";
+import { existsSync } from "fs";
 export interface JobInput {
   name: string;
   schedule: string;
@@ -7,6 +8,10 @@ export interface JobInput {
 import { appendAudit, readState, writeState, type AuditEntry, type JobState } from "../utils/logger";
 import { getConfig } from "../utils/config";
 import { buildSystemPrompt } from "../chat/identity";
+
+// Resolve full path to codex so daemon doesn't depend on PATH
+const CODEX_CANDIDATES = ["/opt/homebrew/bin/codex", "/usr/local/bin/codex"];
+const codexPath = CODEX_CANDIDATES.find((p) => existsSync(p)) || "codex";
 
 export interface JobResult {
   job: string;
@@ -36,7 +41,7 @@ export async function runJob(job: JobInput): Promise<JobResult> {
   try {
     const fullPrompt = buildPrompt(job);
     const cwd = homedir();
-    const args = ["codex", "exec", fullPrompt, "-C", cwd, "--ephemeral", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox"];
+    const args = [codexPath, "exec", fullPrompt, "-C", cwd, "--ephemeral", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox"];
     if (model && model !== "default") {
       args.splice(3, 0, "-m", model);
     }

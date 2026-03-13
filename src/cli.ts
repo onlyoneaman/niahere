@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { existsSync, mkdirSync } from "fs";
 import { isRunning, readPid, runDaemon, startDaemon, stopDaemon } from "./core/daemon";
-import { readState } from "./utils/logger";
+import { readState, readAudit } from "./utils/logger";
 import { parseJobs } from "./core/cron";
 import { getConfig, updateRawConfig } from "./utils/config";
 import { runJob } from "./core/runner";
@@ -297,8 +297,25 @@ switch (command) {
         break;
       }
 
+      case "log": {
+        const logName = process.argv[4];
+        const entries = readAudit(logName, 20);
+        if (entries.length === 0) {
+          console.log(logName ? `No runs found for ${logName}` : "No job runs recorded yet.");
+          break;
+        }
+        for (const e of entries) {
+          const time = localTime(new Date(e.timestamp));
+          const dur = `${e.duration_ms}ms`;
+          const status = e.status === "ok" ? "\u2713" : "\u2717";
+          const summary = e.error || e.result.slice(0, 80).replace(/\n/g, " ") || "-";
+          console.log(`  ${status} ${time}  ${dur.padStart(8)}  ${e.job}  ${summary}`);
+        }
+        break;
+      }
+
       default:
-        console.log("Usage: nia job <list|add|remove|enable|disable|status|run|import>\n");
+        console.log("Usage: nia job <list|add|remove|enable|disable|status|run|log|import>\n");
         console.log("  list                          — list all jobs");
         console.log("  add <name> <schedule> <prompt> — add a new job");
         console.log("  remove <name>                 — delete a job");
@@ -306,6 +323,7 @@ switch (command) {
         console.log("  disable <name>                — disable a job");
         console.log("  status <name>                 — show job details + last run");
         console.log("  run <name>                    — run a job once");
+        console.log("  log [name]                    — show recent run history");
         console.log("  import                        — import YAML jobs to DB");
         process.exit(subcommand ? 1 : 0);
     }
