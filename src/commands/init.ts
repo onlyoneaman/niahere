@@ -88,15 +88,31 @@ export async function runInit(): Promise<void> {
       if (chatIdStr) telegramChatId = Number(chatIdStr);
     }
 
+    // Read existing self files for defaults
+    function readExisting(file: string, field: string): string {
+      const filePath = `${paths.selfDir}/${file}`;
+      if (!existsSync(filePath)) return "";
+      const content = readFileSync(filePath, "utf8");
+      const match = content.match(new RegExp(`\\*\\*${field}\\*\\*:\\s*(.+)$`, "m"));
+      return match?.[1]?.trim() || "";
+    }
+
+    function readExistingName(file: string): string {
+      const filePath = `${paths.selfDir}/${file}`;
+      if (!existsSync(filePath)) return "";
+      const match = readFileSync(filePath, "utf8").match(/^#\s+(.+)$/m);
+      return match?.[1]?.trim() || "";
+    }
+
     // Owner info
     console.log("\nAbout you:");
-    const ownerName = await ask(rl, "Your name");
-    const ownerRole = await ask(rl, "What do you do? (e.g. software engineer, student)", "");
-    const ownerLocation = await ask(rl, "Location (e.g. San Francisco, CA)", "");
-    const ownerInterests = await ask(rl, "Interests (comma-separated, Enter to skip)", "");
+    const ownerName = await ask(rl, "Your name", readExisting("owner.md", "Name"));
+    const ownerRole = await ask(rl, "What do you do?", readExisting("owner.md", "Role"));
+    const ownerLocation = await ask(rl, "Location", readExisting("owner.md", "Location"));
+    const ownerInterests = await ask(rl, "Interests", readExisting("owner.md", "Interests"));
 
     // Agent name
-    const agentName = await ask(rl, "\nAgent name", "nia");
+    const agentName = await ask(rl, "\nAgent name", readExistingName("identity.md") || "nia");
 
     rl.close();
 
@@ -126,15 +142,17 @@ export async function runInit(): Promise<void> {
     const vars = { agentName, ownerName, ownerRole, ownerLocation, ownerInterests };
     const selfFile = (name: string) => `${paths.selfDir}/${name}`;
 
-    writeIfMissing(selfFile("identity.md"), loadTemplate("identity.md", vars), selfFile("identity.md"));
+    writeFileSync(selfFile("identity.md"), loadTemplate("identity.md", vars));
+    console.log(`  \u2713 wrote ${selfFile("identity.md")}`);
 
     if (ownerName) {
       let ownerContent = loadTemplate("owner.md", vars);
-      // Strip lines with empty values
       ownerContent = ownerContent.split("\n").filter((l) => !l.match(/\*\*\w+\*\*:\s*$/)).join("\n");
-      writeIfMissing(selfFile("owner.md"), ownerContent, selfFile("owner.md"));
+      writeFileSync(selfFile("owner.md"), ownerContent);
+      console.log(`  \u2713 wrote ${selfFile("owner.md")}`);
     }
 
+    // Soul and memory — only create if missing (user may have customized)
     writeIfMissing(selfFile("soul.md"), loadTemplate("soul.md"), selfFile("soul.md"));
     writeIfMissing(selfFile("memory.md"), loadTemplate("memory.md"), selfFile("memory.md"));
 
