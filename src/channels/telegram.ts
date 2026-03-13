@@ -154,9 +154,10 @@ class TelegramChannel implements Channel {
           },
           onActivity(status) {
             lastActivity = status;
-            // Show activity as italic status line while no text has streamed yet
-            if (!lastEditedText || lastEditedText.startsWith("_")) {
-              scheduleEdit(`_${status}_`);
+            // Show activity while no real text has streamed yet
+            if (!lastEditedText || lastEditedText.startsWith("\u270F")) {
+              const clean = status.replace(/_/g, " ");
+              scheduleEdit(`\u270F ${clean}`);
             }
           },
         });

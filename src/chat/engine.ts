@@ -84,6 +84,8 @@ interface PendingResult {
   onStream: StreamCallback | null;
   onActivity: ActivityCallback | null;
   accumulatedText: string;
+  accumulatedThinking: string;
+  currentToolName: string;
   resolve: (value: SendResult) => void;
   reject: (error: Error) => void;
 }
@@ -217,17 +219,44 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
             }
           }
 
-          // Stream events: text deltas + block lifecycle
+          // Stream events: text deltas, thinking deltas, block lifecycle
           if (message.type === "stream_event" && pending) {
             const event = (message as any).event;
-            if (event?.type === "content_block_delta" && event.delta?.type === "text_delta" && event.delta.text) {
-              pending.accumulatedText += event.delta.text;
-              pending.onStream?.(pending.accumulatedText);
+
+            if (event?.type === "content_block_delta") {
+              const delta = event.delta;
+              if (delta?.type === "text_delta" && delta.text) {
+                pending.accumulatedText += delta.text;
+                pending.onStream?.(pending.accumulatedText);
+              }
+              if (delta?.type === "thinking_delta" && delta.thinking) {
+                pending.accumulatedThinking += delta.thinking;
+                // Show last line of thinking as activity
+                const lines = pending.accumulatedThinking.trim().split("\n");
+                const lastLine = lines[lines.length - 1]?.trim();
+                if (lastLine) {
+                  pending.onActivity?.(truncate(lastLine, 70));
+                }
+              }
             }
+
             if (event?.type === "content_block_start") {
-              const blockType = event.content_block?.type;
-              if (blockType === "thinking") pending.onActivity?.("thinking");
-              if (blockType === "text") pending.onActivity?.("writing");
+              const block = event.content_block;
+              if (block?.type === "thinking") {
+                pending.accumulatedThinking = "";
+                pending.onActivity?.("thinking...");
+              }
+              if (block?.type === "text") pending.onActivity?.("writing");
+              if (block?.type === "tool_use") {
+                pending.currentToolName = block.name || "tool";
+                pending.onActivity?.(formatToolUse(pending.currentToolName, {}));
+              }
+            }
+
+            if (event?.type === "content_block_stop") {
+              if (pending.accumulatedThinking) {
+                pending.accumulatedThinking = "";
+              }
             }
           }
 
@@ -326,6 +355,8 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
           onStream: callbacks?.onStream || null,
           onActivity: callbacks?.onActivity || null,
           accumulatedText: "",
+          accumulatedThinking: "",
+          currentToolName: "",
           resolve,
           reject,
         };
