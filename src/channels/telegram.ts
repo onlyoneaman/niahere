@@ -96,7 +96,7 @@ class TelegramChannel implements Channel {
       // Send placeholder upfront — avoids async race conditions
       let sentMsg: any;
       try {
-        sentMsg = await bot.api.sendMessage(chatId, "...");
+        sentMsg = await bot.api.sendMessage(chatId, "·");
       } catch (err) {
         clearInterval(typingInterval);
         log.error({ err, chatId }, "failed to send placeholder");
