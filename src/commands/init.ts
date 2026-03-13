@@ -1,11 +1,15 @@
 import * as readline from "readline";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { resolve } from "path";
 import { getNiaHome, getPaths } from "../utils/paths";
 import { resetConfig } from "../utils/config";
 import { runMigrations } from "../db/migrate";
 import { closeDb } from "../db/connection";
 import { startDaemon, isRunning } from "../core/daemon";
+import { errMsg } from "../utils/errors";
 import yaml from "js-yaml";
+
+const DEFAULTS_DIR = resolve(import.meta.dir, "../../defaults/self");
 
 function ask(rl: readline.Interface, question: string, defaultValue?: string): Promise<string> {
   const suffix = defaultValue ? ` [${defaultValue}]` : "";
@@ -14,6 +18,11 @@ function ask(rl: readline.Interface, question: string, defaultValue?: string): P
       resolve(answer.trim() || defaultValue || "");
     });
   });
+}
+
+function loadTemplate(name: string, vars: Record<string, string> = {}): string {
+  const content = readFileSync(resolve(DEFAULTS_DIR, name), "utf8");
+  return content.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? "");
 }
 
 function writeIfMissing(filePath: string, content: string, label: string): void {
@@ -62,9 +71,9 @@ export async function runInit(): Promise<void> {
       console.log("  \u2713 connected, ran migrations");
       await closeDb();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = errMsg(err);
       console.log(`  \u2717 could not connect: ${msg}`);
-      console.log("  (you can fix this later in ~/.niahere/config.yaml)\n");
+      console.log(`  (you can fix this later in ${paths.config})\n`);
     }
     delete process.env.DATABASE_URL;
 
@@ -110,81 +119,23 @@ export async function runInit(): Promise<void> {
     }
 
     writeFileSync(paths.config, yaml.dump(config, { lineWidth: -1 }));
-    console.log("\n  \u2713 wrote ~/.niahere/config.yaml");
+    console.log(`\n  \u2713 wrote ${paths.config}`);
 
-    // --- Self files ---
+    // --- Self files (from defaults/self/ templates) ---
+    const vars = { agentName, ownerName, ownerRole, ownerInterests };
+    const selfFile = (name: string) => `${paths.selfDir}/${name}`;
 
-    // identity.md
-    writeIfMissing(
-      `${paths.selfDir}/identity.md`,
-      `# ${agentName}
+    writeIfMissing(selfFile("identity.md"), loadTemplate("identity.md", vars), selfFile("identity.md"));
 
-You are ${agentName}, a personal AI assistant. You run as a background daemon, handle scheduled tasks, and chat when needed.
-
-## Voice
-- Direct and concise. Lead with the answer, not the reasoning.
-- Warm but not chatty. Friendly without filler.
-- Opinionated when you have context. Say what you'd recommend, then the alternatives.
-- Light humor when natural. Never forced.
-`,
-      "~/.niahere/self/identity.md",
-    );
-
-    // owner.md
     if (ownerName) {
-      const ownerLines = [`# Owner`, ``, `- **Name**: ${ownerName}`];
-      if (ownerRole) ownerLines.push(`- **Role**: ${ownerRole}`);
-      if (ownerInterests) {
-        ownerLines.push(`- **Interests**: ${ownerInterests}`);
-      }
-      ownerLines.push("");
-
-      writeIfMissing(
-        `${paths.selfDir}/owner.md`,
-        ownerLines.join("\n"),
-        "~/.niahere/self/owner.md",
-      );
+      let ownerContent = loadTemplate("owner.md", vars);
+      // Strip lines with empty values
+      ownerContent = ownerContent.split("\n").filter((l) => !l.match(/\*\*\w+\*\*:\s*$/)).join("\n");
+      writeIfMissing(selfFile("owner.md"), ownerContent, selfFile("owner.md"));
     }
 
-    // soul.md
-    writeIfMissing(
-      `${paths.selfDir}/soul.md`,
-      `# Operating Principles
-
-## Modes
-- **Chat** (terminal, telegram): Be conversational. Ask clarifying questions. Show personality.
-- **Jobs** (cron): Be terse. Execute the task, report the result. No small talk.
-
-## Self-Resolution
-Before asking the user anything, try in this order:
-1. Check memory.md — have you learned this before?
-2. Check owner.md — is the answer in the owner's profile?
-3. Try to solve it yourself — use your tools, search, read files.
-4. Ask the user — last resort, not first.
-
-## Rules
-1. Execute scheduled jobs on time.
-2. Log actions transparently.
-3. Never take destructive actions without permission.
-4. Keep responses concise and actionable.
-5. Report errors clearly with context.
-6. If something costs you time or surprises you, write it to memory.md.
-`,
-      "~/.niahere/self/soul.md",
-    );
-
-    // memory.md
-    writeIfMissing(
-      `${paths.selfDir}/memory.md`,
-      `# Memory
-
-Things I've learned that I don't want to forget. Auto-maintained.
-
----
-
-`,
-      "~/.niahere/self/memory.md",
-    );
+    writeIfMissing(selfFile("soul.md"), loadTemplate("soul.md"), selfFile("soul.md"));
+    writeIfMissing(selfFile("memory.md"), loadTemplate("memory.md"), selfFile("memory.md"));
 
     resetConfig();
 
