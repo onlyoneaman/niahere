@@ -92,6 +92,7 @@ export async function runInit(): Promise<void> {
     console.log("\nAbout you:");
     const ownerName = await ask(rl, "Your name");
     const ownerRole = await ask(rl, "What do you do? (e.g. software engineer, student)", "");
+    const ownerLocation = await ask(rl, "Location (e.g. San Francisco, CA)", "");
     const ownerInterests = await ask(rl, "Interests (comma-separated, Enter to skip)", "");
 
     // Agent name
@@ -122,7 +123,7 @@ export async function runInit(): Promise<void> {
     console.log(`\n  \u2713 wrote ${paths.config}`);
 
     // --- Self files (from defaults/self/ templates) ---
-    const vars = { agentName, ownerName, ownerRole, ownerInterests };
+    const vars = { agentName, ownerName, ownerRole, ownerLocation, ownerInterests };
     const selfFile = (name: string) => `${paths.selfDir}/${name}`;
 
     writeIfMissing(selfFile("identity.md"), loadTemplate("identity.md", vars), selfFile("identity.md"));
