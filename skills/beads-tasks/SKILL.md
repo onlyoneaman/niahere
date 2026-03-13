@@ -29,6 +29,10 @@ Global task manager powered by [Beads](https://github.com/steveyegge/beads). Sto
 - User says "done with X" / "finished" → `bd close <id>`
 - User wants to see cross-project work → `bd list` (no project filter)
 - User wants project-specific view → `bd list --label project:<name>`
+- User asks for task in-progress state → use task status:
+  - `bd update <task-id> --status in_progress`
+- `bd set-state ... state=...` is for operational metadata only and does not
+  change list-visible task status.
 - bd not installed → offer install, don't silently fail
 - Ephemeral/conversation-only tracking → use conversation context, not beads
 
