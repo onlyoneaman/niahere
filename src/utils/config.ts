@@ -11,6 +11,7 @@ export interface Config {
   database_url: string;
   telegram_bot_token: string | null;
   telegram_chat_id: number | null;
+  telegram_open: boolean;
   log_level: string;
 }
 
@@ -23,6 +24,7 @@ const DEFAULTS: Config = {
   database_url: "postgres://localhost:5432/niahere",
   telegram_bot_token: null,
   telegram_chat_id: null,
+  telegram_open: false,
   log_level: "info",
 };
 
@@ -92,6 +94,8 @@ export function loadConfig(): Config {
     (process.env.TELEGRAM_CHAT_ID ? Number(process.env.TELEGRAM_CHAT_ID) : null) ||
     (typeof raw.telegram_chat_id === "number" ? raw.telegram_chat_id : null);
 
+  const telegram_open = raw.telegram_open === true;
+
   // Log level — env var overrides config
   const log_level =
     process.env.LOG_LEVEL ||
@@ -104,6 +108,7 @@ export function loadConfig(): Config {
     database_url,
     telegram_bot_token,
     telegram_chat_id,
+    telegram_open,
     log_level,
   };
 }

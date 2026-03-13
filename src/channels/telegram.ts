@@ -74,11 +74,19 @@ class TelegramChannel implements Channel {
       state.lock = state.lock.then(fn, fn);
     }
 
+    const isOpen = config.telegram_open;
+
     function registerOutbound(chatId: number): void {
       if (outboundChatId) return;
       outboundChatId = chatId;
       updateRawConfig({ telegram_chat_id: chatId });
       log.info({ chatId }, "auto-registered outbound chat ID");
+    }
+
+    function isAllowed(chatId: number): boolean {
+      if (isOpen) return true;
+      if (!outboundChatId) return true; // first user always allowed (gets registered)
+      return chatId === outboundChatId;
     }
 
     const bot = new Bot(token);
@@ -174,12 +182,20 @@ class TelegramChannel implements Channel {
     }
 
     bot.command("start", async (ctx) => {
+      if (!isAllowed(ctx.chatId)) {
+        await ctx.reply("Unauthorized.");
+        return;
+      }
       registerOutbound(ctx.chatId);
       const state = await getState(ctx.chatId);
       withLock(ctx.chatId, () => processMessage(ctx, state, "hi"));
     });
 
     bot.command(["restart", "new"], async (ctx) => {
+      if (!isAllowed(ctx.chatId)) {
+        await ctx.reply("Unauthorized.");
+        return;
+      }
       registerOutbound(ctx.chatId);
       const state = await restartChat(ctx.chatId);
       log.info({ chatId: ctx.chatId, room: `tg-${ctx.chatId}-${state.roomIndex}` }, "new telegram conversation");
@@ -187,6 +203,10 @@ class TelegramChannel implements Channel {
     });
 
     bot.on("message:text", async (ctx) => {
+      if (!isAllowed(ctx.chatId)) {
+        await ctx.reply("Unauthorized.");
+        return;
+      }
       registerOutbound(ctx.chatId);
       const state = await getState(ctx.chatId);
       withLock(ctx.chatId, () => processMessage(ctx, state, ctx.message.text));

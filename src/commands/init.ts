@@ -78,16 +78,26 @@ export async function runInit(): Promise<void> {
     delete process.env.DATABASE_URL;
 
     // Telegram
-    const existingToken = (existing.telegram_bot_token as string) || "";
-    const maskedToken = existingToken ? `${existingToken.slice(0, 4)}…${existingToken.slice(-4)}` : "";
-    const tokenInput = await ask(rl, "Telegram bot token (Enter to skip)", maskedToken);
-    const telegramToken = tokenInput === maskedToken ? existingToken : tokenInput;
-
+    let telegramToken = "";
     let telegramChatId: number | null = (existing.telegram_chat_id as number) || null;
-    if (telegramToken) {
-      const defaultChatId = telegramChatId ? String(telegramChatId) : "";
-      const chatIdStr = await ask(rl, "Telegram chat ID (Enter to skip)", defaultChatId);
-      if (chatIdStr) telegramChatId = Number(chatIdStr);
+    let telegramOpen = existing.telegram_open === true;
+
+    const existingToken = (existing.telegram_bot_token as string) || "";
+    const setupDefault = existingToken ? "y" : "n";
+    const setupTelegram = await ask(rl, "\nSet up Telegram? (y/n)", setupDefault);
+
+    if (setupTelegram.toLowerCase() === "y") {
+      const maskedToken = existingToken ? `${existingToken.slice(0, 4)}…${existingToken.slice(-4)}` : "";
+      const tokenInput = await ask(rl, "Bot token", maskedToken);
+      telegramToken = tokenInput === maskedToken ? existingToken : tokenInput;
+
+      if (telegramToken) {
+        const openDefault = telegramOpen ? "y" : "n";
+        const openInput = await ask(rl, "Allow anyone to message? (y/n)", openDefault);
+        telegramOpen = openInput.toLowerCase() === "y";
+      }
+    } else if (existingToken) {
+      telegramToken = existingToken;
     }
 
     // Read existing self files for defaults
@@ -135,6 +145,7 @@ export async function runInit(): Promise<void> {
     if (telegramToken) {
       config.telegram_bot_token = telegramToken;
       if (telegramChatId) config.telegram_chat_id = telegramChatId;
+      config.telegram_open = telegramOpen;
     }
 
     writeFileSync(paths.config, yaml.dump(config, { lineWidth: -1 }));
