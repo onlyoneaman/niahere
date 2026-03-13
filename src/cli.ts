@@ -26,7 +26,7 @@ try {
 const command = process.argv[2];
 
 // Ensure ~/.niahere/ exists for commands that need it
-if (command && command !== "init" && command !== "help") {
+if (command && !["init", "help", "version", "-v", "--version"].includes(command)) {
   mkdirSync(getNiaHome(), { recursive: true });
 }
 
@@ -37,6 +37,14 @@ function fail(msg: string): never {
 }
 
 switch (command) {
+  case "version":
+  case "-v":
+  case "--version": {
+    const { version } = await import("../package.json");
+    console.log(`nia v${version}`);
+    break;
+  }
+
   case "start": {
     if (isRunning()) fail(`nia is already running (pid: ${readPid()})`);
     const { registerService } = await import("./commands/service");
