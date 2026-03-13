@@ -2,7 +2,8 @@ import * as readline from "readline";
 import { createChatEngine } from "./engine";
 import { runMigrations } from "../db/migrate";
 import { closeDb } from "../db/connection";
-import { getMcpServers } from "../mcp";
+import { getMcpServers, setMcpServers } from "../mcp";
+import { createNiaMcpServer } from "../mcp/server";
 
 export async function startRepl(resume = false): Promise<void> {
   try {
@@ -12,6 +13,14 @@ export async function startRepl(resume = false): Promise<void> {
     console.error(`Failed to connect to postgres: ${msg}`);
     console.error(`Set database_url in ~/.niahere/config.yaml or run \`nia init\``);
     process.exit(1);
+  }
+
+  // Initialize MCP server if not already set (standalone chat mode)
+  if (!getMcpServers()) {
+    try {
+      const mcpConfig = createNiaMcpServer();
+      setMcpServers({ nia: mcpConfig });
+    } catch {}
   }
 
   const engine = await createChatEngine({ room: "terminal", channel: "terminal", resume, mcpServers: getMcpServers() });
