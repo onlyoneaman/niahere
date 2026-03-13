@@ -1,17 +1,16 @@
 #!/usr/bin/env bun
 import { existsSync, mkdirSync } from "fs";
-import { isRunning, readPid, runDaemon, startDaemon, stopDaemon } from "./core/daemon";
-import { readState, readAudit } from "./utils/logger";
-import { parseJobs } from "./core/cron";
-import { getConfig, updateRawConfig } from "./utils/config";
-import { runJob } from "./core/runner";
-import { localTime } from "./utils/time";
-import { startRepl } from "./chat/repl";
-import { Message, ActiveEngine, Job, Session } from "./db/models";
-import { withDb } from "./db/connection";
-import { getNiaHome, getPaths } from "./utils/paths";
-import { errMsg } from "./utils/errors";
-import cron from "node-cron";
+import { isRunning, readPid, runDaemon, startDaemon, stopDaemon } from "../core/daemon";
+import { readState } from "../utils/logger";
+import { getConfig, updateRawConfig } from "../utils/config";
+import { localTime } from "../utils/time";
+import { startRepl } from "../chat/repl";
+import { Message, ActiveEngine, Job, Session } from "../db/models";
+import { withDb } from "../db/connection";
+import { getNiaHome, getPaths } from "../utils/paths";
+import { errMsg } from "../utils/errors";
+import { fail } from "./helpers";
+import { jobCommand } from "./job";
 
 // Set LOG_LEVEL from config before anything else logs
 try {
@@ -30,24 +29,18 @@ if (command && !["init", "help", "version", "-v", "--version"].includes(command)
   mkdirSync(getNiaHome(), { recursive: true });
 }
 
-/** Print error and exit. */
-function fail(msg: string): never {
-  console.log(msg);
-  process.exit(1);
-}
-
 switch (command) {
   case "version":
   case "-v":
   case "--version": {
-    const { version } = await import("../package.json");
+    const { version } = await import("../../package.json");
     console.log(`nia v${version}`);
     break;
   }
 
   case "start": {
     if (isRunning()) fail(`nia is already running (pid: ${readPid()})`);
-    const { registerService } = await import("./commands/service");
+    const { registerService } = await import("../commands/service");
     await registerService();
     console.log(`nia started (pid: ${startDaemon()})`);
     break;
@@ -56,7 +49,7 @@ switch (command) {
   case "stop": {
     if (!isRunning()) fail("nia is not running");
     stopDaemon();
-    const { unregisterService } = await import("./commands/service");
+    const { unregisterService } = await import("../commands/service");
     await unregisterService();
     console.log("nia stopped");
     break;
@@ -123,11 +116,9 @@ switch (command) {
   }
 
   case "run": {
-    // No args = foreground daemon mode (used by daemon's child process)
-    // With args = one-shot prompt execution
     const prompt = process.argv.slice(3).join(" ");
     if (prompt) {
-      const { createChatEngine } = await import("./chat/engine");
+      const { createChatEngine } = await import("../chat/engine");
       await withDb(async () => {
         const engine = await createChatEngine({ room: "cli-run", channel: "terminal", resume: false });
         const { result } = await engine.send(prompt);
@@ -141,206 +132,7 @@ switch (command) {
   }
 
   case "job": {
-    const subcommand = process.argv[3];
-
-    switch (subcommand) {
-      case "list": {
-        try {
-          await withDb(async () => {
-            const jobs = await Job.list();
-            if (jobs.length === 0) {
-              console.log("No jobs configured. Use `nia job add` or `nia job import`.");
-            } else {
-              for (const job of jobs) {
-                console.log(`  ${job.enabled ? "●" : "○"} ${job.name}  ${job.schedule}  ${job.prompt.slice(0, 60)}${job.prompt.length > 60 ? "..." : ""}`);
-              }
-            }
-          });
-        } catch (err) {
-          fail(`Failed to list jobs: ${errMsg(err)}`);
-        }
-        break;
-      }
-
-      case "add": {
-        const name = process.argv[4];
-        const schedule = process.argv[5];
-        const prompt = process.argv.slice(6).join(" ");
-
-        if (!name || !schedule || !prompt) {
-          console.log('Usage: nia job add <name> <schedule> <prompt>');
-          fail('Example: nia job add heartbeat "*/10 * * * *" Check system health');
-        }
-        if (!cron.validate(schedule)) fail(`Invalid cron schedule: ${schedule}`);
-
-        try {
-          await withDb(async () => {
-            await Job.create(name, schedule, prompt);
-            console.log(`Job "${name}" added.`);
-          });
-        } catch (err) {
-          fail(`Failed to add job: ${errMsg(err)}`);
-        }
-        break;
-      }
-
-      case "remove": {
-        const name = process.argv[4];
-        if (!name) fail("Usage: nia job remove <name>");
-
-        try {
-          await withDb(async () => {
-            const removed = await Job.remove(name);
-            console.log(removed ? `Job "${name}" removed.` : `Job not found: ${name}`);
-          });
-        } catch (err) {
-          fail(`Failed to remove job: ${errMsg(err)}`);
-        }
-        break;
-      }
-
-      case "enable":
-      case "disable": {
-        const name = process.argv[4];
-        if (!name) fail(`Usage: nia job ${subcommand} <name>`);
-        const enabled = subcommand === "enable";
-
-        try {
-          await withDb(async () => {
-            const updated = await Job.update(name, { enabled });
-            console.log(updated ? `Job "${name}" ${subcommand}d.` : `Job not found: ${name}`);
-          });
-        } catch (err) {
-          fail(`Failed: ${errMsg(err)}`);
-        }
-        break;
-      }
-
-      case "import": {
-        const yamlJobs = parseJobs();
-        if (yamlJobs.length === 0) {
-          console.log("No YAML job files found in jobs/");
-          break;
-        }
-
-        try {
-          await withDb(async () => {
-            let imported = 0;
-            let skipped = 0;
-            for (const job of yamlJobs) {
-              if (await Job.get(job.name)) { skipped++; continue; }
-              await Job.create(job.name, job.schedule, job.prompt);
-              if (!job.enabled) await Job.update(job.name, { enabled: false });
-              imported++;
-            }
-            console.log(`Imported ${imported} job${imported !== 1 ? "s" : ""}${skipped > 0 ? ` (${skipped} already exist)` : ""}`);
-            if (imported > 0) console.log("Jobs will be picked up automatically.");
-          });
-        } catch (err) {
-          fail(`Failed to import: ${errMsg(err)}`);
-        }
-        break;
-      }
-
-      case "show":
-      case "status": {
-        const name = process.argv[4];
-        if (!name) fail(`Usage: nia job ${subcommand} <name>`);
-
-        try {
-          await withDb(async () => {
-            const job = await Job.get(name);
-            if (!job) fail(`Job not found: ${name}`);
-
-            console.log(`  ${job.enabled ? "●" : "○"} ${job.name}`);
-            console.log(`  schedule: ${job.schedule}`);
-            console.log(`  enabled:  ${job.enabled}`);
-            console.log(`  prompt:   ${job.prompt}`);
-
-            const state = readState();
-            const info = state[job.name];
-            if (info) {
-              console.log(`\n  last run: ${localTime(new Date(info.lastRun))}`);
-              console.log(`  status:   ${info.status}`);
-              console.log(`  duration: ${info.duration_ms}ms`);
-              if (info.error) console.log(`  error:    ${info.error}`);
-            } else {
-              console.log("\n  never run");
-            }
-
-            // Recent run history
-            const entries = readAudit(job.name, 5);
-            if (entries.length > 0) {
-              console.log("\n  recent runs:");
-              for (const e of entries) {
-                const time = localTime(new Date(e.timestamp));
-                const dur = `${e.duration_ms}ms`;
-                const icon = e.status === "ok" ? "\u2713" : "\u2717";
-                const summary = e.error || e.result.slice(0, 60).replace(/\n/g, " ") || "-";
-                console.log(`    ${icon} ${time}  ${dur.padStart(8)}  ${summary}`);
-              }
-            }
-          });
-        } catch (err) {
-          fail(`Failed: ${errMsg(err)}`);
-        }
-        break;
-      }
-
-      case "run": {
-        const name = process.argv[4];
-        if (!name) fail("Usage: nia job run <name>");
-
-        let job: { name: string; schedule: string; prompt: string } | null = null;
-        try {
-          await withDb(async () => { job = await Job.get(name); });
-        } catch { /* DB unavailable */ }
-
-        if (!job) {
-          const found = parseJobs().find((j) => j.name === name);
-          if (found) job = found;
-        }
-        if (!job) fail(`Job not found: ${name}`);
-
-        console.log(`Running job: ${job.name} (model: ${getConfig().model})`);
-        const result = await runJob(job);
-        console.log(`\nStatus: ${result.status}`);
-        console.log(`Duration: ${result.duration_ms}ms`);
-        if (result.result) console.log(`\nResult:\n${result.result}`);
-        if (result.error) console.log(`\nError: ${result.error}`);
-        break;
-      }
-
-      case "log": {
-        const logName = process.argv[4];
-        const entries = readAudit(logName, 20);
-        if (entries.length === 0) {
-          console.log(logName ? `No runs found for ${logName}` : "No job runs recorded yet.");
-          break;
-        }
-        for (const e of entries) {
-          const time = localTime(new Date(e.timestamp));
-          const dur = `${e.duration_ms}ms`;
-          const status = e.status === "ok" ? "\u2713" : "\u2717";
-          const summary = e.error || e.result.slice(0, 80).replace(/\n/g, " ") || "-";
-          console.log(`  ${status} ${time}  ${dur.padStart(8)}  ${e.job}  ${summary}`);
-        }
-        break;
-      }
-
-      default:
-        console.log("Usage: nia job <list|show|add|remove|enable|disable|run|log|import>\n");
-        console.log("  list                          — list all jobs");
-        console.log("  show <name>                   — full job details + recent runs");
-        console.log("  add <name> <schedule> <prompt> — add a new job");
-        console.log("  remove <name>                 — delete a job");
-        console.log("  enable <name>                 — enable a job");
-        console.log("  disable <name>                — disable a job");
-        console.log("  run <name>                    — run a job once");
-        console.log("  log [name]                    — show recent run history");
-        console.log("  import                        — import YAML jobs to DB");
-        process.exit(subcommand ? 1 : 0);
-    }
+    await jobCommand();
     break;
   }
 
@@ -378,7 +170,7 @@ switch (command) {
   }
 
   case "seed": {
-    await import("./db/seed");
+    await import("../db/seed");
     break;
   }
 
@@ -389,7 +181,7 @@ switch (command) {
   }
 
   case "skills": {
-    const { loadSkillNames } = await import("./chat/identity");
+    const { loadSkillNames } = await import("../chat/identity");
     const names = loadSkillNames();
     if (names.length === 0) {
       console.log("No skills found.");
@@ -470,7 +262,7 @@ switch (command) {
     const extraArgs = process.argv.slice(3).filter((a) => a !== "-v" && a !== "--verbose");
     const proc = Bun.spawn(["bun", "test", ...extraArgs], {
       stdio: ["ignore", "pipe", "pipe"],
-      cwd: import.meta.dir + "/..",
+      cwd: import.meta.dir + "/../..",
       env: { ...process.env, LOG_LEVEL: "silent" },
     });
 
@@ -484,7 +276,6 @@ switch (command) {
     if (verbose) {
       process.stdout.write(output);
     } else {
-      // Show summary lines only: pass/fail counts, file count, timing
       for (const line of output.split("\n")) {
         if (/^\s*\d+ pass/.test(line) || /^\s*\d+ fail/.test(line) || /^Ran \d+ tests/.test(line) || /expect\(\) calls/.test(line)) {
           console.log(line);
@@ -497,7 +288,7 @@ switch (command) {
   }
 
   case "init": {
-    const { runInit } = await import("./commands/init");
+    const { runInit } = await import("../commands/init");
     await runInit();
     break;
   }

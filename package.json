@@ -4,10 +4,10 @@
   "description": "A simple AI sidekick.",
   "type": "module",
   "scripts": {
-    "start": "bun run src/cli.ts start",
-    "stop": "bun run src/cli.ts stop",
-    "status": "bun run src/cli.ts status",
-    "dev": "bun run src/cli.ts run",
+    "start": "bun run src/cli/index.ts start",
+    "stop": "bun run src/cli/index.ts stop",
+    "status": "bun run src/cli/index.ts status",
+    "dev": "bun run src/cli/index.ts run",
     "test": "bun test",
     "seed": "bun run src/db/seed.ts"
   },
@@ -19,7 +19,7 @@
     "cron"
   ],
   "bin": {
-    "nia": "src/cli.ts"
+    "nia": "src/cli/index.ts"
   },
   "author": "Aman",
   "license": "MIT",
