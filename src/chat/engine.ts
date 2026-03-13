@@ -1,4 +1,6 @@
 import { query, type Query } from "@anthropic-ai/claude-agent-sdk";
+import { existsSync } from "fs";
+import { join } from "path";
 import { homedir } from "os";
 import { buildSystemPrompt } from "./identity";
 import { Session, Message, ActiveEngine } from "../db/models";
@@ -106,11 +108,24 @@ function formatToolInput(tool: string, input: any): string {
   return truncate(String(val), 60);
 }
 
+function sessionFileExists(sessionId: string, cwd: string): boolean {
+  // SDK stores sessions at ~/.claude/projects/<encoded-cwd>/<session-id>.jsonl
+  const encoded = cwd.replace(/\//g, "-");
+  const sessionFile = join(homedir(), ".claude", "projects", encoded, `${sessionId}.jsonl`);
+  return existsSync(sessionFile);
+}
+
 export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine> {
   const systemPrompt = buildSystemPrompt();
   const { room, channel, resume } = opts;
+  const cwd = homedir();
 
   let sessionId = resume ? await Session.getLatest(room) : null;
+
+  // Verify session file exists on disk before attempting resume
+  if (sessionId && !sessionFileExists(sessionId, cwd)) {
+    sessionId = null;
+  }
   let stream: MessageStream | null = null;
   let queryHandle: Query | null = null;
   let pending: PendingResult | null = null;
@@ -146,7 +161,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
 
     const options: Record<string, unknown> = {
       systemPrompt,
-      cwd: homedir(),
+      cwd,
       permissionMode: "bypassPermissions",
       includePartialMessages: true,
       settingSources: ["project", "user"],
