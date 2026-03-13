@@ -78,8 +78,10 @@ export async function runInit(): Promise<void> {
     delete process.env.DATABASE_URL;
 
     // Telegram
-    const defaultToken = (existing.telegram_bot_token as string) || "";
-    const telegramToken = await ask(rl, "Telegram bot token (Enter to skip)", defaultToken);
+    const existingToken = (existing.telegram_bot_token as string) || "";
+    const maskedToken = existingToken ? `${existingToken.slice(0, 4)}…${existingToken.slice(-4)}` : "";
+    const tokenInput = await ask(rl, "Telegram bot token (Enter to skip)", maskedToken);
+    const telegramToken = tokenInput === maskedToken ? existingToken : tokenInput;
 
     let telegramChatId: number | null = (existing.telegram_chat_id as number) || null;
     if (telegramToken) {
