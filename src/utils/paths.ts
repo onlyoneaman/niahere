@@ -10,6 +10,7 @@ export interface Paths {
   config: string;
   jobsDir: string;
   selfDir: string;
+  beadsDir: string;
 }
 
 export function getNiaHome(): string {
@@ -27,5 +28,6 @@ export function getPaths(): Paths {
     config: resolve(home, "config.yaml"),
     jobsDir: resolve(home, "jobs"),
     selfDir: resolve(home, "self"),
+    beadsDir: resolve(home, "beads"),
   };
 }

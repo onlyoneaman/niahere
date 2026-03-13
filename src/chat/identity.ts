@@ -1,10 +1,13 @@
 import { existsSync, readFileSync, readdirSync } from "fs";
-import { join } from "path";
+import { join, resolve } from "path";
 import { homedir } from "os";
 import yaml from "js-yaml";
 import { getPaths } from "../utils/paths";
 import { getConfig } from "../utils/config";
 import { localTime } from "../utils/time";
+
+// niahere project root (resolved from this file's location)
+const PROJECT_ROOT = resolve(import.meta.dir, "../..");
 
 function loadFile(dir: string, name: string): string {
   const filePath = join(dir, name);
@@ -20,7 +23,13 @@ export function loadIdentity(): string {
 
 function scanSkills(): { name: string; description: string }[] {
   const home = homedir();
+  const cwd = process.cwd();
   const skillDirs = [
+    // Project/cwd skills first (most specific)
+    join(cwd, "skills"),
+    // niahere bundled skills
+    join(PROJECT_ROOT, "skills"),
+    // User-level skills
     join(home, ".shared", "skills"),
     join(home, ".claude", "skills"),
     join(home, ".codex", "skills"),

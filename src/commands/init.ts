@@ -154,6 +154,51 @@ export async function runInit(): Promise<void> {
       }
     }
 
+    // Beads task manager
+    const bdInstalled = await Bun.spawn(["which", "bd"], { stdout: "pipe", stderr: "pipe" }).exited === 0;
+    const beadsInitialized = existsSync(`${paths.beadsDir}/.beads`);
+
+    if (bdInstalled && beadsInitialized) {
+      console.log("\nBeads: installed and initialized.");
+    } else if (bdInstalled && !beadsInitialized) {
+      const initBeads = await ask(rl, "\nBeads (bd) found but not initialized. Set up global task DB? (y/n)", "y");
+      if (initBeads.toLowerCase() === "y") {
+        mkdirSync(paths.beadsDir, { recursive: true });
+        const initProc = Bun.spawn(["bd", "init"], { cwd: paths.beadsDir, stdout: "pipe", stderr: "pipe" });
+        const exitCode = await initProc.exited;
+        if (exitCode === 0) {
+          console.log(`  \u2713 initialized beads at ${paths.beadsDir}`);
+        } else {
+          const stderr = await new Response(initProc.stderr).text();
+          console.log(`  \u2717 bd init failed: ${stderr.trim()}`);
+        }
+      }
+    } else {
+      const installBeads = await ask(rl, "\nInstall Beads task manager? (y/n)", "n");
+      if (installBeads.toLowerCase() === "y") {
+        console.log("  Installing...");
+        const npmProc = Bun.spawn(["npm", "install", "-g", "@beads/bd"], { stdout: "pipe", stderr: "pipe" });
+        let installExit = await npmProc.exited;
+
+        if (installExit !== 0 && process.platform === "darwin") {
+          console.log("  npm failed, trying brew...");
+          const brewProc = Bun.spawn(["brew", "install", "beads"], { stdout: "pipe", stderr: "pipe" });
+          installExit = await brewProc.exited;
+        }
+
+        if (installExit === 0) {
+          console.log("  \u2713 beads installed");
+          mkdirSync(paths.beadsDir, { recursive: true });
+          const initProc = Bun.spawn(["bd", "init"], { cwd: paths.beadsDir, stdout: "pipe", stderr: "pipe" });
+          if (await initProc.exited === 0) {
+            console.log(`  \u2713 initialized beads at ${paths.beadsDir}`);
+          }
+        } else {
+          console.log("  \u2717 install failed. You can install manually: npm install -g @beads/bd");
+        }
+      }
+    }
+
     // Read existing self files for defaults
     function readExisting(file: string, field: string): string {
       const filePath = `${paths.selfDir}/${file}`;
