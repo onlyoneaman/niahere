@@ -46,7 +46,8 @@ export async function jobCommand(): Promise<void> {
             console.log("No jobs configured. Use `nia job add` or `nia job import`.");
           } else {
             for (const job of jobs) {
-              console.log(`  ${job.enabled ? "●" : "○"} ${job.name}  ${job.schedule}  ${job.prompt.slice(0, 60)}${job.prompt.length > 60 ? "..." : ""}`);
+              const tag = job.always ? "  always" : "";
+              console.log(`  ${job.enabled ? "●" : "○"} ${job.name}  ${job.schedule}${tag}  ${job.prompt.slice(0, 60)}${job.prompt.length > 60 ? "..." : ""}`);
             }
           }
         });
@@ -57,20 +58,22 @@ export async function jobCommand(): Promise<void> {
     }
 
     case "add": {
-      const name = process.argv[4];
-      const schedule = process.argv[5];
-      const prompt = process.argv.slice(6).join(" ");
+      const always = process.argv.includes("--always");
+      const args = process.argv.slice(4).filter((a) => a !== "--always");
+      const name = args[0];
+      const schedule = args[1];
+      const prompt = args.slice(2).join(" ");
 
       if (!name || !schedule || !prompt) {
-        console.log('Usage: nia job add <name> <schedule> <prompt>');
-        fail('Example: nia job add heartbeat "*/10 * * * *" Check system health');
+        console.log('Usage: nia job add <name> <schedule> <prompt> [--always]');
+        fail('Example: nia job add heartbeat "*/10 * * * *" Check system health --always');
       }
       if (!cron.validate(schedule)) fail(`Invalid cron schedule: ${schedule}`);
 
       try {
         await withDb(async () => {
-          await Job.create(name, schedule, prompt);
-          console.log(`Job "${name}" added.`);
+          await Job.create(name, schedule, prompt, always);
+          console.log(`Job "${name}" added.${always ? " (runs 24/7)" : ""}`);
         });
       } catch (err) {
         fail(`Failed to add job: ${errMsg(err)}`);
@@ -147,6 +150,7 @@ export async function jobCommand(): Promise<void> {
           console.log(`  ${job.enabled ? "●" : "○"} ${job.name}`);
           console.log(`  schedule: ${job.schedule}`);
           console.log(`  enabled:  ${job.enabled}`);
+          console.log(`  type:     ${job.always ? "cron (runs 24/7)" : "job (active hours only)"}`);
           console.log(`  prompt:   ${job.prompt}`);
 
           const state = readState();
@@ -191,7 +195,8 @@ export async function jobCommand(): Promise<void> {
           const status = info
             ? `${info.status} (${localTime(new Date(info.lastRun))}, ${info.duration_ms}ms)`
             : "never run";
-          console.log(`  ${job.enabled ? "●" : "○"} ${job.name}  [${job.schedule}]  ${status}`);
+          const tag = job.always ? " always" : "";
+          console.log(`  ${job.enabled ? "●" : "○"} ${job.name}  [${job.schedule}]${tag}  ${status}`);
           if (info?.error) console.log(`    error: ${info.error}`);
         });
       } catch (err) {
@@ -246,7 +251,8 @@ export async function jobCommand(): Promise<void> {
       console.log("  list                          — list all jobs");
       console.log("  show [name]                   — full job details + recent runs");
       console.log("  status [name]                 — quick status check");
-      console.log("  add <name> <schedule> <prompt> — add a new job");
+      console.log("  add <name> <schedule> <prompt> — add a job (active hours only)")
+      console.log("      --always                  — run 24/7 regardless of active hours");
       console.log("  remove <name>                 — delete a job");
       console.log("  enable <name>                 — enable a job");
       console.log("  disable <name>                — disable a job");

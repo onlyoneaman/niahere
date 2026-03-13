@@ -124,23 +124,35 @@ export async function runDaemon(): Promise<void> {
   let channels: Channel[] = [];
   channels = await startChannels();
 
+  function isWithinActiveHours(): boolean {
+    const { start, end } = config.activeHours;
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: config.timezone });
+    const current = formatter.format(now).replace(/\u200e/g, ""); // "HH:MM"
+    return current >= start && current <= end;
+  }
+
   // Schedule jobs from DB
   async function scheduleJobs() {
     stopAllCronTasks();
 
-    let jobs: { name: string; schedule: string; prompt: string }[];
+    let jobs: { name: string; schedule: string; prompt: string; always: boolean }[];
     try {
       jobs = await JobModel.listEnabled();
     } catch {
       const { parseJobs } = await import("./cron");
-      jobs = parseJobs().filter((j) => j.enabled);
+      jobs = parseJobs().filter((j) => j.enabled).map((j) => ({ ...j, always: false }));
     }
 
     for (const job of jobs) {
-      log.info({ job: job.name, schedule: job.schedule }, "scheduling job");
+      log.info({ job: job.name, schedule: job.schedule, always: job.always }, "scheduling job");
       cron.schedule(
         job.schedule,
         async () => {
+          if (!job.always && !isWithinActiveHours()) {
+            log.info({ job: job.name }, "skipping job — outside active hours");
+            return;
+          }
           log.info({ job: job.name }, "running job");
           const result = await runJob(job);
           log.info({ job: job.name, status: result.status, duration: result.duration_ms }, "job completed");

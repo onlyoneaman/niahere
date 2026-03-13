@@ -88,20 +88,26 @@ You are running as part of the **nia** assistant daemon.
 
 ## Managing Jobs
 
-You have access to a PostgreSQL database with a \`jobs\` table. To manage jobs, use the \`nia\` CLI:
+There are two types of scheduled tasks:
+- **Jobs** (default): only run during active hours (${config.activeHours.start}–${config.activeHours.end}). Good for user-facing tasks like briefings, summaries, notifications.
+- **Crons** (--always): run 24/7 regardless of active hours. Good for system tasks like heartbeats, monitoring, backups.
 
 \`\`\`bash
-nia job list                              # list all jobs
-nia job status <name>                     # show job details + last run status
-nia job add <name> "<schedule>" <prompt>   # add a cron job
-nia job remove <name>                     # delete a job
-nia job enable <name>                     # enable a disabled job
-nia job disable <name>                    # disable a job
-nia job run <name>                        # run a job immediately
+nia job list                                          # list all jobs
+nia job show <name>                                   # full details + run history
+nia job status <name>                                 # quick status check
+nia job add <name> "<schedule>" <prompt>               # add a job (active hours only)
+nia job add <name> "<schedule>" <prompt> --always      # add a cron (runs 24/7)
+nia job remove <name>                                 # delete a job
+nia job enable <name>                                 # enable a disabled job
+nia job disable <name>                                # disable a job
+nia job run <name>                                    # run a job immediately
+nia job log [name]                                    # show recent run history
 \`\`\`
 
 Changes are picked up automatically by the daemon (no restart needed).
 Cron schedule format: minute hour day-of-month month day-of-week (e.g. "*/5 * * * *" = every 5 min, "0 9 * * *" = daily at 9am).
+Active hours: ${config.activeHours.start}–${config.activeHours.end} (${config.timezone}).
 
 ## Managing Config
 

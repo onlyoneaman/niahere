@@ -5,6 +5,7 @@ export interface Job {
   schedule: string;
   prompt: string;
   enabled: boolean;
+  always: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -15,6 +16,7 @@ function toJob(r: Record<string, any>): Job {
     schedule: r.schedule,
     prompt: r.prompt,
     enabled: r.enabled,
+    always: r.always ?? false,
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at),
   };
@@ -25,30 +27,30 @@ async function notifyChange(): Promise<void> {
   await sql`SELECT pg_notify('nia_jobs', '')`;
 }
 
-export async function create(name: string, schedule: string, prompt: string): Promise<void> {
+export async function create(name: string, schedule: string, prompt: string, always = false): Promise<void> {
   const sql = getSql();
   await sql`
-    INSERT INTO jobs (name, schedule, prompt)
-    VALUES (${name}, ${schedule}, ${prompt})
+    INSERT INTO jobs (name, schedule, prompt, always)
+    VALUES (${name}, ${schedule}, ${prompt}, ${always})
   `;
   await notifyChange();
 }
 
 export async function list(): Promise<Job[]> {
   const sql = getSql();
-  const rows = await sql`SELECT name, schedule, prompt, enabled, created_at, updated_at FROM jobs ORDER BY name`;
+  const rows = await sql`SELECT name, schedule, prompt, enabled, always, created_at, updated_at FROM jobs ORDER BY name`;
   return rows.map(toJob);
 }
 
 export async function get(name: string): Promise<Job | null> {
   const sql = getSql();
-  const rows = await sql`SELECT name, schedule, prompt, enabled, created_at, updated_at FROM jobs WHERE name = ${name}`;
+  const rows = await sql`SELECT name, schedule, prompt, enabled, always, created_at, updated_at FROM jobs WHERE name = ${name}`;
   return rows.length > 0 ? toJob(rows[0]) : null;
 }
 
 export async function update(
   name: string,
-  fields: Partial<{ schedule: string; prompt: string; enabled: boolean }>,
+  fields: Partial<{ schedule: string; prompt: string; enabled: boolean; always: boolean }>,
 ): Promise<boolean> {
   const sql = getSql();
   const existing = await get(name);
@@ -57,10 +59,11 @@ export async function update(
   const schedule = fields.schedule ?? existing.schedule;
   const prompt = fields.prompt ?? existing.prompt;
   const enabled = fields.enabled ?? existing.enabled;
+  const always = fields.always ?? existing.always;
 
   await sql`
     UPDATE jobs
-    SET schedule = ${schedule}, prompt = ${prompt}, enabled = ${enabled}, updated_at = NOW()
+    SET schedule = ${schedule}, prompt = ${prompt}, enabled = ${enabled}, always = ${always}, updated_at = NOW()
     WHERE name = ${name}
   `;
   await notifyChange();
@@ -76,6 +79,6 @@ export async function remove(name: string): Promise<boolean> {
 
 export async function listEnabled(): Promise<Job[]> {
   const sql = getSql();
-  const rows = await sql`SELECT name, schedule, prompt, enabled, created_at, updated_at FROM jobs WHERE enabled = TRUE ORDER BY name`;
+  const rows = await sql`SELECT name, schedule, prompt, enabled, always, created_at, updated_at FROM jobs WHERE enabled = TRUE ORDER BY name`;
   return rows.map(toJob);
 }
