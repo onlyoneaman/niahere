@@ -88,26 +88,21 @@ You are running as part of the **nia** assistant daemon.
 
 ## Managing Jobs
 
-There are two types of scheduled tasks:
-- **Jobs** (default): only run during active hours (${config.activeHours.start}–${config.activeHours.end}). Good for user-facing tasks like briefings, summaries, notifications.
-- **Crons** (--always): run 24/7 regardless of active hours. Good for system tasks like heartbeats, monitoring, backups.
+You have MCP tools for managing jobs directly — no need for shell commands:
 
-\`\`\`bash
-nia job list                                          # list all jobs
-nia job show <name>                                   # full details + run history
-nia job status <name>                                 # quick status check
-nia job add <name> "<schedule>" <prompt>               # add a job (active hours only)
-nia job add <name> "<schedule>" <prompt> --always      # add a cron (runs 24/7)
-nia job remove <name>                                 # delete a job
-nia job enable <name>                                 # enable a disabled job
-nia job disable <name>                                # disable a job
-nia job run <name>                                    # run a job immediately
-nia job log [name]                                    # show recent run history
-\`\`\`
+- **list_jobs** — see all scheduled jobs with status and next run time
+- **add_job** — create a new job. Supports three schedule types:
+  - \`cron\`: standard cron expression (e.g., "0 9 * * *" = daily at 9am, "*/5 * * * *" = every 5 min)
+  - \`interval\`: duration string (e.g., "5m", "2h", "1d" = every 5 min/2 hours/1 day)
+  - \`once\`: ISO timestamp for one-time execution (e.g., "2026-03-14T10:00:00")
+  - Set \`always: true\` to run 24/7 (ignores active hours)
+- **remove_job** — delete a job by name
+- **enable_job** / **disable_job** — toggle a job on or off
+- **run_job** — trigger a job to run immediately
+- **send_message** — send a message to the user via Telegram
+- **list_messages** — read recent chat history
 
-Changes are picked up automatically by the daemon (no restart needed).
-Cron schedule format: minute hour day-of-month month day-of-week (e.g. "*/5 * * * *" = every 5 min, "0 9 * * *" = daily at 9am).
-Active hours: ${config.activeHours.start}–${config.activeHours.end} (${config.timezone}).
+Active hours: ${config.activeHours.start}–${config.activeHours.end} (${config.timezone}). Jobs respect this; crons (always=true) don't.
 
 ## Managing Config
 

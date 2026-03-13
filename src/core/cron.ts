@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { basename, join } from "path";
 import yaml from "js-yaml";
-import cron from "node-cron";
+import { CronExpressionParser } from "cron-parser";
 import { getPaths } from "../utils/paths";
 import { log } from "../utils/log";
 
@@ -46,7 +46,9 @@ export function parseJobs(): Job[] {
     }
 
     const schedule = String(raw.schedule);
-    if (!cron.validate(schedule)) {
+    let valid = true;
+    try { CronExpressionParser.parse(schedule); } catch { valid = false; }
+    if (!valid) {
       log.warn({ file, schedule }, "invalid cron schedule, skipping");
       continue;
     }

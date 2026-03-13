@@ -1,16 +1,13 @@
-import type { Channel, ChannelFactory } from "./channel";
+import type { Channel } from "./channel";
+import { getFactories, registerChannel } from "./registry";
 import { log } from "../utils/log";
 
-const factories: ChannelFactory[] = [];
-
-export function registerChannel(factory: ChannelFactory): void {
-  factories.push(factory);
-}
+export { registerChannel };
 
 export async function startChannels(): Promise<Channel[]> {
   const channels: Channel[] = [];
 
-  for (const factory of factories) {
+  for (const factory of getFactories()) {
     const channel = factory();
     if (!channel) continue;
 
@@ -38,3 +35,4 @@ export async function stopChannels(channels: Channel[]): Promise<void> {
 }
 
 export type { Channel, ChannelFactory } from "./channel";
+export { sendToTelegram } from "./telegram";

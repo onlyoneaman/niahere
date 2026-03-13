@@ -1,12 +1,24 @@
 import { Bot } from "grammy";
 import type { Channel } from "./channel";
-import { registerChannel } from "./index";
+import { registerChannel } from "./registry";
 import { createChatEngine, type ChatEngine } from "../chat/engine";
 import { getConfig } from "../utils/config";
 import { updateRawConfig } from "../utils/config";
 import { runMigrations } from "../db/migrate";
 import { Session } from "../db/models";
 import { log } from "../utils/log";
+import { getMcpServers } from "../mcp";
+
+let telegramSender: ((text: string) => Promise<void>) | null = null;
+
+export function setSender(fn: (text: string) => Promise<void>): void {
+  telegramSender = fn;
+}
+
+export async function sendToTelegram(text: string): Promise<void> {
+  if (!telegramSender) throw new Error("Telegram not configured");
+  await telegramSender(text);
+}
 
 interface ChatState {
   engine: ChatEngine;
@@ -44,7 +56,7 @@ class TelegramChannel implements Channel {
         const prefix = roomPrefix(chatId);
         const idx = await Session.getLatestRoomIndex(prefix);
         const room = roomName(chatId, idx);
-        const engine = await createChatEngine({ room, channel: "telegram", resume: true });
+        const engine = await createChatEngine({ room, channel: "telegram", resume: true, mcpServers: getMcpServers() });
         state = { engine, roomIndex: idx, lock: Promise.resolve() };
         chats.set(chatId, state);
       }
@@ -59,7 +71,7 @@ class TelegramChannel implements Channel {
       const prevIdx = await Session.getLatestRoomIndex(prefix);
       const newIdx = prevIdx + 1;
       const room = roomName(chatId, newIdx);
-      const engine = await createChatEngine({ room, channel: "telegram", resume: false });
+      const engine = await createChatEngine({ room, channel: "telegram", resume: false, mcpServers: getMcpServers() });
       const state: ChatState = { engine, roomIndex: newIdx, lock: Promise.resolve() };
       chats.set(chatId, state);
       return state;
@@ -90,6 +102,12 @@ class TelegramChannel implements Channel {
     }
 
     const bot = new Bot(token);
+
+    setSender(async (text: string) => {
+      const chatId = outboundChatId;
+      if (!chatId) throw new Error("No outbound chat ID registered");
+      await bot.api.sendMessage(chatId, text);
+    });
 
     async function processMessage(ctx: any, state: ChatState, text: string): Promise<void> {
       const chatId = ctx.chatId;
@@ -230,6 +248,7 @@ class TelegramChannel implements Channel {
   }
 
   async stop(): Promise<void> {
+    telegramSender = null;
     if (this.bot) {
       this.bot.stop();
       this.bot = null;

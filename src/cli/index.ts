@@ -119,8 +119,9 @@ switch (command) {
     const prompt = process.argv.slice(3).join(" ");
     if (prompt) {
       const { createChatEngine } = await import("../chat/engine");
+      const { getMcpServers } = await import("../mcp");
       await withDb(async () => {
-        const engine = await createChatEngine({ room: "cli-run", channel: "terminal", resume: false });
+        const engine = await createChatEngine({ room: "cli-run", channel: "terminal", resume: false, mcpServers: getMcpServers() });
         const { result } = await engine.send(prompt);
         console.log(result.trim());
         engine.close();

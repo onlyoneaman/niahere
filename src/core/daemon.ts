@@ -1,14 +1,15 @@
 import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { dirname } from "path";
-import cron from "node-cron";
 import { getPaths } from "../utils/paths";
 import { getConfig } from "../utils/config";
-import { runJob } from "./runner";
 import { log } from "../utils/log";
-import { ActiveEngine, Job as JobModel } from "../db/models";
+import { ActiveEngine } from "../db/models";
 import { runMigrations } from "../db/migrate";
 import { closeDb, getSql } from "../db/connection";
 import { startChannels, stopChannels, type Channel } from "../channels";
+import { startScheduler, stopScheduler, recomputeAllNextRuns } from "./scheduler";
+import { createNiaMcpServer } from "../mcp/server";
+import { setMcpServers } from "../mcp";
 import "../channels/telegram"; // side-effect: registers channel factory
 
 export function writePid(pid: number): void {
@@ -84,15 +85,7 @@ export function stopDaemon(): boolean {
   return true;
 }
 
-function stopAllCronTasks(): void {
-  for (const [, task] of cron.getTasks()) {
-    task.stop();
-  }
-}
-
 export async function runDaemon(): Promise<void> {
-  const config = getConfig();
-
   writePid(process.pid);
   log.info({ pid: process.pid }, "daemon started");
 
@@ -120,58 +113,37 @@ export async function runDaemon(): Promise<void> {
     log.info({ recovered }, "recovered stale running jobs");
   }
 
+  // Initialize MCP server (in-process, no HTTP needed)
+  try {
+    const mcpConfig = createNiaMcpServer();
+    setMcpServers({ nia: mcpConfig });
+    log.info("MCP server initialized");
+  } catch (err) {
+    log.error({ err }, "failed to initialize MCP server");
+  }
+
   // Start channels (telegram, etc.)
   let channels: Channel[] = [];
   channels = await startChannels();
 
-  function isWithinActiveHours(): boolean {
-    const { start, end } = config.activeHours;
-    const now = new Date();
-    const formatter = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: config.timezone });
-    const current = formatter.format(now).replace(/\u200e/g, ""); // "HH:MM"
-    return current >= start && current <= end;
+  // Recompute next_run_at for jobs that don't have one (legacy cron jobs)
+  try {
+    await recomputeAllNextRuns();
+  } catch (err) {
+    log.warn({ err }, "failed to recompute next_run_at");
   }
 
-  // Schedule jobs from DB
-  async function scheduleJobs() {
-    stopAllCronTasks();
-
-    let jobs: { name: string; schedule: string; prompt: string; always: boolean }[];
-    try {
-      jobs = await JobModel.listEnabled();
-    } catch {
-      const { parseJobs } = await import("./cron");
-      jobs = parseJobs().filter((j) => j.enabled).map((j) => ({ ...j, always: false }));
-    }
-
-    for (const job of jobs) {
-      log.info({ job: job.name, schedule: job.schedule, always: job.always }, "scheduling job");
-      cron.schedule(
-        job.schedule,
-        async () => {
-          if (!job.always && !isWithinActiveHours()) {
-            log.info({ job: job.name }, "skipping job — outside active hours");
-            return;
-          }
-          log.info({ job: job.name }, "running job");
-          const result = await runJob(job);
-          log.info({ job: job.name, status: result.status, duration: result.duration_ms }, "job completed");
-        },
-        { timezone: config.timezone },
-      );
-    }
-
-    log.info({ count: jobs.length }, "jobs scheduled");
-  }
-
-  await scheduleJobs();
+  // Start unified scheduler (replaces node-cron)
+  startScheduler();
 
   // Listen for job changes via Postgres LISTEN/NOTIFY
   try {
     const sql = getSql();
     await sql.listen("nia_jobs", async () => {
-      log.info("job change detected via NOTIFY, reloading");
-      await scheduleJobs();
+      log.info("job change detected via NOTIFY, recomputing next runs");
+      await recomputeAllNextRuns().catch((err) => {
+        log.warn({ err }, "failed to recompute next runs on notify");
+      });
     });
     log.info("listening for job changes on nia_jobs channel");
   } catch (err) {
@@ -180,8 +152,8 @@ export async function runDaemon(): Promise<void> {
 
   // SIGHUP as manual fallback
   process.on("SIGHUP", async () => {
-    log.info("received SIGHUP, reloading jobs");
-    await scheduleJobs();
+    log.info("received SIGHUP, recomputing job schedules");
+    await recomputeAllNextRuns().catch(() => {});
   });
 
   let shuttingDown = false;
@@ -192,6 +164,7 @@ export async function runDaemon(): Promise<void> {
 
     log.info("shutting down...");
 
+    stopScheduler();
     await stopChannels(channels);
 
     try {
@@ -209,8 +182,6 @@ export async function runDaemon(): Promise<void> {
     } catch {
       // postgres may be gone
     }
-
-    stopAllCronTasks();
 
     try {
       await closeDb();

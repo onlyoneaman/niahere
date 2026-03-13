@@ -6,6 +6,9 @@ export interface Job {
   prompt: string;
   enabled: boolean;
   always: boolean;
+  scheduleType: "cron" | "interval" | "once";
+  nextRunAt: string | null;
+  lastRunAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -17,6 +20,9 @@ function toJob(r: Record<string, any>): Job {
     prompt: r.prompt,
     enabled: r.enabled,
     always: r.always ?? false,
+    scheduleType: r.schedule_type || "cron",
+    nextRunAt: r.next_run_at ? String(r.next_run_at) : null,
+    lastRunAt: r.last_run_at ? String(r.last_run_at) : null,
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at),
   };
@@ -27,24 +33,31 @@ async function notifyChange(): Promise<void> {
   await sql`SELECT pg_notify('nia_jobs', '')`;
 }
 
-export async function create(name: string, schedule: string, prompt: string, always = false): Promise<void> {
+export async function create(
+  name: string,
+  schedule: string,
+  prompt: string,
+  always = false,
+  scheduleType: "cron" | "interval" | "once" = "cron",
+  nextRunAt?: Date,
+): Promise<void> {
   const sql = getSql();
   await sql`
-    INSERT INTO jobs (name, schedule, prompt, always)
-    VALUES (${name}, ${schedule}, ${prompt}, ${always})
+    INSERT INTO jobs (name, schedule, prompt, always, schedule_type, next_run_at)
+    VALUES (${name}, ${schedule}, ${prompt}, ${always}, ${scheduleType}, ${nextRunAt ?? null})
   `;
   await notifyChange();
 }
 
 export async function list(): Promise<Job[]> {
   const sql = getSql();
-  const rows = await sql`SELECT name, schedule, prompt, enabled, always, created_at, updated_at FROM jobs ORDER BY name`;
+  const rows = await sql`SELECT name, schedule, prompt, enabled, always, schedule_type, next_run_at, last_run_at, created_at, updated_at FROM jobs ORDER BY name`;
   return rows.map(toJob);
 }
 
 export async function get(name: string): Promise<Job | null> {
   const sql = getSql();
-  const rows = await sql`SELECT name, schedule, prompt, enabled, always, created_at, updated_at FROM jobs WHERE name = ${name}`;
+  const rows = await sql`SELECT name, schedule, prompt, enabled, always, schedule_type, next_run_at, last_run_at, created_at, updated_at FROM jobs WHERE name = ${name}`;
   return rows.length > 0 ? toJob(rows[0]) : null;
 }
 
@@ -79,6 +92,27 @@ export async function remove(name: string): Promise<boolean> {
 
 export async function listEnabled(): Promise<Job[]> {
   const sql = getSql();
-  const rows = await sql`SELECT name, schedule, prompt, enabled, always, created_at, updated_at FROM jobs WHERE enabled = TRUE ORDER BY name`;
+  const rows = await sql`SELECT name, schedule, prompt, enabled, always, schedule_type, next_run_at, last_run_at, created_at, updated_at FROM jobs WHERE enabled = TRUE ORDER BY name`;
   return rows.map(toJob);
+}
+
+export async function listDue(): Promise<Job[]> {
+  const sql = getSql();
+  const rows = await sql`
+    SELECT name, schedule, prompt, enabled, always, schedule_type, next_run_at, last_run_at, created_at, updated_at
+    FROM jobs
+    WHERE enabled = TRUE AND next_run_at <= NOW()
+    ORDER BY next_run_at
+  `;
+  return rows.map(toJob);
+}
+
+export async function markRun(name: string, nextRunAt: Date | null): Promise<void> {
+  const sql = getSql();
+  if (nextRunAt) {
+    await sql`UPDATE jobs SET last_run_at = NOW(), next_run_at = ${nextRunAt}, updated_at = NOW() WHERE name = ${name}`;
+  } else {
+    await sql`UPDATE jobs SET last_run_at = NOW(), enabled = FALSE, updated_at = NOW() WHERE name = ${name}`;
+  }
+  await notifyChange();
 }

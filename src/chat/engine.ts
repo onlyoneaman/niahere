@@ -32,6 +32,7 @@ export interface EngineOptions {
   room: string;
   channel: string;
   resume: boolean;
+  mcpServers?: Record<string, unknown>;
 }
 
 interface SDKUserMessage {
@@ -137,7 +138,7 @@ function sessionFileExists(sessionId: string, cwd: string): boolean {
 }
 
 export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine> {
-  const { room, channel, resume } = opts;
+  const { room, channel, resume, mcpServers } = opts;
   const systemPrompt = buildSystemPrompt("chat", channel);
   const cwd = homedir();
 
@@ -190,6 +191,10 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
 
     if (sessionId) {
       options.resume = sessionId;
+    }
+
+    if (mcpServers) {
+      options.mcpServers = mcpServers;
     }
 
     queryHandle = query({

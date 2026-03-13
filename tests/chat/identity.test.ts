@@ -107,9 +107,10 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("active hours");
   });
 
-  test("includes job management commands", () => {
+  test("includes MCP job management tools", () => {
     const prompt = buildSystemPrompt();
-    expect(prompt).toContain("nia job");
-    expect(prompt).toContain("--always");
+    expect(prompt).toContain("list_jobs");
+    expect(prompt).toContain("add_job");
+    expect(prompt).toContain("send_message");
   });
 });

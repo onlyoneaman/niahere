@@ -1,5 +1,5 @@
 import * as readline from "readline";
-import cron from "node-cron";
+import { CronExpressionParser } from "cron-parser";
 import { readState, readAudit } from "../utils/logger";
 import { getConfig } from "../utils/config";
 import { parseJobs } from "../core/cron";
@@ -9,6 +9,7 @@ import { Job } from "../db/models";
 import { withDb } from "../db/connection";
 import { errMsg } from "../utils/errors";
 import { fail, pickFromList } from "./helpers";
+import { computeInitialNextRun } from "../core/scheduler";
 
 async function pickJob(prompt = "Pick a job"): Promise<string> {
   let jobs: { name: string; schedule: string; enabled: boolean; prompt: string }[] = [];
@@ -47,7 +48,8 @@ export async function jobCommand(): Promise<void> {
           } else {
             for (const job of jobs) {
               const tag = job.always ? "  always" : "";
-              console.log(`  ${job.enabled ? "●" : "○"} ${job.name}  ${job.schedule}${tag}  ${job.prompt.slice(0, 60)}${job.prompt.length > 60 ? "..." : ""}`);
+              const type = job.scheduleType !== "cron" ? ` (${job.scheduleType})` : "";
+              console.log(`  ${job.enabled ? "●" : "○"} ${job.name}  ${job.schedule}${type}${tag}  ${job.prompt.slice(0, 60)}${job.prompt.length > 60 ? "..." : ""}`);
             }
           }
         });
@@ -59,21 +61,39 @@ export async function jobCommand(): Promise<void> {
 
     case "add": {
       const always = process.argv.includes("--always");
-      const args = process.argv.slice(4).filter((a) => a !== "--always");
-      const name = args[0];
-      const schedule = args[1];
-      const prompt = args.slice(2).join(" ");
+      let cliArgs = process.argv.slice(4).filter((a) => a !== "--always");
+
+      // Parse --type flag
+      let scheduleType: "cron" | "interval" | "once" = "cron";
+      const typeIdx = cliArgs.indexOf("--type");
+      if (typeIdx !== -1 && cliArgs[typeIdx + 1]) {
+        const val = cliArgs[typeIdx + 1];
+        if (val === "cron" || val === "interval" || val === "once") {
+          scheduleType = val;
+          cliArgs.splice(typeIdx, 2);
+        }
+      }
+
+      const name = cliArgs[0];
+      const schedule = cliArgs[1];
+      const prompt = cliArgs.slice(2).join(" ");
 
       if (!name || !schedule || !prompt) {
-        console.log('Usage: nia job add <name> <schedule> <prompt> [--always]');
+        console.log('Usage: nia job add <name> <schedule> <prompt> [--always] [--type cron|interval|once]');
         fail('Example: nia job add heartbeat "*/10 * * * *" Check system health --always');
       }
-      if (!cron.validate(schedule)) fail(`Invalid cron schedule: ${schedule}`);
+
+      // Validate schedule based on type
+      if (scheduleType === "cron") {
+        try { CronExpressionParser.parse(schedule); } catch { fail(`Invalid cron schedule: ${schedule}`); }
+      }
 
       try {
+        const config = getConfig();
+        const nextRunAt = computeInitialNextRun(scheduleType, schedule, config.timezone);
         await withDb(async () => {
-          await Job.create(name, schedule, prompt, always);
-          console.log(`Job "${name}" added.${always ? " (runs 24/7)" : ""}`);
+          await Job.create(name, schedule, prompt, always, scheduleType, nextRunAt);
+          console.log(`Job "${name}" added (${scheduleType}: ${schedule}).${always ? " (runs 24/7)" : ""}`);
         });
       } catch (err) {
         fail(`Failed to add job: ${errMsg(err)}`);
