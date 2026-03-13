@@ -3,6 +3,7 @@ import type { Channel } from "./channel";
 import { registerChannel } from "./index";
 import { createChatEngine, type ChatEngine } from "../chat/engine";
 import { getConfig } from "../utils/config";
+import { updateRawConfig } from "../utils/config";
 import { runMigrations } from "../db/migrate";
 import { Session } from "../db/models";
 import { log } from "../utils/log";
@@ -25,7 +26,7 @@ class TelegramChannel implements Channel {
 
     await runMigrations();
 
-    const allowedChatId = config.telegram_chat_id;
+    let outboundChatId = config.telegram_chat_id;
 
     const chats = new Map<number, ChatState>();
 
@@ -73,9 +74,11 @@ class TelegramChannel implements Channel {
       state.lock = state.lock.then(fn, fn);
     }
 
-    function isAllowed(chatId: number): boolean {
-      if (!allowedChatId) return true;
-      return chatId === allowedChatId;
+    function registerOutbound(chatId: number): void {
+      if (outboundChatId) return;
+      outboundChatId = chatId;
+      updateRawConfig({ telegram_chat_id: chatId });
+      log.info({ chatId }, "auto-registered outbound chat ID");
     }
 
     const bot = new Bot(token);
@@ -171,32 +174,22 @@ class TelegramChannel implements Channel {
     }
 
     bot.command("start", async (ctx) => {
-      if (!isAllowed(ctx.chatId)) return;
+      registerOutbound(ctx.chatId);
       const state = await getState(ctx.chatId);
       withLock(ctx.chatId, () => processMessage(ctx, state, "hi"));
     });
 
     bot.command(["restart", "new"], async (ctx) => {
-      if (!isAllowed(ctx.chatId)) return;
+      registerOutbound(ctx.chatId);
       const state = await restartChat(ctx.chatId);
       log.info({ chatId: ctx.chatId, room: `tg-${ctx.chatId}-${state.roomIndex}` }, "new telegram conversation");
       await ctx.reply("New conversation started.");
     });
 
     bot.on("message:text", async (ctx) => {
-      const chatId = ctx.chatId;
-
-      if (!isAllowed(chatId)) {
-        log.debug({ chatId }, "ignored message from unauthorized chat");
-        return;
-      }
-
-      if (!allowedChatId) {
-        log.info({ chatId }, "message from unregistered chat (set telegram_chat_id to restrict)");
-      }
-
-      const state = await getState(chatId);
-      withLock(chatId, () => processMessage(ctx, state, ctx.message.text));
+      registerOutbound(ctx.chatId);
+      const state = await getState(ctx.chatId);
+      withLock(ctx.chatId, () => processMessage(ctx, state, ctx.message.text));
     });
 
     bot.start({
