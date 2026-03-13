@@ -20,12 +20,18 @@ function toJob(r: Record<string, any>): Job {
   };
 }
 
+async function notifyChange(): Promise<void> {
+  const sql = getSql();
+  await sql`SELECT pg_notify('nia_jobs', '')`;
+}
+
 export async function create(name: string, schedule: string, prompt: string): Promise<void> {
   const sql = getSql();
   await sql`
     INSERT INTO jobs (name, schedule, prompt)
     VALUES (${name}, ${schedule}, ${prompt})
   `;
+  await notifyChange();
 }
 
 export async function list(): Promise<Job[]> {
@@ -57,12 +63,14 @@ export async function update(
     SET schedule = ${schedule}, prompt = ${prompt}, enabled = ${enabled}, updated_at = NOW()
     WHERE name = ${name}
   `;
+  await notifyChange();
   return true;
 }
 
 export async function remove(name: string): Promise<boolean> {
   const sql = getSql();
   const result = await sql`DELETE FROM jobs WHERE name = ${name}`;
+  if (result.count > 0) await notifyChange();
   return result.count > 0;
 }
 

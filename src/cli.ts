@@ -38,25 +38,19 @@ function fail(msg: string): never {
 
 switch (command) {
   case "start": {
-    if (process.argv[3] === "--service") {
-      const { installService } = await import("./commands/service");
-      await installService();
-    } else {
-      if (isRunning()) fail(`nia is already running (pid: ${readPid()})`);
-      console.log(`nia started (pid: ${startDaemon()})`);
-    }
+    if (isRunning()) fail(`nia is already running (pid: ${readPid()})`);
+    const { registerService } = await import("./commands/service");
+    await registerService();
+    console.log(`nia started (pid: ${startDaemon()})`);
     break;
   }
 
   case "stop": {
-    if (process.argv[3] === "--service") {
-      const { uninstallService } = await import("./commands/service");
-      await uninstallService();
-    } else {
-      if (!isRunning()) fail("nia is not running");
-      stopDaemon();
-      console.log("nia stopped");
-    }
+    if (!isRunning()) fail("nia is not running");
+    stopDaemon();
+    const { unregisterService } = await import("./commands/service");
+    await unregisterService();
+    console.log("nia stopped");
     break;
   }
 
@@ -120,18 +114,6 @@ switch (command) {
     break;
   }
 
-  case "reload": {
-    const pid = readPid();
-    if (!pid || !isRunning()) fail("nia is not running");
-    try {
-      process.kill(pid, "SIGHUP");
-      console.log("reload signal sent");
-    } catch {
-      fail("failed to send reload signal");
-    }
-    break;
-  }
-
   case "run": {
     // No args = foreground daemon mode (used by daemon's child process)
     // With args = one-shot prompt execution
@@ -186,7 +168,7 @@ switch (command) {
         try {
           await withDb(async () => {
             await Job.create(name, schedule, prompt);
-            console.log(`Job "${name}" added. Run \`nia reload\` to activate.`);
+            console.log(`Job "${name}" added.`);
           });
         } catch (err) {
           fail(`Failed to add job: ${errMsg(err)}`);
@@ -201,7 +183,7 @@ switch (command) {
         try {
           await withDb(async () => {
             const removed = await Job.remove(name);
-            console.log(removed ? `Job "${name}" removed. Run \`nia reload\` to apply.` : `Job not found: ${name}`);
+            console.log(removed ? `Job "${name}" removed.` : `Job not found: ${name}`);
           });
         } catch (err) {
           fail(`Failed to remove job: ${errMsg(err)}`);
@@ -218,7 +200,7 @@ switch (command) {
         try {
           await withDb(async () => {
             const updated = await Job.update(name, { enabled });
-            console.log(updated ? `Job "${name}" ${subcommand}d. Run \`nia reload\` to apply.` : `Job not found: ${name}`);
+            console.log(updated ? `Job "${name}" ${subcommand}d.` : `Job not found: ${name}`);
           });
         } catch (err) {
           fail(`Failed: ${errMsg(err)}`);
@@ -244,7 +226,7 @@ switch (command) {
               imported++;
             }
             console.log(`Imported ${imported} job${imported !== 1 ? "s" : ""}${skipped > 0 ? ` (${skipped} already exist)` : ""}`);
-            if (imported > 0) console.log("Run `nia reload` to activate.");
+            if (imported > 0) console.log("Jobs will be picked up automatically.");
           });
         } catch (err) {
           fail(`Failed to import: ${errMsg(err)}`);
@@ -364,7 +346,7 @@ switch (command) {
     if (chatId) fields.telegram_chat_id = Number(chatId);
     updateRawConfig(fields);
 
-    console.log("Telegram bot token saved to ~/.niahere/config.yaml");
+    console.log(`Telegram bot token saved to ${getPaths().config}`);
     if (chatId) console.log(`Chat ID: ${chatId}`);
     console.log("Run `nia restart` to activate.");
     break;
@@ -379,7 +361,8 @@ switch (command) {
   default:
     console.log("Usage: nia <command>\n");
     console.log("  init                — setup nia");
-    console.log("  start / stop        — daemon control");
+    console.log("  start / stop        — daemon + service control");
+    console.log("  restart             — restart daemon");
     console.log("  status              — show daemon, jobs, channels");
     console.log("  chat [-r|--resume]  — interactive chat");
     console.log("  run <prompt>        — one-shot execution");

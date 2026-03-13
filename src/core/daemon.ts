@@ -7,7 +7,7 @@ import { runJob } from "./runner";
 import { log } from "../utils/log";
 import { ActiveEngine, Job as JobModel } from "../db/models";
 import { runMigrations } from "../db/migrate";
-import { closeDb } from "../db/connection";
+import { closeDb, getSql } from "../db/connection";
 import { startChannels, stopChannels, type Channel } from "../channels";
 import "../channels/telegram"; // side-effect: registers channel factory
 
@@ -154,6 +154,19 @@ export async function runDaemon(): Promise<void> {
 
   await scheduleJobs();
 
+  // Listen for job changes via Postgres LISTEN/NOTIFY
+  try {
+    const sql = getSql();
+    await sql.listen("nia_jobs", async () => {
+      log.info("job change detected via NOTIFY, reloading");
+      await scheduleJobs();
+    });
+    log.info("listening for job changes on nia_jobs channel");
+  } catch (err) {
+    log.warn({ err }, "could not subscribe to nia_jobs, falling back to SIGHUP only");
+  }
+
+  // SIGHUP as manual fallback
   process.on("SIGHUP", async () => {
     log.info("received SIGHUP, reloading jobs");
     await scheduleJobs();

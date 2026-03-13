@@ -4,17 +4,21 @@ import { homedir } from "os";
 import { getPaths } from "../utils/paths";
 
 const PLIST_NAME = "com.niahere.agent";
-const PLIST_PATH = join(homedir(), "Library", "LaunchAgents", `${PLIST_NAME}.plist`);
+const SYSTEMD_UNIT = "niahere.service";
 
-function getCliPath(): string {
-  // process.argv[1] is the path to the nia CLI script
-  return process.argv[1];
+function getExecCommand(): [string, string] {
+  return [process.execPath, process.argv[1]];
+}
+
+// --- macOS launchd ---
+
+function plistPath(): string {
+  return join(homedir(), "Library", "LaunchAgents", `${PLIST_NAME}.plist`);
 }
 
 function buildPlist(): string {
   const paths = getPaths();
-  const execPath = process.execPath;
-  const cliPath = getCliPath();
+  const [execPath, cliPath] = getExecCommand();
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -45,67 +49,126 @@ function buildPlist(): string {
 </plist>`;
 }
 
-export async function installService(): Promise<void> {
+async function installLaunchd(): Promise<void> {
   const paths = getPaths();
+  const path = plistPath();
 
-  // Ensure directories exist
   mkdirSync(join(homedir(), "Library", "LaunchAgents"), { recursive: true });
   mkdirSync(`${paths.home}/tmp`, { recursive: true });
+  writeFileSync(path, buildPlist());
 
-  // Write plist
-  writeFileSync(PLIST_PATH, buildPlist());
-
-  // Load the service
-  const unload = Bun.spawn(["launchctl", "unload", PLIST_PATH], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  // Unload first (ignore errors if not loaded)
+  const unload = Bun.spawn(["launchctl", "unload", path], { stdout: "pipe", stderr: "pipe" });
   await unload.exited;
 
-  const load = Bun.spawn(["launchctl", "load", PLIST_PATH], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const load = Bun.spawn(["launchctl", "load", path], { stdout: "pipe", stderr: "pipe" });
   const exitCode = await load.exited;
 
   if (exitCode !== 0) {
     const stderr = await new Response(load.stderr).text();
-    console.log(`Failed to load service: ${stderr.trim()}`);
-    process.exit(1);
+    throw new Error(`launchctl load failed: ${stderr.trim()}`);
   }
-
-  console.log("nia service installed and started");
-  console.log(`  plist: ${PLIST_PATH}`);
-  console.log(`  logs: ${paths.daemonLog}`);
 }
 
-export async function uninstallService(): Promise<void> {
-  if (!existsSync(PLIST_PATH)) {
-    console.log("nia service is not installed");
-    return;
-  }
+async function uninstallLaunchd(): Promise<void> {
+  const path = plistPath();
+  if (!existsSync(path)) return;
 
-  const unload = Bun.spawn(["launchctl", "unload", PLIST_PATH], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const unload = Bun.spawn(["launchctl", "unload", path], { stdout: "pipe", stderr: "pipe" });
   await unload.exited;
 
-  try {
-    unlinkSync(PLIST_PATH);
-  } catch {
-    // already gone
-  }
-
-  console.log("nia service uninstalled");
+  try { unlinkSync(path); } catch { /* already gone */ }
 }
 
-export function serviceStatus(): void {
-  if (!existsSync(PLIST_PATH)) {
-    console.log("nia service: not installed");
-    return;
-  }
+function isLaunchdInstalled(): boolean {
+  return existsSync(plistPath());
+}
 
-  console.log("nia service: installed");
-  console.log(`  plist: ${PLIST_PATH}`);
+// --- Linux systemd ---
+
+function unitPath(): string {
+  return join(homedir(), ".config", "systemd", "user", SYSTEMD_UNIT);
+}
+
+function buildUnit(): string {
+  const paths = getPaths();
+  const [execPath, cliPath] = getExecCommand();
+
+  return `[Unit]
+Description=nia personal AI assistant
+After=network.target
+
+[Service]
+ExecStart=${execPath} ${cliPath} run
+Restart=always
+RestartSec=5
+StandardOutput=append:${paths.daemonLog}
+StandardError=append:${paths.daemonLog}
+Environment=PATH=${process.env.PATH || "/usr/local/bin:/usr/bin:/bin"}
+
+[Install]
+WantedBy=default.target
+`;
+}
+
+async function installSystemd(): Promise<void> {
+  const paths = getPaths();
+  const path = unitPath();
+
+  mkdirSync(join(homedir(), ".config", "systemd", "user"), { recursive: true });
+  mkdirSync(`${paths.home}/tmp`, { recursive: true });
+  writeFileSync(path, buildUnit());
+
+  const reload = Bun.spawn(["systemctl", "--user", "daemon-reload"], { stdout: "pipe", stderr: "pipe" });
+  await reload.exited;
+
+  const enable = Bun.spawn(["systemctl", "--user", "enable", "--now", SYSTEMD_UNIT], { stdout: "pipe", stderr: "pipe" });
+  const exitCode = await enable.exited;
+
+  if (exitCode !== 0) {
+    const stderr = await new Response(enable.stderr).text();
+    throw new Error(`systemctl enable failed: ${stderr.trim()}`);
+  }
+}
+
+async function uninstallSystemd(): Promise<void> {
+  const path = unitPath();
+  if (!existsSync(path)) return;
+
+  const disable = Bun.spawn(["systemctl", "--user", "disable", "--now", SYSTEMD_UNIT], { stdout: "pipe", stderr: "pipe" });
+  await disable.exited;
+
+  try { unlinkSync(path); } catch { /* already gone */ }
+
+  const reload = Bun.spawn(["systemctl", "--user", "daemon-reload"], { stdout: "pipe", stderr: "pipe" });
+  await reload.exited;
+}
+
+function isSystemdInstalled(): boolean {
+  return existsSync(unitPath());
+}
+
+// --- Public API (platform-aware) ---
+
+export async function registerService(): Promise<void> {
+  if (process.platform === "darwin") {
+    await installLaunchd();
+  } else if (process.platform === "linux") {
+    await installSystemd();
+  }
+  // Windows/other: no-op, daemon still works via startDaemon()
+}
+
+export async function unregisterService(): Promise<void> {
+  if (process.platform === "darwin") {
+    await uninstallLaunchd();
+  } else if (process.platform === "linux") {
+    await uninstallSystemd();
+  }
+}
+
+export function isServiceInstalled(): boolean {
+  if (process.platform === "darwin") return isLaunchdInstalled();
+  if (process.platform === "linux") return isSystemdInstalled();
+  return false;
 }
