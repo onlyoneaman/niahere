@@ -116,8 +116,8 @@ function sessionFileExists(sessionId: string, cwd: string): boolean {
 }
 
 export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine> {
-  const systemPrompt = buildSystemPrompt();
   const { room, channel, resume } = opts;
+  const systemPrompt = buildSystemPrompt("chat", channel);
   const cwd = homedir();
 
   let sessionId = resume ? await Session.getLatest(room) : null;

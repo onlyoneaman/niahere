@@ -121,7 +121,7 @@ Your persona files live in ${paths.selfDir}/:
 To remember something, append to ${paths.selfDir}/memory.md using a shell command.`;
 }
 
-export function buildSystemPrompt(mode: "chat" | "job" = "chat"): string {
+export function buildSystemPrompt(mode: "chat" | "job" = "chat", channel: "terminal" | "telegram" | string = "terminal"): string {
   const identity = loadIdentity();
   const parts: string[] = [];
 
@@ -135,6 +135,16 @@ export function buildSystemPrompt(mode: "chat" | "job" = "chat"): string {
     parts.push("## Mode: Chat\nYou are in a live chat session. Be conversational, helpful, and concise. You can run shell commands to manage jobs, read files, or check system state.");
   } else {
     parts.push("## Mode: Job\nYou are executing a scheduled job. Be terse — execute the task and report the result. No small talk.");
+  }
+
+  if (channel === "telegram") {
+    parts.push(`## Channel: Telegram
+- Keep responses short — this is a mobile chat, not a terminal.
+- Do NOT include sources, links, or references unless explicitly asked.
+- Do NOT use code blocks for simple answers.
+- Use MarkdownV2 formatting: *bold*, _italic_, \`code\`. Escape special chars: \\. \\! \\- \\( \\)
+- Avoid long lists — summarize instead.
+- No headers (#) — Telegram doesn't render them.`);
   }
 
   const skills = loadSkillsSummary();
