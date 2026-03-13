@@ -29,14 +29,14 @@ export async function runJob(job: JobInput): Promise<JobResult> {
   const startMs = performance.now();
 
   // Update state: running
-  const state = readState();
+  const state: Record<string, JobState> = { ...readState() };
   state[job.name] = { lastRun: timestamp, status: "running", duration_ms: 0 };
   writeState(state);
 
   try {
     const fullPrompt = buildPrompt(job);
     const cwd = homedir();
-    const args = ["codex", "exec", fullPrompt, "-C", cwd, "--ephemeral"];
+    const args = ["codex", "exec", fullPrompt, "-C", cwd, "--ephemeral", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox"];
     if (model && model !== "default") {
       args.splice(3, 0, "-m", model);
     }

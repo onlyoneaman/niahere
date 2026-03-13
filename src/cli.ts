@@ -367,6 +367,31 @@ switch (command) {
     break;
   }
 
+  case "send": {
+    const message = process.argv.slice(3).join(" ");
+    if (!message) fail("Usage: nia send <message>");
+
+    const config = getConfig();
+    const token = config.telegram_bot_token;
+    const chatId = config.telegram_chat_id;
+    if (!token) fail("Telegram bot token not configured. Run: nia telegram <token>");
+    if (!chatId) fail("Telegram chat ID not set. Send /start to your bot first.");
+
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, text: message }),
+      });
+      const data = await res.json() as { ok: boolean; description?: string };
+      if (!data.ok) fail(`Telegram API error: ${data.description || "unknown"}`);
+      console.log("Sent.");
+    } catch (err) {
+      fail(`Failed to send: ${errMsg(err)}`);
+    }
+    break;
+  }
+
   case "telegram": {
     const token = process.argv[3];
     const chatId = process.argv[4];
@@ -441,6 +466,7 @@ switch (command) {
     console.log("  logs [-f]           — daemon logs");
     console.log("  job <sub>           — manage jobs");
     console.log("  skills              — list available skills");
+    console.log("  send <message>      — send a message via telegram");
     console.log("  telegram <token>    — configure telegram");
     console.log("  test                — run tests");
     process.exit(command ? 1 : 0);
