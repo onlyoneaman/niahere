@@ -1,6 +1,7 @@
 import * as readline from "readline";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "fs";
 import { resolve } from "path";
+import { homedir } from "os";
 import { getNiaHome, getPaths } from "../utils/paths";
 import { resetConfig } from "../utils/config";
 import { runMigrations } from "../db/migrate";
@@ -18,6 +19,39 @@ function ask(rl: readline.Interface, question: string, defaultValue?: string): P
       resolve(answer.trim() || defaultValue || "");
     });
   });
+}
+
+function getShellRc(): string {
+  const shell = process.env.SHELL || "";
+  if (shell.endsWith("zsh")) return resolve(homedir(), ".zshrc");
+  if (shell.endsWith("bash")) {
+    const bashProfile = resolve(homedir(), ".bash_profile");
+    if (existsSync(bashProfile)) return bashProfile;
+    return resolve(homedir(), ".bashrc");
+  }
+  return resolve(homedir(), ".profile");
+}
+
+const BEADS_EXPORT_LINE = (dir: string) => `export BEADS_DIR="${dir.replace(homedir(), "$HOME")}/.beads"`;
+
+async function offerBeadsShellExport(rl: readline.Interface, beadsDir: string): Promise<void> {
+  const rcFile = getShellRc();
+  const exportLine = BEADS_EXPORT_LINE(beadsDir);
+
+  // Check if already exported
+  if (existsSync(rcFile)) {
+    const content = readFileSync(rcFile, "utf8");
+    if (content.includes("BEADS_DIR")) {
+      return; // already configured
+    }
+  }
+
+  const answer = await ask(rl, `\nAdd BEADS_DIR to ${rcFile.replace(homedir(), "~")} so 'bd' works globally? (y/n)`, "y");
+  if (answer.toLowerCase() !== "y") return;
+
+  appendFileSync(rcFile, `\n# Beads global task DB\n${exportLine}\n`);
+  console.log(`  \u2713 added BEADS_DIR to ${rcFile.replace(homedir(), "~")}`);
+  console.log(`  Run 'source ${rcFile.replace(homedir(), "~")}' or open a new terminal.`);
 }
 
 function loadTemplate(name: string, vars: Record<string, string> = {}): string {
@@ -160,6 +194,7 @@ export async function runInit(): Promise<void> {
 
     if (bdInstalled && beadsInitialized) {
       console.log("\nBeads: installed and initialized.");
+      await offerBeadsShellExport(rl, paths.beadsDir);
     } else if (bdInstalled && !beadsInitialized) {
       const initBeads = await ask(rl, "\nBeads (bd) found but not initialized. Set up global task DB? (y/n)", "y");
       if (initBeads.toLowerCase() === "y") {
@@ -168,6 +203,7 @@ export async function runInit(): Promise<void> {
         const exitCode = await initProc.exited;
         if (exitCode === 0) {
           console.log(`  \u2713 initialized beads at ${paths.beadsDir}`);
+          await offerBeadsShellExport(rl, paths.beadsDir);
         } else {
           const stderr = await new Response(initProc.stderr).text();
           console.log(`  \u2717 bd init failed: ${stderr.trim()}`);
@@ -192,6 +228,7 @@ export async function runInit(): Promise<void> {
           const initProc = Bun.spawn(["bd", "init"], { cwd: paths.beadsDir, stdout: "pipe", stderr: "pipe" });
           if (await initProc.exited === 0) {
             console.log(`  \u2713 initialized beads at ${paths.beadsDir}`);
+            await offerBeadsShellExport(rl, paths.beadsDir);
           }
         } else {
           console.log("  \u2717 install failed. You can install manually: npm install -g @beads/bd");
