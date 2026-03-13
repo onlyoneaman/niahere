@@ -3,6 +3,8 @@ import { join } from "path";
 import { homedir } from "os";
 import yaml from "js-yaml";
 import { getPaths } from "../utils/paths";
+import { getConfig } from "../utils/config";
+import { localTime } from "../utils/time";
 
 function loadFile(dir: string, name: string): string {
   const filePath = join(dir, name);
@@ -71,7 +73,54 @@ export function loadSkillsSummary(): string {
   return `Available skills:\n${lines.join("\n")}`;
 }
 
-export function buildSystemPrompt(): string {
+function buildEnvironmentContext(): string {
+  const paths = getPaths();
+  const config = getConfig();
+
+  return `## Environment
+
+You are running as part of the **nia** assistant daemon.
+- Config: ${paths.config}
+- Database: PostgreSQL (${config.database_url.replace(/\/\/.*@/, "//***@")})
+- Persona files: ${paths.selfDir}/
+- Timezone: ${config.timezone}
+- Current time: ${localTime()}
+
+## Managing Jobs
+
+You have access to a PostgreSQL database with a \`jobs\` table. To manage jobs, use the \`nia\` CLI:
+
+\`\`\`bash
+nia job list                              # list all jobs
+nia job add <name> "<schedule>" <prompt>   # add a cron job
+nia job remove <name>                     # delete a job
+nia job enable <name>                     # enable a disabled job
+nia job disable <name>                    # disable a job
+nia job run <name>                        # run a job immediately
+\`\`\`
+
+Changes are picked up automatically by the daemon (no restart needed).
+Cron schedule format: minute hour day-of-month month day-of-week (e.g. "*/5 * * * *" = every 5 min, "0 9 * * *" = daily at 9am).
+
+## Managing Config
+
+Config file: ${paths.config}
+To view: \`cat ${paths.config}\`
+To update a field: edit the YAML file directly.
+After config changes, run \`nia restart\` to apply.
+
+## Persona & Memory
+
+Your persona files live in ${paths.selfDir}/:
+- \`identity.md\` — your personality and voice
+- \`owner.md\` — info about who runs you
+- \`soul.md\` — operating principles
+- \`memory.md\` — persistent learnings (you can append to this)
+
+To remember something, append to ${paths.selfDir}/memory.md using a shell command.`;
+}
+
+export function buildSystemPrompt(mode: "chat" | "job" = "chat"): string {
   const identity = loadIdentity();
   const parts: string[] = [];
 
@@ -79,11 +128,13 @@ export function buildSystemPrompt(): string {
     parts.push(identity);
   }
 
-  parts.push("You are in a live chat session. Be conversational, helpful, and concise.");
+  parts.push(buildEnvironmentContext());
 
-  // Memory path for the agent to write to
-  const memoryPath = join(getPaths().selfDir, "memory.md");
-  parts.push(`If you learn something non-obvious that would save time in future sessions (a gotcha, a preference, a correction), append it to ${memoryPath} using a shell command. Keep entries short — one line per learning.`);
+  if (mode === "chat") {
+    parts.push("## Mode: Chat\nYou are in a live chat session. Be conversational, helpful, and concise. You can run shell commands to manage jobs, read files, or check system state.");
+  } else {
+    parts.push("## Mode: Job\nYou are executing a scheduled job. Be terse — execute the task and report the result. No small talk.");
+  }
 
   const skills = loadSkillsSummary();
   if (skills) {

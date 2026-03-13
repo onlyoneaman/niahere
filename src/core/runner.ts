@@ -6,8 +6,7 @@ export interface JobInput {
 }
 import { appendAudit, readState, writeState, type AuditEntry, type JobState } from "../utils/logger";
 import { getConfig } from "../utils/config";
-import { localTime } from "../utils/time";
-import { loadIdentity } from "../chat/identity";
+import { buildSystemPrompt } from "../chat/identity";
 
 export interface JobResult {
   job: string;
@@ -19,19 +18,8 @@ export interface JobResult {
 }
 
 function buildPrompt(job: JobInput): string {
-  const identity = loadIdentity();
-  const parts: string[] = [];
-
-  if (identity) {
-    parts.push(identity);
-  }
-
-  parts.push(`Current time: ${localTime()}`);
-  parts.push(`Job: ${job.name} (schedule: ${job.schedule})`);
-  parts.push(`---`);
-  parts.push(job.prompt);
-
-  return parts.join("\n\n");
+  const systemPrompt = buildSystemPrompt("job");
+  return `${systemPrompt}\n\n---\n\nJob: ${job.name} (schedule: ${job.schedule})\n\n${job.prompt}`;
 }
 
 export async function runJob(job: JobInput): Promise<JobResult> {
