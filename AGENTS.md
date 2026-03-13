@@ -15,10 +15,13 @@
 
 ```
 src/
-  cli.ts                 # Entry point, all CLI commands
+  cli/
+    index.ts             # Entry point, command routing
+    job.ts               # Job subcommands (list, show, status, add, run, log, etc.)
+    helpers.ts           # Shared CLI helpers (fail, pickFromList)
   core/
-    daemon.ts            # Daemon lifecycle, cron scheduling, LISTEN/NOTIFY
-    runner.ts            # Job execution via Claude Agent SDK
+    daemon.ts            # Daemon lifecycle, cron scheduling, active hours, LISTEN/NOTIFY
+    runner.ts            # Job execution via Codex CLI
     cron.ts              # YAML job file parsing (legacy)
   chat/
     engine.ts            # Chat engine — Claude SDK query(), sessions, streaming
@@ -27,17 +30,17 @@ src/
   channels/
     channel.ts           # Channel interface + registry
     index.ts             # Start/stop all channels
-    telegram.ts          # Telegram bot channel (grammY)
+    telegram.ts          # Telegram bot channel (grammY) — access control, streaming, activity status
   commands/
     init.ts              # Interactive setup wizard
     service.ts           # OS service registration (launchd/systemd)
   db/
     connection.ts        # Lazy postgres init, withDb() helper
     migrate.ts           # SQL migration runner
-    migrations/          # Numbered .sql migration files
+    migrations/          # Numbered .ts migration files
     seed.ts              # DB seed script
     models/
-      job.ts             # Job CRUD + pg_notify on mutations
+      job.ts             # Job CRUD + pg_notify on mutations (has `always` flag for crons)
       message.ts         # Chat message storage + room stats
       session.ts         # Session tracking
       active-engine.ts   # Active engine registry
@@ -65,10 +68,12 @@ All config lives in `~/.niahere/config.yaml`. Env vars override config values:
 |---------------------|-----------------------|----------------------------------|
 | `database_url`      | `DATABASE_URL`        | `postgres://localhost:5432/niahere` |
 | `telegram_bot_token`| `TELEGRAM_BOT_TOKEN`  | null                             |
-| `telegram_chat_id`  | `TELEGRAM_CHAT_ID`    | null                             |
+| `telegram_chat_id`  | `TELEGRAM_CHAT_ID`    | null (auto-registered on first message) |
+| `telegram_open`     | —                     | false (only owner can message)   |
 | `log_level`         | `LOG_LEVEL`           | `info`                           |
 | `model`             | —                     | `default`                        |
 | `timezone`          | —                     | system timezone                  |
+| `active_hours`      | —                     | `{ start: "00:00", end: "23:59" }` |
 
 ## Build & Test
 
@@ -84,6 +89,9 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 
 - **Lazy DB:** `getSql()` creates connection on first use, `withDb()` wraps migrate+execute+close
 - **LISTEN/NOTIFY:** Job mutations call `pg_notify('nia_jobs')`, daemon listens and auto-reloads schedules
+- **Jobs vs crons:** Jobs respect `active_hours`, crons (`always: true`) run 24/7. Both use the same `jobs` table.
+- **Telegram access:** First user auto-registers as owner (`telegram_chat_id`). Others blocked unless `telegram_open: true`.
+- **Activity streaming:** Engine emits rich activity events (thinking text, tool use details, bash commands) — Telegram shows them as live status.
 - **Persona:** 4 files loaded in order: `identity.md`, `owner.md`, `soul.md`, `memory.md`
 - **Templates:** `defaults/self/` contains templates with `{{placeholders}}`, interpolated during `nia init`
 - **Service:** `nia start` auto-registers OS service (launchd on macOS, systemd on Linux)
