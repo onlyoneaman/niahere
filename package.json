@@ -1,7 +1,7 @@
 {
   "name": "niahere",
   "version": "0.1.1",
-  "description": "A simple AI sidekick.",
+  "description": "A personal AI assistant daemon — scheduled jobs, terminal chat, and Telegram, powered by Claude.",
   "type": "module",
   "scripts": {
     "start": "bun run src/cli/index.ts start",
