@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, rmSync, readFileSync } from "fs";
-import { appendAudit, readState, writeState, type AuditEntry, type CronState } from "../../src/utils/logger";
+import { appendAudit, readAudit, readState, writeState, type AuditEntry, type CronState } from "../../src/utils/logger";
 
 const TEST_DIR = "/tmp/test-nia-logger";
 
@@ -54,5 +54,40 @@ describe("cronState", () => {
   test("returns empty object when no state file", () => {
     const state = readState();
     expect(state).toEqual({});
+  });
+});
+
+describe("readAudit", () => {
+  const entry = (job: string, status: "ok" | "error" = "ok"): AuditEntry => ({
+    job,
+    timestamp: "2026-03-05T12:00:00Z",
+    status,
+    result: "done",
+    duration_ms: 100,
+  });
+
+  test("returns empty array when no audit file", () => {
+    expect(readAudit()).toEqual([]);
+  });
+
+  test("reads all entries", () => {
+    appendAudit(entry("a"));
+    appendAudit(entry("b"));
+    appendAudit(entry("a"));
+    expect(readAudit()).toHaveLength(3);
+  });
+
+  test("filters by job name", () => {
+    appendAudit(entry("a"));
+    appendAudit(entry("b"));
+    appendAudit(entry("a"));
+    expect(readAudit("a")).toHaveLength(2);
+    expect(readAudit("b")).toHaveLength(1);
+    expect(readAudit("c")).toHaveLength(0);
+  });
+
+  test("limits results to last N entries", () => {
+    for (let i = 0; i < 10; i++) appendAudit(entry("x"));
+    expect(readAudit(undefined, 3)).toHaveLength(3);
   });
 });

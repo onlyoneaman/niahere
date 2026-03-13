@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "fs";
 import { loadIdentity, buildSystemPrompt } from "../../src/chat/identity";
+import { resetConfig } from "../../src/utils/config";
 
 const TEST_DIR = "/tmp/test-nia-identity";
 
@@ -12,6 +13,7 @@ beforeEach(() => {
 afterEach(() => {
   rmSync(TEST_DIR, { recursive: true, force: true });
   delete process.env.NIA_HOME;
+  resetConfig();
 });
 
 describe("loadIdentity", () => {
@@ -86,5 +88,28 @@ describe("buildSystemPrompt", () => {
   test("includes chat instructions even without identity files", () => {
     const prompt = buildSystemPrompt();
     expect(prompt).toContain("live chat session");
+  });
+
+  test("job mode includes terse instructions", () => {
+    const prompt = buildSystemPrompt("job");
+    expect(prompt).toContain("Job");
+    expect(prompt).not.toContain("live chat session");
+  });
+
+  test("telegram channel includes Telegram-specific instructions", () => {
+    const prompt = buildSystemPrompt("chat", "telegram");
+    expect(prompt).toContain("Telegram");
+    expect(prompt).toContain("MarkdownV2");
+  });
+
+  test("includes active hours info", () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain("active hours");
+  });
+
+  test("includes job management commands", () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain("nia job");
+    expect(prompt).toContain("--always");
   });
 });

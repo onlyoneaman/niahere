@@ -61,4 +61,24 @@ describe("loadConfig", () => {
     expect(config.activeHours.start).toBe("00:00");
     expect(config.activeHours.end).toBe("23:59");
   });
+
+  test("parses telegram_open as boolean", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, `telegram_open: true\n`);
+    const config = loadConfig();
+    expect(config.telegram_open).toBe(true);
+  });
+
+  test("telegram_open defaults to false", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, `model: default\n`);
+    const config = loadConfig();
+    expect(config.telegram_open).toBe(false);
+  });
+
+  test("env var overrides database_url", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, `database_url: postgres://config\n`);
+    process.env.DATABASE_URL = "postgres://env";
+    const config = loadConfig();
+    expect(config.database_url).toBe("postgres://env");
+    delete process.env.DATABASE_URL;
+  });
 });

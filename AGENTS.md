@@ -106,3 +106,14 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 - Imports: node builtins first, then deps, then local
 - Local timestamps via `localTime()` — never raw `toISOString()` for display
 - Keep modules small: core/ for daemon logic, chat/ for AI interactions, utils/ for shared helpers
+
+## Keeping Docs Updated
+
+When making changes, keep these files in sync:
+
+- **AGENTS.md** — update when: adding/moving files, changing config schema, adding key patterns, modifying architecture
+- **README.md** — update when: adding/changing CLI commands, adding features, changing setup steps
+- **System prompt** (`src/chat/identity.ts` `buildEnvironmentContext()`) — update when: adding CLI commands the agent should know about, changing job/config behavior
+- **CLI help text** (`src/cli/index.ts` default case, `src/cli/job.ts` default case) — update when: adding/renaming subcommands
+
+Run `nia test` after doc changes to catch any broken imports.
