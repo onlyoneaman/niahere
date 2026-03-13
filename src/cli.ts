@@ -385,11 +385,34 @@ switch (command) {
   }
 
   case "test": {
-    const proc = Bun.spawn(["bun", "test", ...process.argv.slice(3)], {
-      stdio: ["ignore", "inherit", "inherit"],
+    const verbose = process.argv.includes("-v") || process.argv.includes("--verbose");
+    const extraArgs = process.argv.slice(3).filter((a) => a !== "-v" && a !== "--verbose");
+    const proc = Bun.spawn(["bun", "test", ...extraArgs], {
+      stdio: ["ignore", "pipe", "pipe"],
       cwd: import.meta.dir + "/..",
+      env: { ...process.env, LOG_LEVEL: "silent" },
     });
-    process.exit(await proc.exited);
+
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+    const exitCode = await proc.exited;
+    const output = stdout + stderr;
+
+    if (verbose) {
+      process.stdout.write(output);
+    } else {
+      // Show summary lines only: pass/fail counts, file count, timing
+      for (const line of output.split("\n")) {
+        if (/^\s*\d+ pass/.test(line) || /^\s*\d+ fail/.test(line) || /^Ran \d+ tests/.test(line) || /expect\(\) calls/.test(line)) {
+          console.log(line);
+        } else if (/^✗|FAIL|error:/i.test(line.trim())) {
+          console.log(line);
+        }
+      }
+    }
+    process.exit(exitCode);
   }
 
   case "init": {
