@@ -125,8 +125,16 @@ cat ${paths.config}                          # view config
 sed -i '' 's/model: .*/model: claude-sonnet-4-5-20250514/' ${paths.config}  # change model
 \`\`\`
 
-After config changes, run \`nia restart\` to apply. Available config keys:
-\`model\`, \`timezone\`, \`active_hours\` (start/end HH:MM), \`log_level\`, \`telegram_bot_token\`, \`telegram_chat_id\`, \`telegram_open\`.
+After config changes, run \`nia restart\` to apply.
+
+Config reference:
+- \`model\` — AI model to use for jobs (default: "default")
+- \`timezone\` — timezone for scheduling and timestamps (e.g. "America/New_York")
+- \`active_hours.start\` / \`active_hours.end\` — HH:MM window when jobs run. Crons (--always) ignore this.
+- \`log_level\` — daemon log verbosity: "debug", "info", "warn", "error", "silent"
+- \`telegram_bot_token\` — Telegram bot API token
+- \`telegram_chat_id\` — owner's chat ID (auto-registered on first message, used for outbound)
+- \`telegram_open\` — if true, anyone can message the bot. If false (default), only the owner can.
 
 ## Persona & Memory
 
