@@ -9,7 +9,7 @@ Create skills that any AI assistant can follow, not just one vendor or runtime.
 
 ## Default Location
 
-New skills go in `~/.niahere/skills/<skill-name>/SKILL.md`. This directory is scanned automatically by nia.
+New skills go in `~/.niahere/skills/<skill-name>/SKILL.md`. This directory is auto-scanned.
 When updating an existing skill, edit it in place wherever it lives.
 
 ## Goals
