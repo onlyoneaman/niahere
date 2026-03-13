@@ -99,7 +99,7 @@ You have MCP tools for managing jobs directly — no need for shell commands:
 - **remove_job** — delete a job by name
 - **enable_job** / **disable_job** — toggle a job on or off
 - **run_job** — trigger a job to run immediately
-- **send_message** — send a message to the user via Telegram
+- **send_message** — send a message to the user (via telegram, slack, or default channel)
 - **list_messages** — read recent chat history
 
 Active hours: ${config.activeHours.start}–${config.activeHours.end} (${config.timezone}). Jobs respect this; crons (always=true) don't.
@@ -130,6 +130,10 @@ Config reference:
 - \`telegram_bot_token\` — Telegram bot API token
 - \`telegram_chat_id\` — owner's chat ID (auto-registered on first message, used for outbound)
 - \`telegram_open\` — if true, anyone can message the bot. If false (default), only the owner can.
+- \`slack_bot_token\` — Slack bot token (xoxb-...)
+- \`slack_app_token\` — Slack app token (xapp-...) for Socket Mode
+- \`slack_channel_id\` — default Slack channel for outbound messages
+- \`default_channel\` — which channel send_message uses by default ("telegram" or "slack")
 
 ## Persona & Memory
 
@@ -158,7 +162,13 @@ export function buildSystemPrompt(mode: "chat" | "job" = "chat", channel: "termi
     parts.push("## Mode: Job\nYou are executing a scheduled job. Be terse — execute the task and report the result. No small talk.");
   }
 
-  if (channel === "telegram") {
+  if (channel === "slack") {
+    parts.push(`## Channel: Slack
+- Use Slack mrkdwn formatting: *bold*, _italic_, \`code\`, \`\`\`code blocks\`\`\`
+- Keep responses clear and well-structured.
+- Use bullet points and numbered lists where appropriate.
+- You can use <url|text> for links.`);
+  } else if (channel === "telegram") {
     parts.push(`## Channel: Telegram
 - Keep responses short — this is a mobile chat, not a terminal.
 - Do NOT include sources, links, or references unless explicitly asked.

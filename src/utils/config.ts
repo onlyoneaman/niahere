@@ -12,6 +12,11 @@ export interface Config {
   telegram_bot_token: string | null;
   telegram_chat_id: number | null;
   telegram_open: boolean;
+  slack_bot_token: string | null;
+  slack_app_token: string | null;
+  slack_channel_id: string | null;
+  slack_dm_user_id: string | null;
+  default_channel: string;
   log_level: string;
 }
 
@@ -25,6 +30,11 @@ const DEFAULTS: Config = {
   telegram_bot_token: null,
   telegram_chat_id: null,
   telegram_open: false,
+  slack_bot_token: null,
+  slack_app_token: null,
+  slack_channel_id: null,
+  slack_dm_user_id: null,
+  default_channel: "telegram",
   log_level: "info",
 };
 
@@ -96,6 +106,26 @@ export function loadConfig(): Config {
 
   const telegram_open = raw.telegram_open === true;
 
+  // Slack — env vars override config
+  const slack_bot_token =
+    process.env.SLACK_BOT_TOKEN ||
+    (typeof raw.slack_bot_token === "string" ? raw.slack_bot_token : null);
+
+  const slack_app_token =
+    process.env.SLACK_APP_TOKEN ||
+    (typeof raw.slack_app_token === "string" ? raw.slack_app_token : null);
+
+  const slack_channel_id =
+    process.env.SLACK_CHANNEL_ID ||
+    (typeof raw.slack_channel_id === "string" ? raw.slack_channel_id : null);
+
+  const slack_dm_user_id =
+    typeof raw.slack_dm_user_id === "string" ? raw.slack_dm_user_id : null;
+
+  // Default channel for outbound messages
+  const default_channel =
+    typeof raw.default_channel === "string" ? raw.default_channel : DEFAULTS.default_channel;
+
   // Log level — env var overrides config
   const log_level =
     process.env.LOG_LEVEL ||
@@ -109,6 +139,11 @@ export function loadConfig(): Config {
     telegram_bot_token,
     telegram_chat_id,
     telegram_open,
+    slack_bot_token,
+    slack_app_token,
+    slack_channel_id,
+    slack_dm_user_id,
+    default_channel,
     log_level,
   };
 }

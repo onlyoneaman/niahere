@@ -83,21 +83,75 @@ export async function runInit(): Promise<void> {
     let telegramOpen = existing.telegram_open === true;
 
     const existingToken = (existing.telegram_bot_token as string) || "";
-    const setupDefault = existingToken ? "y" : "n";
-    const setupTelegram = await ask(rl, "\nSet up Telegram? (y/n)", setupDefault);
 
-    if (setupTelegram.toLowerCase() === "y") {
-      const maskedToken = existingToken ? `${existingToken.slice(0, 4)}…${existingToken.slice(-4)}` : "";
-      const tokenInput = await ask(rl, "Bot token", maskedToken);
-      telegramToken = tokenInput === maskedToken ? existingToken : tokenInput;
-
-      if (telegramToken) {
+    if (existingToken) {
+      const masked = `...${existingToken.slice(-6)}`;
+      const reconfigure = await ask(rl, `\nTelegram: configured (${masked}). Reconfigure? (y/n)`, "n");
+      if (reconfigure.toLowerCase() === "y") {
+        const tokenInput = await ask(rl, "Bot token", "");
+        telegramToken = tokenInput || existingToken;
         const openDefault = telegramOpen ? "y" : "n";
         const openInput = await ask(rl, "Allow anyone to message? (y/n)", openDefault);
         telegramOpen = openInput.toLowerCase() === "y";
+      } else {
+        telegramToken = existingToken;
       }
-    } else if (existingToken) {
-      telegramToken = existingToken;
+    } else {
+      const setupTelegram = await ask(rl, "\nSet up Telegram? (y/n)", "n");
+      if (setupTelegram.toLowerCase() === "y") {
+        telegramToken = await ask(rl, "Bot token", "");
+        if (telegramToken) {
+          const openInput = await ask(rl, "Allow anyone to message? (y/n)", "n");
+          telegramOpen = openInput.toLowerCase() === "y";
+        }
+      }
+    }
+
+    // Slack
+    let slackBotToken = "";
+    let slackAppToken = "";
+    let slackChannelId = (existing.slack_channel_id as string) || "";
+
+    const existingSlackBot = (existing.slack_bot_token as string) || "";
+
+    if (existingSlackBot) {
+      const masked = `...${existingSlackBot.slice(-6)}`;
+      const reconfigure = await ask(rl, `\nSlack: configured (${masked}). Reconfigure? (y/n)`, "n");
+      if (reconfigure.toLowerCase() === "y") {
+        const botInput = await ask(rl, "Bot token (xoxb-...)", "");
+        slackBotToken = botInput || existingSlackBot;
+        const existingSlackApp = (existing.slack_app_token as string) || "";
+        const appInput = await ask(rl, "App token (xapp-...)", "");
+        slackAppToken = appInput || existingSlackApp;
+        if (slackBotToken && slackAppToken) {
+          slackChannelId = await ask(rl, "Default channel ID for outbound messages (optional)", slackChannelId);
+        }
+      } else {
+        slackBotToken = existingSlackBot;
+        slackAppToken = (existing.slack_app_token as string) || "";
+        slackChannelId = (existing.slack_channel_id as string) || "";
+      }
+    } else {
+      const setupSlack = await ask(rl, "\nSet up Slack? (y/n)", "n");
+      if (setupSlack.toLowerCase() === "y") {
+        // Read manifest and build the create-app URL
+        const manifestPath = resolve(import.meta.dir, "../../defaults/channels/slack-manifest.json");
+        const manifest = readFileSync(manifestPath, "utf8");
+        const createUrl = `https://api.slack.com/apps?new_app=1&manifest_json=${encodeURIComponent(manifest)}`;
+
+        console.log("\n  Opening Slack app creation page...");
+        Bun.spawn(["open", createUrl], { stdio: ["ignore", "ignore", "ignore"] });
+        console.log("  1. Click 'Create' to create the app");
+        console.log("  2. Go to 'OAuth & Permissions' → Install to workspace → copy Bot Token (xoxb-...)");
+        console.log("  3. Go to 'Basic Information' → 'App-Level Tokens' → create one with connections:write → copy (xapp-...)\n");
+
+        slackBotToken = await ask(rl, "Bot token (xoxb-...)", "");
+        slackAppToken = await ask(rl, "App token (xapp-...)", "");
+
+        if (slackBotToken && slackAppToken) {
+          slackChannelId = await ask(rl, "Default channel ID for outbound messages (optional)", "");
+        }
+      }
     }
 
     // Read existing self files for defaults
@@ -154,6 +208,17 @@ export async function runInit(): Promise<void> {
       config.telegram_bot_token = telegramToken;
       if (telegramChatId) config.telegram_chat_id = telegramChatId;
       config.telegram_open = telegramOpen;
+    }
+
+    if (slackBotToken && slackAppToken) {
+      config.slack_bot_token = slackBotToken;
+      config.slack_app_token = slackAppToken;
+      if (slackChannelId) config.slack_channel_id = slackChannelId;
+    }
+
+    // Set default channel based on what's configured
+    if (slackBotToken && !telegramToken) {
+      config.default_channel = "slack";
     }
 
     writeFileSync(paths.config, yaml.dump(config, { lineWidth: -1 }));

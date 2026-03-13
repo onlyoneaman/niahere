@@ -1,8 +1,9 @@
 import type { Channel } from "./channel";
-import { getFactories, registerChannel } from "./registry";
+import { getFactories, registerChannel, trackStarted, clearStarted } from "./registry";
 import { log } from "../utils/log";
 
 export { registerChannel };
+export { getChannel } from "./registry";
 
 export async function startChannels(): Promise<Channel[]> {
   const channels: Channel[] = [];
@@ -14,6 +15,7 @@ export async function startChannels(): Promise<Channel[]> {
     try {
       await channel.start();
       channels.push(channel);
+      trackStarted(channel);
       log.info({ channel: channel.name }, "channel started");
     } catch (err) {
       log.error({ err, channel: channel.name }, "channel failed to start");
@@ -32,7 +34,7 @@ export async function stopChannels(channels: Channel[]): Promise<void> {
       log.error({ err, channel: channel.name }, "channel failed to stop");
     }
   }
+  clearStarted();
 }
 
 export type { Channel, ChannelFactory } from "./channel";
-export { sendToTelegram } from "./telegram";

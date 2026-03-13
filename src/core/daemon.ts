@@ -11,6 +11,7 @@ import { startScheduler, stopScheduler, recomputeAllNextRuns } from "./scheduler
 import { createNiaMcpServer } from "../mcp/server";
 import { setMcpServers } from "../mcp";
 import "../channels/telegram"; // side-effect: registers channel factory
+import "../channels/slack"; // side-effect: registers channel factory
 
 export function writePid(pid: number): void {
   const { pid: pidPath } = getPaths();

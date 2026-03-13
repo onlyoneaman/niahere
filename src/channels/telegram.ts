@@ -9,17 +9,6 @@ import { Session } from "../db/models";
 import { log } from "../utils/log";
 import { getMcpServers } from "../mcp";
 
-let telegramSender: ((text: string) => Promise<void>) | null = null;
-
-export function setSender(fn: (text: string) => Promise<void>): void {
-  telegramSender = fn;
-}
-
-export async function sendToTelegram(text: string): Promise<void> {
-  if (!telegramSender) throw new Error("Telegram not configured");
-  await telegramSender(text);
-}
-
 interface ChatState {
   engine: ChatEngine;
   roomIndex: number;
@@ -31,6 +20,14 @@ const STREAM_EDIT_INTERVAL = 2000; // min ms between edits (Telegram rate limit)
 class TelegramChannel implements Channel {
   name = "telegram";
   private bot: Bot | null = null;
+  private outboundChatId: number | null = null;
+
+  async sendMessage(text: string): Promise<void> {
+    if (!this.bot) throw new Error("Telegram not started");
+    const chatId = this.outboundChatId;
+    if (!chatId) throw new Error("No outbound chat ID registered");
+    await this.bot.api.sendMessage(chatId, text);
+  }
 
   async start(): Promise<void> {
     const config = getConfig();
@@ -38,7 +35,7 @@ class TelegramChannel implements Channel {
 
     await runMigrations();
 
-    let outboundChatId = config.telegram_chat_id;
+    this.outboundChatId = config.telegram_chat_id;
 
     const chats = new Map<number, ChatState>();
 
@@ -87,27 +84,22 @@ class TelegramChannel implements Channel {
     }
 
     const isOpen = config.telegram_open;
+    const self = this;
 
     function registerOutbound(chatId: number): void {
-      if (outboundChatId) return;
-      outboundChatId = chatId;
+      if (self.outboundChatId) return;
+      self.outboundChatId = chatId;
       updateRawConfig({ telegram_chat_id: chatId });
       log.info({ chatId }, "auto-registered outbound chat ID");
     }
 
     function isAllowed(chatId: number): boolean {
       if (isOpen) return true;
-      if (!outboundChatId) return true; // first user always allowed (gets registered)
-      return chatId === outboundChatId;
+      if (!self.outboundChatId) return true; // first user always allowed (gets registered)
+      return chatId === self.outboundChatId;
     }
 
     const bot = new Bot(token);
-
-    setSender(async (text: string) => {
-      const chatId = outboundChatId;
-      if (!chatId) throw new Error("No outbound chat ID registered");
-      await bot.api.sendMessage(chatId, text);
-    });
 
     async function processMessage(ctx: any, state: ChatState, text: string): Promise<void> {
       const chatId = ctx.chatId;
@@ -248,7 +240,6 @@ class TelegramChannel implements Channel {
   }
 
   async stop(): Promise<void> {
-    telegramSender = null;
     if (this.bot) {
       this.bot.stop();
       this.bot = null;

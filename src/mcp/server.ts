@@ -63,10 +63,10 @@ export function createNiaMcpServer() {
       ),
       tool(
         "send_message",
-        "Send a message to the user via Telegram",
+        "Send a message to the user via configured channel (telegram, slack). Uses default_channel from config if not specified.",
         {
           text: z.string().describe("Message text to send"),
-          channel: z.string().default("telegram").describe("Channel (default: telegram)"),
+          channel: z.string().optional().describe("Channel name (telegram, slack). Omit to use default."),
         },
         async (args) => ({
           content: [{ type: "text" as const, text: await handlers.sendMessage(args.text, args.channel) }],

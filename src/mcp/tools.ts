@@ -1,7 +1,7 @@
 import { Job, Message, Session } from "../db/models";
 import { computeInitialNextRun } from "../core/scheduler";
 import { getConfig } from "../utils/config";
-import { sendToTelegram } from "../channels/telegram";
+import { getChannel } from "../channels/registry";
 import { log } from "../utils/log";
 
 export async function listJobs(): Promise<string> {
@@ -59,18 +59,61 @@ export async function runJobNow(name: string): Promise<string> {
   return `Job "${name}" queued for immediate execution.`;
 }
 
-export async function sendMessage(text: string, channel = "telegram"): Promise<string> {
-  if (channel !== "telegram") return `Channel "${channel}" not supported yet.`;
+/** Send directly via API when no started channel is available (e.g. CLI `nia send`). */
+async function sendDirect(target: string, text: string): Promise<void> {
+  const config = getConfig();
+
+  if (target === "telegram") {
+    const token = config.telegram_bot_token;
+    const chatId = config.telegram_chat_id;
+    if (!token) throw new Error("Telegram not configured (no bot token)");
+    if (!chatId) throw new Error("No Telegram chat ID — send a message to the bot first");
+    const { Bot } = await import("grammy");
+    const bot = new Bot(token);
+    await bot.api.sendMessage(chatId, text);
+    return;
+  }
+
+  if (target === "slack") {
+    const token = config.slack_bot_token;
+    const recipient = config.slack_channel_id || config.slack_dm_user_id;
+    if (!token) throw new Error("Slack not configured (no bot token)");
+    if (!recipient) throw new Error("No Slack recipient — DM the bot first, or set slack_channel_id in config");
+    const { App } = await import("@slack/bolt");
+    const app = new App({ token, signingSecret: "unused" });
+    await app.client.chat.postMessage({ token, channel: recipient, text });
+    return;
+  }
+
+  throw new Error(`Channel "${target}" not configured`);
+}
+
+export async function sendMessage(text: string, channelName?: string): Promise<string> {
+  const config = getConfig();
+  const target = channelName || config.default_channel;
+
+  // Use started channel if available (daemon), otherwise call API directly (CLI)
+  const channel = getChannel(target);
 
   try {
-    await sendToTelegram(text);
+    if (channel?.sendMessage) {
+      await channel.sendMessage(text);
+    } else {
+      await sendDirect(target, text);
+    }
 
     // Store in messages table (best-effort)
     try {
-      const config = getConfig();
-      const chatId = config.telegram_chat_id;
-      if (chatId) {
-        const room = `tg-${chatId}`;
+      let room: string | undefined;
+      if (target === "telegram") {
+        const chatId = config.telegram_chat_id;
+        if (chatId) room = `tg-${chatId}`;
+      } else if (target === "slack") {
+        const channelId = config.slack_channel_id;
+        if (channelId) room = `slack-${channelId}`;
+      }
+
+      if (room) {
         const idx = await Session.getLatestRoomIndex(room);
         const fullRoom = `${room}-${idx}`;
         const sessionId = await Session.getLatest(fullRoom);

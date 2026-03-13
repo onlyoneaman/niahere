@@ -1,0 +1,264 @@
+import { App } from "@slack/bolt";
+import type { Channel } from "./channel";
+import { registerChannel } from "./registry";
+import { createChatEngine, type ChatEngine } from "../chat/engine";
+import { getConfig, updateRawConfig } from "../utils/config";
+import { runMigrations } from "../db/migrate";
+import { Session } from "../db/models";
+import { log } from "../utils/log";
+import { getMcpServers } from "../mcp";
+
+interface ChatState {
+  engine: ChatEngine;
+  roomIndex: number;
+  lock: Promise<void>;
+}
+
+class SlackChannel implements Channel {
+  name = "slack";
+  private app: App | null = null;
+  private defaultChannelId: string | null = null;
+  private dmUserId: string | null = null;
+
+  async sendMessage(text: string): Promise<void> {
+    if (!this.app) throw new Error("Slack not started");
+    const target = this.defaultChannelId || this.dmUserId;
+    if (!target) throw new Error("No Slack recipient — DM the bot first, or set slack_channel_id in config");
+    await this.app.client.chat.postMessage({ channel: target, text });
+  }
+
+  async start(): Promise<void> {
+    const config = getConfig();
+    const botToken = config.slack_bot_token!;
+    const appToken = config.slack_app_token!;
+
+    await runMigrations();
+
+    this.defaultChannelId = config.slack_channel_id;
+    this.dmUserId = config.slack_dm_user_id;
+
+    const chats = new Map<string, ChatState>();
+    const channelNames = new Map<string, string>();
+
+    async function resolveChannelName(app: App, channelId: string): Promise<string> {
+      let name = channelNames.get(channelId);
+      if (name) return name;
+      try {
+        const info = await app.client.conversations.info({ channel: channelId });
+        name = (info.channel as any)?.name || channelId;
+      } catch {
+        name = channelId;
+      }
+      channelNames.set(channelId, name);
+      return name;
+    }
+
+    function roomPrefix(key: string): string {
+      return `slack-${key}`;
+    }
+
+    function roomName(key: string, index: number): string {
+      return `slack-${key}-${index}`;
+    }
+
+    async function getState(key: string): Promise<ChatState> {
+      let state = chats.get(key);
+      if (!state) {
+        const prefix = roomPrefix(key);
+        const idx = await Session.getLatestRoomIndex(prefix);
+        const room = roomName(key, idx);
+        const engine = await createChatEngine({ room, channel: "slack", resume: true, mcpServers: getMcpServers() });
+        state = { engine, roomIndex: idx, lock: Promise.resolve() };
+        chats.set(key, state);
+      }
+      return state;
+    }
+
+    async function restartChat(key: string): Promise<ChatState> {
+      const old = chats.get(key);
+      if (old) old.engine.close();
+
+      const prefix = roomPrefix(key);
+      const prevIdx = await Session.getLatestRoomIndex(prefix);
+      const newIdx = prevIdx + 1;
+      const room = roomName(key, newIdx);
+      const engine = await createChatEngine({ room, channel: "slack", resume: false, mcpServers: getMcpServers() });
+      const state: ChatState = { engine, roomIndex: newIdx, lock: Promise.resolve() };
+      chats.set(key, state);
+      return state;
+    }
+
+    function withLock(key: string, fn: () => Promise<void>): void {
+      const state = chats.get(key);
+      if (!state) {
+        fn().catch((err) => log.error({ err, key }, "unhandled error in locked handler"));
+        return;
+      }
+      state.lock = state.lock.then(fn, fn);
+    }
+
+    const self = this;
+
+    const app = new App({
+      token: botToken,
+      appToken,
+      socketMode: true,
+    });
+
+    let botUserId: string | undefined;
+
+    // Slash command: /nia
+    app.command("/nia", async ({ command, ack, respond }) => {
+      await ack();
+
+      const subcommand = command.text.trim().toLowerCase();
+      const isDm = command.channel_name === "directmessage";
+      const channelName = isDm ? `dm-${command.user_id}` : await resolveChannelName(app, command.channel_id);
+      // For slash commands in channels, reset the whole channel DM-style (no thread context)
+      const key = isDm ? channelName : channelName;
+
+      if (subcommand === "new" || subcommand === "start") {
+        const state = await restartChat(key);
+        log.info({ channel: command.channel_id, key, room: roomName(key, state.roomIndex) }, "new slack session");
+        await respond("New conversation started.");
+      } else if (subcommand === "" || subcommand === "help") {
+        await respond("Commands:\n• `/nia new` — start a new conversation\n• `/nia help` — show this help");
+      } else {
+        const state = await getState(key);
+        withLock(key, async () => {
+          try {
+            const { result } = await state.engine.send(subcommand, {
+              onActivity(status) {
+                log.debug({ status }, "slack engine activity");
+              },
+            });
+            await respond(result.trim() || "(no response)");
+          } catch (err) {
+            const errText = err instanceof Error ? err.message : String(err);
+            await respond(`[error] ${errText}`);
+          }
+        });
+      }
+    });
+
+    // Handle messages (DMs + @mentions)
+    app.message(async ({ message, say, client }) => {
+      if (message.subtype) return;
+      const msg = message as {
+        text?: string;
+        channel: string;
+        channel_type?: string;
+        user?: string;
+        ts: string;
+        thread_ts?: string;
+      };
+      if (!msg.text || !msg.user) return;
+
+      const isDm = msg.channel_type === "im";
+      const isMention = botUserId && msg.text.includes(`<@${botUserId}>`);
+
+      if (!isDm && !isMention) return;
+
+      // Strip the @mention
+      let text = msg.text;
+      if (botUserId) {
+        text = text.replace(new RegExp(`<@${botUserId}>`, "g"), "").trim();
+      }
+      if (!text) return;
+
+      // Auto-register DM user for outbound messages
+      if (isDm && !self.dmUserId && msg.user) {
+        self.dmUserId = msg.user;
+        updateRawConfig({ slack_dm_user_id: msg.user });
+        log.info({ userId: msg.user }, "auto-registered slack DM user");
+      }
+
+      // Build session key:
+      // - DMs: flat, one session per user → slack-dm-{userId}
+      // - Channels: per-thread → slack-{channelName}-t{threadTs}
+      //   - Top-level @mention starts a new thread (uses msg.ts as thread root)
+      //   - Reply in thread continues that thread's session
+      let key: string;
+      let replyThreadTs: string | undefined;
+
+      if (isDm) {
+        key = `dm-${msg.user}`;
+        // DMs stay flat, no threading
+      } else {
+        const channelName = await resolveChannelName(app, msg.channel);
+        const threadTs = msg.thread_ts || msg.ts; // existing thread or start new one
+        key = `${channelName}-t${threadTs}`;
+        replyThreadTs = threadTs;
+      }
+
+      log.info({ channel: msg.channel, key, text: text.slice(0, 100), isDm }, "slack message received");
+
+      const state = await getState(key);
+
+      withLock(key, async () => {
+        try {
+          const { result } = await state.engine.send(text, {
+            onActivity(status) {
+              log.debug({ status }, "slack engine activity");
+            },
+          });
+
+          const reply = result.trim() || "(no response)";
+
+          if (replyThreadTs) {
+            // Reply in thread
+            await client.chat.postMessage({
+              channel: msg.channel,
+              text: reply,
+              thread_ts: replyThreadTs,
+            });
+          } else {
+            await say(reply);
+          }
+
+          log.info({ channel: msg.channel, key, chars: reply.length }, "slack reply sent");
+        } catch (err) {
+          const errText = err instanceof Error ? err.message : String(err);
+          log.error({ err, channel: msg.channel }, "slack message processing failed");
+
+          if (replyThreadTs) {
+            await client.chat.postMessage({
+              channel: msg.channel,
+              text: `[error] ${errText}`,
+              thread_ts: replyThreadTs,
+            }).catch(() => {});
+          } else {
+            await say(`[error] ${errText}`);
+          }
+        }
+      });
+    });
+
+    await app.start();
+
+    // Get bot user ID for @mention detection
+    try {
+      const auth = await app.client.auth.test();
+      botUserId = auth.user_id as string | undefined;
+      log.info({ botUserId }, "slack bot authenticated");
+    } catch (err) {
+      log.warn({ err }, "could not get slack bot user ID");
+    }
+
+    log.info("slack bot started (Socket Mode)");
+    this.app = app;
+  }
+
+  async stop(): Promise<void> {
+    if (this.app) {
+      await this.app.stop();
+      this.app = null;
+    }
+  }
+}
+
+registerChannel(() => {
+  const config = getConfig();
+  if (!config.slack_bot_token || !config.slack_app_token) return null;
+  return new SlackChannel();
+});
