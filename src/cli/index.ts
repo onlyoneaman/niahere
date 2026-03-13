@@ -196,37 +196,13 @@ switch (command) {
     const message = process.argv.slice(3).join(" ");
     if (!message) fail("Usage: nia send <message>");
 
-    const config = getConfig();
-    const token = config.telegram_bot_token;
-    const chatId = config.telegram_chat_id;
-    if (!token) fail("Telegram bot token not configured. Run: nia telegram <token>");
-    if (!chatId) fail("Telegram chat ID not set. Send /start to your bot first.");
+    const { sendMessage } = await import("../mcp/tools");
 
     try {
-      const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, text: message }),
+      await withDb(async () => {
+        const result = await sendMessage(message);
+        console.log(result);
       });
-      const data = await res.json() as { ok: boolean; description?: string };
-      if (!data.ok) fail(`Telegram API error: ${data.description || "unknown"}`);
-
-      // Store in latest telegram session
-      try {
-        await withDb(async () => {
-          const room = `tg-${chatId}`;
-          const idx = await Session.getLatestRoomIndex(room);
-          const fullRoom = `${room}-${idx}`;
-          const sessionId = await Session.getLatest(fullRoom);
-          if (sessionId) {
-            await Message.save({ sessionId, room: fullRoom, sender: "nia", content: message, isFromAgent: true });
-          }
-        });
-      } catch {
-        // DB unavailable — message still sent
-      }
-
-      console.log("Sent.");
     } catch (err) {
       fail(`Failed to send: ${errMsg(err)}`);
     }
