@@ -7,6 +7,7 @@ import { runMigrations } from "../db/migrate";
 import { Session } from "../db/models";
 import { log } from "../utils/log";
 import { getMcpServers } from "../mcp";
+import { type Attachment, classifyMime, validateAttachment, prepareImage } from "../types/attachment";
 
 interface ChatState {
   engine: ChatEngine;
@@ -25,6 +26,17 @@ class SlackChannel implements Channel {
     const target = this.defaultChannelId || this.dmUserId;
     if (!target) throw new Error("No Slack recipient — DM the bot first, or set slack_channel_id in config");
     await this.app.client.chat.postMessage({ channel: target, text });
+  }
+
+  async sendMedia(data: Buffer, mimeType: string, filename?: string): Promise<void> {
+    if (!this.app) throw new Error("Slack not started");
+    const target = this.defaultChannelId || this.dmUserId;
+    if (!target) throw new Error("No Slack recipient — DM the bot first, or set slack_channel_id in config");
+    await this.app.client.filesUploadV2({
+      channel_id: target,
+      file: data,
+      filename: filename || `file.${mimeType.split("/")[1] || "bin"}`,
+    });
   }
 
   async start(): Promise<void> {
@@ -141,6 +153,43 @@ class SlackChannel implements Channel {
       }
     });
 
+    async function downloadSlackFile(url: string): Promise<Buffer> {
+      const resp = await fetch(url, {
+        headers: { Authorization: `Bearer ${botToken}` },
+      });
+      if (!resp.ok) throw new Error(`Slack file download failed: ${resp.status}`);
+      return Buffer.from(await resp.arrayBuffer());
+    }
+
+    async function extractSlackAttachments(files: any[]): Promise<Attachment[]> {
+      const attachments: Attachment[] = [];
+      for (const file of files.slice(0, 5)) {
+        const mime = file.mimetype || "application/octet-stream";
+        const attType = classifyMime(mime);
+        if (!attType) continue;
+        if (!file.url_private_download) continue;
+        try {
+          const data = await downloadSlackFile(file.url_private_download);
+          const error = validateAttachment(data, mime);
+          if (error) {
+            log.warn({ file: file.name, error }, "skipping slack attachment");
+            continue;
+          }
+          let finalData = data;
+          let finalMime = mime;
+          if (attType === "image") {
+            const prepared = await prepareImage(data, mime);
+            finalData = prepared.data;
+            finalMime = prepared.mimeType;
+          }
+          attachments.push({ type: attType, data: finalData, mimeType: finalMime, filename: file.name });
+        } catch (err) {
+          log.warn({ err, file: file.name }, "failed to download slack file");
+        }
+      }
+      return attachments;
+    }
+
     // Handle messages (DMs + @mentions)
     app.message(async ({ message, say, client }) => {
       if (message.subtype) return;
@@ -151,20 +200,33 @@ class SlackChannel implements Channel {
         user?: string;
         ts: string;
         thread_ts?: string;
+        files?: any[];
       };
-      if (!msg.text || !msg.user) return;
+      if (!msg.user) return;
+      if (!msg.text && (!msg.files || msg.files.length === 0)) return;
 
       const isDm = msg.channel_type === "im";
-      const isMention = botUserId && msg.text.includes(`<@${botUserId}>`);
+      const isMention = botUserId && msg.text?.includes(`<@${botUserId}>`);
+      const hasFiles = msg.files && msg.files.length > 0;
 
+      if (!isDm && !isMention && !hasFiles) return;
+      // In channels, still require mention even with files
       if (!isDm && !isMention) return;
 
       // Strip the @mention
-      let text = msg.text;
+      let text = msg.text || "";
       if (botUserId) {
         text = text.replace(new RegExp(`<@${botUserId}>`, "g"), "").trim();
       }
-      if (!text) return;
+
+      // Download any file attachments
+      let attachments: Attachment[] | undefined;
+      if (hasFiles) {
+        attachments = await extractSlackAttachments(msg.files!);
+      }
+
+      if (!text && (!attachments || attachments.length === 0)) return;
+      if (!text) text = attachments?.some(a => a.type === "image") ? "What's in this image?" : "Here's a file.";
 
       // Auto-register DM user for outbound messages
       if (isDm && !self.dmUserId && msg.user) {
@@ -191,7 +253,7 @@ class SlackChannel implements Channel {
         replyThreadTs = threadTs;
       }
 
-      log.info({ channel: msg.channel, key, text: text.slice(0, 100), isDm }, "slack message received");
+      log.info({ channel: msg.channel, key, text: text.slice(0, 100), isDm, attachments: attachments?.length || 0 }, "slack message received");
 
       const state = await getState(key);
 
@@ -201,7 +263,7 @@ class SlackChannel implements Channel {
             onActivity(status) {
               log.debug({ status }, "slack engine activity");
             },
-          });
+          }, attachments);
 
           const reply = result.trim() || "(no response)";
 

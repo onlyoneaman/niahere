@@ -1,9 +1,11 @@
 import { query, type Query } from "@anthropic-ai/claude-agent-sdk";
+import type { MessageParam } from "@anthropic-ai/sdk/resources";
 import { existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { buildSystemPrompt } from "./identity";
 import { Session, Message, ActiveEngine } from "../db/models";
+import type { Attachment } from "../types/attachment";
 
 const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 
@@ -24,7 +26,7 @@ export interface SendCallbacks {
 export interface ChatEngine {
   sessionId: string | null;
   room: string;
-  send(userMessage: string, callbacks?: SendCallbacks): Promise<SendResult>;
+  send(userMessage: string, callbacks?: SendCallbacks, attachments?: Attachment[]): Promise<SendResult>;
   close(): void;
 }
 
@@ -37,9 +39,39 @@ export interface EngineOptions {
 
 interface SDKUserMessage {
   type: "user";
-  message: { role: "user"; content: string };
+  message: MessageParam;
   parent_tool_use_id: null;
   session_id: string;
+}
+
+/** Convert provider-agnostic attachments to Anthropic content blocks. */
+export function buildContentBlocks(text: string, attachments?: Attachment[]): MessageParam["content"] {
+  if (!attachments?.length) return text;
+
+  const blocks: Array<{ type: "text"; text: string } | { type: "image"; source: { type: "base64"; media_type: string; data: string } }> = [];
+
+  for (const att of attachments) {
+    if (att.type === "image") {
+      blocks.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: att.mimeType,
+          data: att.data.toString("base64"),
+        },
+      });
+    } else if (att.type === "document") {
+      const docText = att.data.toString("utf8");
+      const label = att.filename ? `[${att.filename}]` : "[document]";
+      blocks.push({ type: "text", text: `${label}\n${docText}` });
+    }
+  }
+
+  if (text) {
+    blocks.push({ type: "text", text });
+  }
+
+  return blocks as MessageParam["content"];
 }
 
 /**
@@ -51,10 +83,10 @@ class MessageStream {
   private waiting: (() => void) | null = null;
   private done = false;
 
-  push(text: string): void {
+  push(text: string, attachments?: Attachment[]): void {
     this.queue.push({
       type: "user",
-      message: { role: "user", content: text },
+      message: { role: "user", content: buildContentBlocks(text, attachments) },
       parent_tool_use_id: null,
       session_id: "",
     });
@@ -347,7 +379,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
       return room;
     },
 
-    async send(userMessage: string, callbacks?: SendCallbacks) {
+    async send(userMessage: string, callbacks?: SendCallbacks, attachments?: Attachment[]) {
       await ActiveEngine.register(room, channel);
 
       if (!alive || !stream) {
@@ -365,7 +397,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
           resolve,
           reject,
         };
-        stream!.push(userMessage);
+        stream!.push(userMessage, attachments);
       });
     },
 

@@ -1,4 +1,4 @@
-import { Bot } from "grammy";
+import { Bot, InputFile } from "grammy";
 import type { Channel } from "./channel";
 import { registerChannel } from "./registry";
 import { createChatEngine, type ChatEngine } from "../chat/engine";
@@ -8,6 +8,7 @@ import { runMigrations } from "../db/migrate";
 import { Session } from "../db/models";
 import { log } from "../utils/log";
 import { getMcpServers } from "../mcp";
+import { type Attachment, classifyMime, validateAttachment, prepareImage } from "../types/attachment";
 
 interface ChatState {
   engine: ChatEngine;
@@ -27,6 +28,29 @@ class TelegramChannel implements Channel {
     const chatId = this.outboundChatId;
     if (!chatId) throw new Error("No outbound chat ID registered");
     await this.bot.api.sendMessage(chatId, text);
+  }
+
+  async sendMedia(data: Buffer, mimeType: string, filename?: string): Promise<void> {
+    if (!this.bot) throw new Error("Telegram not started");
+    const chatId = this.outboundChatId;
+    if (!chatId) throw new Error("No outbound chat ID registered");
+
+    const file = new InputFile(data, filename);
+    if (mimeType.startsWith("image/")) {
+      await this.bot.api.sendPhoto(chatId, file);
+    } else {
+      await this.bot.api.sendDocument(chatId, file);
+    }
+  }
+
+  private async downloadFile(fileId: string): Promise<Buffer> {
+    if (!this.bot) throw new Error("Telegram not started");
+    const file = await this.bot.api.getFile(fileId);
+    const token = getConfig().telegram_bot_token!;
+    const url = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
+    return Buffer.from(await resp.arrayBuffer());
   }
 
   async start(): Promise<void> {
@@ -101,9 +125,9 @@ class TelegramChannel implements Channel {
 
     const bot = new Bot(token);
 
-    async function processMessage(ctx: any, state: ChatState, text: string): Promise<void> {
+    async function processMessage(ctx: any, state: ChatState, text: string, attachments?: Attachment[]): Promise<void> {
       const chatId = ctx.chatId;
-      log.info({ chatId, text: text.slice(0, 100) }, "telegram message received");
+      log.info({ chatId, text: text.slice(0, 100), attachments: attachments?.length || 0 }, "telegram message received");
 
       // Show typing indicator throughout
       const typingInterval = setInterval(() => {
@@ -170,7 +194,7 @@ class TelegramChannel implements Channel {
               scheduleEdit(`\u270F ${clean}`);
             }
           },
-        });
+        }, attachments);
 
         clearInterval(typingInterval);
 
@@ -230,6 +254,67 @@ class TelegramChannel implements Channel {
       registerOutbound(ctx.chatId);
       const state = await getState(ctx.chatId);
       withLock(ctx.chatId, () => processMessage(ctx, state, ctx.message.text));
+    });
+
+    bot.on("message:photo", async (ctx) => {
+      if (!isAllowed(ctx.chatId)) {
+        await ctx.reply("Unauthorized.");
+        return;
+      }
+      registerOutbound(ctx.chatId);
+      const state = await getState(ctx.chatId);
+      withLock(ctx.chatId, async () => {
+        try {
+          const photos = ctx.message.photo;
+          const largest = photos[photos.length - 1];
+          const raw = await self.downloadFile(largest.file_id);
+          const { data, mimeType } = await prepareImage(raw, "image/jpeg");
+          const attachment: Attachment = { type: "image", data, mimeType };
+          const caption = ctx.message.caption || "What's in this image?";
+          await processMessage(ctx, state, caption, [attachment]);
+        } catch (err) {
+          log.error({ err, chatId: ctx.chatId }, "failed to process photo");
+          await ctx.reply("Failed to process image.").catch(() => {});
+        }
+      });
+    });
+
+    bot.on("message:document", async (ctx) => {
+      if (!isAllowed(ctx.chatId)) {
+        await ctx.reply("Unauthorized.");
+        return;
+      }
+      registerOutbound(ctx.chatId);
+      const state = await getState(ctx.chatId);
+      withLock(ctx.chatId, async () => {
+        try {
+          const doc = ctx.message.document;
+          const mime = doc.mime_type || "application/octet-stream";
+          const attType = classifyMime(mime);
+          if (!attType) {
+            await ctx.reply(`Unsupported file type: ${mime}`);
+            return;
+          }
+          let data = await self.downloadFile(doc.file_id);
+          const error = validateAttachment(data, mime);
+          if (error) {
+            await ctx.reply(error);
+            return;
+          }
+          let finalMime = mime;
+          if (attType === "image") {
+            const prepared = await prepareImage(data, mime);
+            data = prepared.data;
+            finalMime = prepared.mimeType;
+          }
+          const attachment: Attachment = { type: attType, data, mimeType: finalMime, filename: doc.file_name };
+          const caption = ctx.message.caption || (attType === "image" ? "What's in this image?" : "Here's a document.");
+          await processMessage(ctx, state, caption, [attachment]);
+        } catch (err) {
+          log.error({ err, chatId: ctx.chatId }, "failed to process document");
+          await ctx.reply("Failed to process document.").catch(() => {});
+        }
+      });
     });
 
     bot.start({

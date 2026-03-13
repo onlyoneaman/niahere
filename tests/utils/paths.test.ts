@@ -21,5 +21,7 @@ describe("getPaths", () => {
     expect(paths.config).toBe(resolve(TEST_DIR, "config.yaml"));
     expect(paths.jobsDir).toBe(resolve(TEST_DIR, "jobs"));
     expect(paths.selfDir).toBe(resolve(TEST_DIR, "self"));
+    expect(paths.beadsDir).toBe(resolve(TEST_DIR, "beads"));
+    expect(paths.skillsDir).toBe(resolve(TEST_DIR, "skills"));
   });
 });

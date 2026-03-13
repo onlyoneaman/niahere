@@ -63,13 +63,14 @@ export function createNiaMcpServer() {
       ),
       tool(
         "send_message",
-        "Send a message to the user via configured channel (telegram, slack). Uses default_channel from config if not specified.",
+        "Send a message to the user via configured channel (telegram, slack). Uses default_channel from config if not specified. Can also send a file/image by providing media_path.",
         {
           text: z.string().describe("Message text to send"),
           channel: z.string().optional().describe("Channel name (telegram, slack). Omit to use default."),
+          media_path: z.string().optional().describe("Absolute path to a file to send as an attachment (image, document)"),
         },
         async (args) => ({
-          content: [{ type: "text" as const, text: await handlers.sendMessage(args.text, args.channel) }],
+          content: [{ type: "text" as const, text: await handlers.sendMessage(args.text, args.channel, args.media_path) }],
         }),
       ),
       tool(

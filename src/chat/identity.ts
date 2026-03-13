@@ -111,7 +111,7 @@ You have MCP tools for managing jobs directly — no need for shell commands:
 - **remove_job** — delete a job by name
 - **enable_job** / **disable_job** — toggle a job on or off
 - **run_job** — trigger a job to run immediately
-- **send_message** — send a message to the user (via telegram, slack, or default channel)
+- **send_message** — send a message to the user (via telegram, slack, or default channel). Supports \`media_path\` to send images/files.
 - **list_messages** — read recent chat history
 
 Active hours: ${config.activeHours.start}–${config.activeHours.end} (${config.timezone}). Jobs respect this; crons (always=true) don't.

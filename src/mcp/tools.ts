@@ -1,8 +1,11 @@
+import { readFileSync, existsSync } from "fs";
+import { basename } from "path";
 import { Job, Message, Session } from "../db/models";
 import { computeInitialNextRun } from "../core/scheduler";
 import { getConfig } from "../utils/config";
 import { getChannel } from "../channels/registry";
 import { log } from "../utils/log";
+import { classifyMime } from "../types/attachment";
 
 export async function listJobs(): Promise<string> {
   const jobs = await Job.list();
@@ -59,6 +62,18 @@ export async function runJobNow(name: string): Promise<string> {
   return `Job "${name}" queued for immediate execution.`;
 }
 
+/** Guess MIME type from file extension. */
+export function guessMime(filePath: string): string {
+  const ext = filePath.split(".").pop()?.toLowerCase();
+  const map: Record<string, string> = {
+    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+    gif: "image/gif", webp: "image/webp",
+    txt: "text/plain", md: "text/markdown", csv: "text/csv",
+    json: "application/json", pdf: "application/pdf", html: "text/html",
+  };
+  return map[ext || ""] || "application/octet-stream";
+}
+
 /** Send directly via API when no started channel is available (e.g. CLI `nia send`). */
 async function sendDirect(target: string, text: string): Promise<void> {
   const config = getConfig();
@@ -88,7 +103,45 @@ async function sendDirect(target: string, text: string): Promise<void> {
   throw new Error(`Channel "${target}" not configured`);
 }
 
-export async function sendMessage(text: string, channelName?: string): Promise<string> {
+/** Send media directly via API (no started channel). */
+async function sendMediaDirect(target: string, data: Buffer, mimeType: string, filename?: string): Promise<void> {
+  const config = getConfig();
+
+  if (target === "telegram") {
+    const token = config.telegram_bot_token;
+    const chatId = config.telegram_chat_id;
+    if (!token) throw new Error("Telegram not configured (no bot token)");
+    if (!chatId) throw new Error("No Telegram chat ID — send a message to the bot first");
+    const { Bot, InputFile } = await import("grammy");
+    const bot = new Bot(token);
+    const file = new InputFile(data, filename);
+    if (mimeType.startsWith("image/")) {
+      await bot.api.sendPhoto(chatId, file);
+    } else {
+      await bot.api.sendDocument(chatId, file);
+    }
+    return;
+  }
+
+  if (target === "slack") {
+    const token = config.slack_bot_token;
+    const recipient = config.slack_channel_id || config.slack_dm_user_id;
+    if (!token) throw new Error("Slack not configured (no bot token)");
+    if (!recipient) throw new Error("No Slack recipient — DM the bot first, or set slack_channel_id in config");
+    const { App } = await import("@slack/bolt");
+    const app = new App({ token, signingSecret: "unused" });
+    await app.client.filesUploadV2({
+      channel_id: recipient,
+      file: data,
+      filename: filename || `file.${mimeType.split("/")[1] || "bin"}`,
+    });
+    return;
+  }
+
+  throw new Error(`Channel "${target}" not configured`);
+}
+
+export async function sendMessage(text: string, channelName?: string, mediaPath?: string): Promise<string> {
   const config = getConfig();
   const target = channelName || config.default_channel;
 
@@ -96,10 +149,33 @@ export async function sendMessage(text: string, channelName?: string): Promise<s
   const channel = getChannel(target);
 
   try {
-    if (channel?.sendMessage) {
-      await channel.sendMessage(text);
+    // Handle media attachment if provided
+    if (mediaPath) {
+      if (!existsSync(mediaPath)) return `Failed to send: file not found: ${mediaPath}`;
+      const data = readFileSync(mediaPath);
+      const mimeType = guessMime(mediaPath);
+      const filename = basename(mediaPath);
+
+      if (channel?.sendMedia) {
+        await channel.sendMedia(data, mimeType, filename);
+      } else {
+        await sendMediaDirect(target, data, mimeType, filename);
+      }
+
+      // Also send text if provided (as a separate message)
+      if (text) {
+        if (channel?.sendMessage) {
+          await channel.sendMessage(text);
+        } else {
+          await sendDirect(target, text);
+        }
+      }
     } else {
-      await sendDirect(target, text);
+      if (channel?.sendMessage) {
+        await channel.sendMessage(text);
+      } else {
+        await sendDirect(target, text);
+      }
     }
 
     // Store in messages table (best-effort)
@@ -118,18 +194,19 @@ export async function sendMessage(text: string, channelName?: string): Promise<s
         const fullRoom = `${room}-${idx}`;
         const sessionId = await Session.getLatest(fullRoom);
         if (sessionId) {
+          const content = mediaPath ? `${text} [media: ${basename(mediaPath)}]` : text;
           await Message.save({
             sessionId,
             room: fullRoom,
             sender: "nia",
-            content: text,
+            content,
             isFromAgent: true,
           });
         }
       }
     } catch {}
 
-    return "Message sent.";
+    return mediaPath ? "Message with media sent." : "Message sent.";
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return `Failed to send: ${msg}`;
