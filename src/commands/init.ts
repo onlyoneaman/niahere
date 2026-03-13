@@ -4,6 +4,7 @@ import { getNiaHome, getPaths } from "../utils/paths";
 import { resetConfig } from "../utils/config";
 import { runMigrations } from "../db/migrate";
 import { closeDb } from "../db/connection";
+import { startDaemon, isRunning } from "../core/daemon";
 import yaml from "js-yaml";
 
 function ask(rl: readline.Interface, question: string, defaultValue?: string): Promise<string> {
@@ -13,6 +14,15 @@ function ask(rl: readline.Interface, question: string, defaultValue?: string): P
       resolve(answer.trim() || defaultValue || "");
     });
   });
+}
+
+function writeIfMissing(filePath: string, content: string, label: string): void {
+  if (existsSync(filePath)) {
+    console.log(`  - ${label} already exists, skipping`);
+  } else {
+    writeFileSync(filePath, content);
+    console.log(`  \u2713 created ${label}`);
+  }
 }
 
 export async function runInit(): Promise<void> {
@@ -69,9 +79,14 @@ export async function runInit(): Promise<void> {
       if (chatIdStr) telegramChatId = Number(chatIdStr);
     }
 
+    // Owner info
+    console.log("\nAbout you:");
+    const ownerName = await ask(rl, "Your name");
+    const ownerRole = await ask(rl, "What do you do? (e.g. software engineer, student)", "");
+    const ownerInterests = await ask(rl, "Interests (comma-separated, Enter to skip)", "");
+
     // Agent name
-    const defaultName = "nia";
-    const agentName = await ask(rl, "Agent name", defaultName);
+    const agentName = await ask(rl, "\nAgent name", "nia");
 
     rl.close();
 
@@ -97,21 +112,91 @@ export async function runInit(): Promise<void> {
     writeFileSync(paths.config, yaml.dump(config, { lineWidth: -1 }));
     console.log("\n  \u2713 wrote ~/.niahere/config.yaml");
 
-    // Write identity.md if it doesn't exist
-    const identityPath = `${paths.selfDir}/identity.md`;
-    if (!existsSync(identityPath)) {
-      writeFileSync(
-        identityPath,
-        `You are ${agentName}, a personal AI assistant.\n`,
+    // --- Self files ---
+
+    // identity.md
+    writeIfMissing(
+      `${paths.selfDir}/identity.md`,
+      `# ${agentName}
+
+You are ${agentName}, a personal AI assistant. You run as a background daemon, handle scheduled tasks, and chat when needed.
+
+## Voice
+- Direct and concise. Lead with the answer, not the reasoning.
+- Warm but not chatty. Friendly without filler.
+- Opinionated when you have context. Say what you'd recommend, then the alternatives.
+- Light humor when natural. Never forced.
+`,
+      "~/.niahere/self/identity.md",
+    );
+
+    // owner.md
+    if (ownerName) {
+      const ownerLines = [`# Owner`, ``, `- **Name**: ${ownerName}`];
+      if (ownerRole) ownerLines.push(`- **Role**: ${ownerRole}`);
+      if (ownerInterests) {
+        ownerLines.push(`- **Interests**: ${ownerInterests}`);
+      }
+      ownerLines.push("");
+
+      writeIfMissing(
+        `${paths.selfDir}/owner.md`,
+        ownerLines.join("\n"),
+        "~/.niahere/self/owner.md",
       );
-      console.log(`  \u2713 created ~/.niahere/self/identity.md`);
-    } else {
-      console.log(`  - ~/.niahere/self/identity.md already exists, skipping`);
     }
+
+    // soul.md
+    writeIfMissing(
+      `${paths.selfDir}/soul.md`,
+      `# Operating Principles
+
+## Modes
+- **Chat** (terminal, telegram): Be conversational. Ask clarifying questions. Show personality.
+- **Jobs** (cron): Be terse. Execute the task, report the result. No small talk.
+
+## Self-Resolution
+Before asking the user anything, try in this order:
+1. Check memory.md — have you learned this before?
+2. Check owner.md — is the answer in the owner's profile?
+3. Try to solve it yourself — use your tools, search, read files.
+4. Ask the user — last resort, not first.
+
+## Rules
+1. Execute scheduled jobs on time.
+2. Log actions transparently.
+3. Never take destructive actions without permission.
+4. Keep responses concise and actionable.
+5. Report errors clearly with context.
+6. If something costs you time or surprises you, write it to memory.md.
+`,
+      "~/.niahere/self/soul.md",
+    );
+
+    // memory.md
+    writeIfMissing(
+      `${paths.selfDir}/memory.md`,
+      `# Memory
+
+Things I've learned that I don't want to forget. Auto-maintained.
+
+---
+
+`,
+      "~/.niahere/self/memory.md",
+    );
 
     resetConfig();
 
-    console.log("\nDone. Run `nia start` to launch.");
+    // Auto-start daemon
+    if (!isRunning()) {
+      const pid = startDaemon();
+      console.log(`\n  \u2713 nia started (pid: ${pid})`);
+    } else {
+      console.log(`\n  - nia already running`);
+    }
+
+    console.log("\nDone.");
   } finally {
     rl.close();
   }

@@ -3,21 +3,16 @@ import { join } from "path";
 import { homedir } from "os";
 import { getPaths } from "../utils/paths";
 
+function loadFile(dir: string, name: string): string {
+  const filePath = join(dir, name);
+  if (!existsSync(filePath)) return "";
+  return readFileSync(filePath, "utf8").trim();
+}
+
 export function loadIdentity(): string {
   const { selfDir } = getPaths();
-  const parts: string[] = [];
-
-  const identityPath = join(selfDir, "identity.md");
-  if (existsSync(identityPath)) {
-    parts.push(readFileSync(identityPath, "utf8").trim());
-  }
-
-  const soulPath = join(selfDir, "soul.md");
-  if (existsSync(soulPath)) {
-    parts.push(readFileSync(soulPath, "utf8").trim());
-  }
-
-  return parts.join("\n\n");
+  const files = ["identity.md", "owner.md", "soul.md", "memory.md"];
+  return files.map((f) => loadFile(selfDir, f)).filter(Boolean).join("\n\n");
 }
 
 function scanSkills(): { name: string; description: string }[] {

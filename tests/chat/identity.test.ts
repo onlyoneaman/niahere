@@ -38,9 +38,26 @@ describe("loadIdentity", () => {
     expect(result).toBe("Be helpful");
   });
 
-  test("returns empty string when neither file exists", () => {
+  test("returns empty string when no files exist", () => {
     const result = loadIdentity();
     expect(result).toBe("");
+  });
+
+  test("loads all four self files in order", () => {
+    writeFileSync(`${TEST_DIR}/self/identity.md`, "I am nia");
+    writeFileSync(`${TEST_DIR}/self/owner.md`, "Owner: Aman");
+    writeFileSync(`${TEST_DIR}/self/soul.md`, "Be helpful");
+    writeFileSync(`${TEST_DIR}/self/memory.md`, "Learned: X");
+
+    const result = loadIdentity();
+    expect(result).toContain("I am nia");
+    expect(result).toContain("Owner: Aman");
+    expect(result).toContain("Be helpful");
+    expect(result).toContain("Learned: X");
+    // Verify order: identity before owner before soul before memory
+    expect(result.indexOf("I am nia")).toBeLessThan(result.indexOf("Owner: Aman"));
+    expect(result.indexOf("Owner: Aman")).toBeLessThan(result.indexOf("Be helpful"));
+    expect(result.indexOf("Be helpful")).toBeLessThan(result.indexOf("Learned: X"));
   });
 
   test("trims whitespace from files", () => {

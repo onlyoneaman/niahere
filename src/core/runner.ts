@@ -1,5 +1,3 @@
-import { existsSync, readFileSync } from "fs";
-import { join } from "path";
 import { homedir } from "os";
 export interface JobInput {
   name: string;
@@ -7,9 +5,9 @@ export interface JobInput {
   prompt: string;
 }
 import { appendAudit, readState, writeState, type AuditEntry, type JobState } from "../utils/logger";
-import { getPaths } from "../utils/paths";
 import { getConfig } from "../utils/config";
 import { localTime } from "../utils/time";
+import { loadIdentity } from "../chat/identity";
 
 export interface JobResult {
   job: string;
@@ -18,23 +16,6 @@ export interface JobResult {
   result: string;
   duration_ms: number;
   error?: string;
-}
-
-function loadIdentity(): string {
-  const { selfDir } = getPaths();
-  const parts: string[] = [];
-
-  const identityPath = join(selfDir, "identity.md");
-  if (existsSync(identityPath)) {
-    parts.push(readFileSync(identityPath, "utf8").trim());
-  }
-
-  const soulPath = join(selfDir, "soul.md");
-  if (existsSync(soulPath)) {
-    parts.push(readFileSync(soulPath, "utf8").trim());
-  }
-
-  return parts.join("\n\n");
 }
 
 function buildPrompt(job: JobInput): string {
