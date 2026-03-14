@@ -1,8 +1,9 @@
 {
   "display_information": {
     "name": "Nia",
-    "description": "Personal AI assistant",
-    "background_color": "#1C398E"
+    "description": "The coworker who never logs off",
+    "background_color": "#8B5A1B",
+    "long_description": "Nia is a personal AI teammate that runs as a background daemon. She handles scheduled jobs, chats across Telegram and Slack, manages your tasks, and watches your systems — so you can focus on the work that matters. She's geeky, direct, and quietly competent. Think of her as the coworker who's already looked into the issue before you mention it.\n\nBuilt by Aman (amankumar.ai) — https://github.com/onlyoneaman/niahere"
   },
   "features": {
     "bot_user": {
