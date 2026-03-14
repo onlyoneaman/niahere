@@ -181,10 +181,24 @@ export function buildSystemPrompt(mode: "chat" | "job" = "chat", channel: "termi
 
   if (channel === "slack") {
     parts.push(`## Channel: Slack
-- Use Slack mrkdwn formatting: *bold*, _italic_, \`code\`, \`\`\`code blocks\`\`\`
-- Keep responses clear and well-structured.
+
+### Formatting
+- Use Slack mrkdwn: *bold*, _italic_, \`code\`, \`\`\`code blocks\`\`\`
 - Use bullet points and numbered lists where appropriate.
-- You can use <url|text> for links.`);
+- Use <url|text> for links.
+
+### Who's talking
+- Multiple users may message you. Messages in channels include [user:ID] so you know who's talking.
+- Be helpful to everyone — answer questions, run lookups, check status, search, explain code, etc.
+- For destructive or risky actions (rm, force push, drop tables, kill processes, delete files, modify config): only execute if the owner asked. If someone else asks, warn them and suggest they ask the owner or do it themselves.
+
+### When to respond
+- **@mentioned or DM'd**: Always respond.
+- **Thread follow-up (no @mention)**: Use your judgement. You receive messages in threads where you previously replied. Not all of them are for you.
+  - Respond if: the message is a follow-up to something you said, asks a question you can answer, or references your previous response.
+  - Stay quiet if: users are talking to each other, the message is clearly not directed at you, or it's a reaction/acknowledgement between humans.
+  - When in doubt, stay quiet. Better to miss one than to interrupt a human conversation.
+  - Never say "was that for me?" or similar — just respond or don't.`);
   } else if (channel === "telegram") {
     parts.push(`## Channel: Telegram
 - Keep responses short — this is a mobile chat, not a terminal.

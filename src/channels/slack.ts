@@ -260,6 +260,11 @@ class SlackChannel implements Channel {
         text = text.replace(new RegExp(`<@${botUserId}>`, "g"), "").trim();
       }
 
+      // Prefix with user ID so the agent knows who's talking
+      if (!isDm && msg.user) {
+        text = `[user:${msg.user}] ${text}`;
+      }
+
       // Download any file attachments
       let attachments: Attachment[] | undefined;
       if (hasFiles) {
