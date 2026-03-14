@@ -92,6 +92,11 @@ class TelegramChannel implements Channel {
       const prevIdx = await Session.getLatestRoomIndex(prefix);
       const newIdx = prevIdx + 1;
       const room = roomName(chatId, newIdx);
+
+      // Persist a placeholder session immediately so the room index survives
+      // daemon restarts (otherwise getState falls back to the old room).
+      await Session.create(`placeholder-${room}`, room);
+
       const engine = await createChatEngine({ room, channel: "telegram", resume: false, mcpServers: getMcpServers() });
       const state: ChatState = { engine, roomIndex: newIdx, lock: Promise.resolve() };
       chats.set(chatId, state);

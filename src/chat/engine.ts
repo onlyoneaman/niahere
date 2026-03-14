@@ -3,6 +3,7 @@ import type { MessageParam } from "@anthropic-ai/sdk/resources";
 import { existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { randomUUID } from "crypto";
 import { buildSystemPrompt } from "./identity";
 import { Session, Message, ActiveEngine } from "../db/models";
 import type { Attachment } from "../types/attachment";
@@ -223,6 +224,11 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
 
     if (sessionId) {
       options.resume = sessionId;
+    } else {
+      // Force a brand-new session with a unique ID so the claude subprocess
+      // cannot auto-continue a prior session in the same CWD ($HOME).
+      options.continue = false;
+      options.sessionId = randomUUID();
     }
 
     if (mcpServers) {

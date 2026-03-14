@@ -61,9 +61,16 @@ export function startDaemon(): number {
   const execPath = process.execPath;
   const scriptPath = process.argv[1];
 
+  // Strip Claude Code env vars so the daemon (and any SDK subprocesses it
+  // spawns) don't think they're running inside a nested Claude Code session.
+  const cleanEnv = { ...process.env };
+  delete cleanEnv.CLAUDECODE;
+  delete cleanEnv.CLAUDE_CODE_ENTRYPOINT;
+  delete cleanEnv.CLAUDE_AGENT_SDK_VERSION;
+
   const proc = Bun.spawn([execPath, scriptPath, "run"], {
     stdio: ["ignore", logFd, logFd],
-    env: { ...process.env },
+    env: cleanEnv,
   });
 
   proc.unref();
@@ -83,10 +90,40 @@ export function stopDaemon(): boolean {
   }
 
   removePid();
+
+  // Kill any orphan daemon processes not tracked by the pidfile.
+  // This happens when the daemon was started multiple times (e.g. from
+  // different terminals) or when a previous stop didn't clean up.
+  try {
+    const result = Bun.spawnSync(["pgrep", "-f", "niahere/src/cli.*\\brun$"]);
+    const pids = new TextDecoder()
+      .decode(result.stdout)
+      .trim()
+      .split("\n")
+      .map((p) => parseInt(p, 10))
+      .filter((p) => !isNaN(p) && p !== pid && p !== process.pid);
+
+    for (const orphan of pids) {
+      try {
+        process.kill(orphan, "SIGTERM");
+      } catch {
+        // Already dead
+      }
+    }
+  } catch {
+    // pgrep not available or failed — not critical
+  }
+
   return true;
 }
 
 export async function runDaemon(): Promise<void> {
+  // Ensure we never pass nested-session env vars to SDK subprocesses,
+  // regardless of how the daemon was launched (nia start, nia run, etc.)
+  delete process.env.CLAUDECODE;
+  delete process.env.CLAUDE_CODE_ENTRYPOINT;
+  delete process.env.CLAUDE_AGENT_SDK_VERSION;
+
   writePid(process.pid);
   log.info({ pid: process.pid }, "daemon started");
 

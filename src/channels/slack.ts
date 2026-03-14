@@ -94,6 +94,11 @@ class SlackChannel implements Channel {
       const prevIdx = await Session.getLatestRoomIndex(prefix);
       const newIdx = prevIdx + 1;
       const room = roomName(key, newIdx);
+
+      // Persist a placeholder session immediately so the room index survives
+      // daemon restarts (otherwise getState falls back to the old room).
+      await Session.create(`placeholder-${room}`, room);
+
       const engine = await createChatEngine({ room, channel: "slack", resume: false, mcpServers: getMcpServers() });
       const state: ChatState = { engine, roomIndex: newIdx, lock: Promise.resolve() };
       chats.set(key, state);
@@ -151,6 +156,16 @@ class SlackChannel implements Channel {
           }
         });
       }
+    });
+
+    // Slash command: /nia-new — quick shortcut to start a fresh conversation
+    app.command("/nia-new", async ({ command, ack, respond }) => {
+      await ack();
+      const isDm = command.channel_name === "directmessage";
+      const key = isDm ? `dm-${command.user_id}` : await resolveChannelName(app, command.channel_id);
+      const state = await restartChat(key);
+      log.info({ channel: command.channel_id, key, room: roomName(key, state.roomIndex) }, "new slack session via /nia-new");
+      await respond("New conversation started.");
     });
 
     async function downloadSlackFile(url: string): Promise<Buffer> {
