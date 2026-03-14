@@ -18,6 +18,7 @@ export interface Config {
   slack_dm_user_id: string | null;
   default_channel: string;
   log_level: string;
+  gemini_api_key: string | null;
 }
 
 const TIME_RE = /^\d{2}:\d{2}$/;
@@ -36,6 +37,7 @@ const DEFAULTS: Config = {
   slack_dm_user_id: null,
   default_channel: "telegram",
   log_level: "info",
+  gemini_api_key: null,
 };
 
 let _config: Config | null = null;
@@ -131,6 +133,11 @@ export function loadConfig(): Config {
     process.env.LOG_LEVEL ||
     (typeof raw.log_level === "string" ? raw.log_level : DEFAULTS.log_level);
 
+  // Gemini API key — env var overrides config
+  const gemini_api_key =
+    process.env.GEMINI_API_KEY ||
+    (typeof raw.gemini_api_key === "string" ? raw.gemini_api_key : null);
+
   return {
     model,
     timezone,
@@ -145,6 +152,7 @@ export function loadConfig(): Config {
     slack_dm_user_id,
     default_channel,
     log_level,
+    gemini_api_key,
   };
 }
 

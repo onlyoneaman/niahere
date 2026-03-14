@@ -11,6 +11,8 @@ import { errMsg } from "../utils/errors";
 import yaml from "js-yaml";
 
 const DEFAULTS_DIR = resolve(import.meta.dir, "../../defaults/self");
+const SKILL_ASSETS_DIR = resolve(import.meta.dir, "../../skills/nia-image/assets");
+const GENERATE_SCRIPT = resolve(import.meta.dir, "../../skills/nia-image/scripts/generate_image.py");
 
 function ask(rl: readline.Interface, question: string, defaultValue?: string): Promise<string> {
   const suffix = defaultValue ? ` [${defaultValue}]` : "";
@@ -188,6 +190,25 @@ export async function runInit(): Promise<void> {
       }
     }
 
+    // Gemini API key (for image generation)
+    let geminiApiKey = "";
+    const existingGemini = (existing.gemini_api_key as string) || "";
+
+    if (existingGemini) {
+      const masked = `...${existingGemini.slice(-6)}`;
+      const reconfigure = await ask(rl, `\nGemini API: configured (${masked}). Reconfigure? (y/n)`, "n");
+      if (reconfigure.toLowerCase() === "y") {
+        geminiApiKey = await ask(rl, "Gemini API key", "") || existingGemini;
+      } else {
+        geminiApiKey = existingGemini;
+      }
+    } else {
+      const setupGemini = await ask(rl, "\nSet up Gemini API key? (for image generation) (y/n)", "n");
+      if (setupGemini.toLowerCase() === "y") {
+        geminiApiKey = await ask(rl, "API key (from https://aistudio.google.com/apikey)", "");
+      }
+    }
+
     // Beads task manager
     const bdInstalled = await Bun.spawn(["which", "bd"], { stdout: "pipe", stderr: "pipe" }).exited === 0;
     const beadsInitialized = existsSync(`${paths.beadsDir}/.beads`);
@@ -270,6 +291,64 @@ export async function runInit(): Promise<void> {
     // Agent name
     const agentName = await ask(rl, "\nAgent name", readExistingName("identity.md") || "nia");
 
+    // Visual identity
+    const imagesDir = `${home}/images`;
+    mkdirSync(imagesDir, { recursive: true });
+    const hasUserReference = existsSync(`${imagesDir}/reference.png`);
+    const hasDefaultReference = existsSync(`${SKILL_ASSETS_DIR}/nia-reference.png`);
+
+    if (geminiApiKey && !hasUserReference) {
+      const setupVisual = await ask(rl, "\nGenerate a visual identity for your agent? (y/n)", "y");
+      if (setupVisual.toLowerCase() === "y") {
+        const visualChoice = await ask(rl, "Describe what your agent looks like (or press enter for default)", "");
+
+        if (visualChoice) {
+          // User provided a description — generate from scratch
+          console.log("  Generating reference image from description...");
+          const prompt = `Ultra photorealistic portrait: ${visualChoice}. Natural skin texture, DSLR quality, 8k, hyper-detailed.`;
+          const proc = Bun.spawn([
+            "python3", GENERATE_SCRIPT,
+            "--no-reference",
+            "--api-key", geminiApiKey,
+            "--aspect-ratio", "9:16",
+            "--prompt", prompt,
+            "--output", `${imagesDir}/reference.png`,
+          ], { stdout: "pipe", stderr: "pipe" });
+          const exitCode = await proc.exited;
+          if (exitCode === 0) {
+            console.log(`  \u2713 generated reference image at ${imagesDir}/reference.png`);
+            // Also generate a profile picture
+            console.log("  Generating profile picture...");
+            const profileProc = Bun.spawn([
+              "python3", GENERATE_SCRIPT,
+              "--reference", `${imagesDir}/reference.png`,
+              "--api-key", geminiApiKey,
+              "--aspect-ratio", "1:1",
+              "--prompt", `Photorealistic close-up portrait of the same person from the reference. Warm slight smile, direct eye contact, soft ambient side lighting, creamy bokeh background, 85mm f/1.8, shallow depth of field. Same face, same style, natural skin texture, DSLR quality, hyper-detailed.`,
+              "--output", `${imagesDir}/profile.png`,
+            ], { stdout: "pipe", stderr: "pipe" });
+            if (await profileProc.exited === 0) {
+              console.log(`  \u2713 generated profile picture at ${imagesDir}/profile.png`);
+            }
+          } else {
+            const stderr = await new Response(proc.stderr).text();
+            console.log(`  \u2717 image generation failed: ${stderr.trim().slice(0, 200)}`);
+          }
+        } else if (hasDefaultReference) {
+          // No description — copy defaults
+          const { copyFileSync } = await import("fs");
+          copyFileSync(`${SKILL_ASSETS_DIR}/nia-reference.png`, `${imagesDir}/reference.png`);
+          console.log(`  \u2713 copied default reference image`);
+          if (existsSync(`${SKILL_ASSETS_DIR}/nia-profile.png`)) {
+            copyFileSync(`${SKILL_ASSETS_DIR}/nia-profile.png`, `${imagesDir}/profile.png`);
+            console.log(`  \u2713 copied default profile picture`);
+          }
+        }
+      }
+    } else if (hasUserReference) {
+      console.log("\nVisual identity: already set up.");
+    }
+
     rl.close();
 
     // Create directories
@@ -296,6 +375,10 @@ export async function runInit(): Promise<void> {
       config.slack_bot_token = slackBotToken;
       config.slack_app_token = slackAppToken;
       if (slackChannelId) config.slack_channel_id = slackChannelId;
+    }
+
+    if (geminiApiKey) {
+      config.gemini_api_key = geminiApiKey;
     }
 
     // Set default channel based on what's configured

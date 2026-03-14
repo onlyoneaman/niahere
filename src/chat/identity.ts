@@ -146,6 +146,7 @@ Config reference:
 - \`slack_app_token\` — Slack app token (xapp-...) for Socket Mode
 - \`slack_channel_id\` — default Slack channel for outbound messages
 - \`default_channel\` — which channel send_message uses by default ("telegram" or "slack")
+- \`gemini_api_key\` — Gemini API key for image generation (used by nia-image skill)
 
 ## Persona & Memory
 
