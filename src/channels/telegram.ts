@@ -16,7 +16,6 @@ interface ChatState {
   lock: Promise<void>;
 }
 
-const STREAM_EDIT_INTERVAL = 2000; // min ms between edits (Telegram rate limit)
 
 class TelegramChannel implements Channel {
   name = "telegram";
@@ -140,93 +139,25 @@ class TelegramChannel implements Channel {
       }, 4000);
       bot.api.sendChatAction(chatId, "typing").catch(() => {});
 
-      // Send placeholder upfront — avoids async race conditions
-      let sentMsg: any;
       try {
-        sentMsg = await bot.api.sendMessage(chatId, "·");
-      } catch (err) {
-        clearInterval(typingInterval);
-        log.error({ err, chatId }, "failed to send placeholder");
-        return;
-      }
-
-      const messageId = sentMsg.message_id;
-      let lastEditedText = "";
-      let lastEditTime = 0;
-      let pendingEdit: string | null = null;
-      let editTimer: ReturnType<typeof setTimeout> | null = null;
-
-      function scheduleEdit(newText: string): void {
-        const display = newText.length > 4000 ? newText.slice(-4000) + "..." : newText;
-        if (display === lastEditedText) return;
-
-        pendingEdit = display;
-        const now = Date.now();
-        const elapsed = now - lastEditTime;
-
-        if (elapsed >= STREAM_EDIT_INTERVAL && !editTimer) {
-          doEdit();
-        } else if (!editTimer) {
-          editTimer = setTimeout(doEdit, STREAM_EDIT_INTERVAL - elapsed);
-        }
-      }
-
-      function doEdit(): void {
-        editTimer = null;
-        if (!pendingEdit || pendingEdit === lastEditedText || !messageId) return;
-
-        const text = pendingEdit;
-        pendingEdit = null;
-        lastEditedText = text;
-        lastEditTime = Date.now();
-
-        bot.api.editMessageText(chatId, messageId, text).catch(() => {});
-      }
-
-      let lastActivity = "";
-
-      try {
-        const { result } = await state.engine.send(text, {
-          onStream(textSoFar) {
-            const trimmed = textSoFar.trim();
-            if (trimmed) scheduleEdit(trimmed);
-          },
-          onActivity(status) {
-            lastActivity = status;
-            // Show activity while no real text has streamed yet
-            if (!lastEditedText || lastEditedText.startsWith("\u270F")) {
-              const clean = status.replace(/_/g, " ");
-              scheduleEdit(`\u270F ${clean}`);
-            }
-          },
-        }, attachments);
+        const { result } = await state.engine.send(text, {}, attachments);
 
         clearInterval(typingInterval);
-
-        if (editTimer) {
-          clearTimeout(editTimer);
-          editTimer = null;
-        }
 
         const reply = result.trim() || "(no response)";
         try {
-          await bot.api.editMessageText(chatId, messageId, reply, { parse_mode: "MarkdownV2" });
+          await bot.api.sendMessage(chatId, reply, { parse_mode: "MarkdownV2" });
         } catch {
-          await bot.api.editMessageText(chatId, messageId, reply).catch(() => {});
+          await bot.api.sendMessage(chatId, reply).catch(() => {});
         }
 
         log.info({ chatId, chars: result.length }, "telegram reply sent");
       } catch (err) {
         clearInterval(typingInterval);
 
-        if (editTimer) {
-          clearTimeout(editTimer);
-          editTimer = null;
-        }
-
         const errText = err instanceof Error ? err.message : String(err);
         log.error({ err, chatId }, "telegram message processing failed");
-        await bot.api.editMessageText(chatId, messageId, `[error] ${errText}`).catch(() => {});
+        await bot.api.sendMessage(chatId, `[error] ${errText}`).catch(() => {});
       }
     }
 
