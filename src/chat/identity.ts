@@ -17,7 +17,7 @@ function loadFile(dir: string, name: string): string {
 
 export function loadIdentity(): string {
   const { selfDir } = getPaths();
-  const files = ["identity.md", "owner.md", "soul.md", "memory.md"];
+  const files = ["identity.md", "owner.md", "soul.md"];
   return files.map((f) => loadFile(selfDir, f)).filter(Boolean).join("\n\n");
 }
 
@@ -152,10 +152,14 @@ Config reference:
 Your persona files live in ${paths.selfDir}/:
 - \`identity.md\` — your personality and voice
 - \`owner.md\` — info about who runs you
-- \`soul.md\` — operating principles
-- \`memory.md\` — persistent learnings (you can append to this)
+- \`soul.md\` — how you work
+- \`memory.md\` — persistent learnings (read/write on demand, not loaded automatically)
 
-To remember something, append to ${paths.selfDir}/memory.md using a shell command.`;
+Memory is NOT loaded into your context automatically. Read it when you need context, write to it when you learn something worth keeping.
+
+- **Read** when: you're unsure about a preference, a past issue, or something you might have seen before.
+- **Write** when: something surprised you, you were corrected, or you found a workaround future-you should know.
+- Append with: \`echo "- $(date +%Y-%m-%d): <what you learned>" >> ${paths.selfDir}/memory.md\``;
 }
 
 export function buildSystemPrompt(mode: "chat" | "job" = "chat", channel: "terminal" | "telegram" | string = "terminal"): string {
