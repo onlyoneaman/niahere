@@ -8,6 +8,7 @@ export interface AuditEntry {
   status: "ok" | "error";
   result: string;
   duration_ms: number;
+  session_id?: string;
   error?: string;
 }
 

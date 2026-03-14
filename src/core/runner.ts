@@ -19,6 +19,7 @@ export interface JobResult {
   status: "ok" | "error";
   result: string;
   duration_ms: number;
+  session_id?: string;
   error?: string;
 }
 
@@ -41,7 +42,7 @@ export async function runJob(job: JobInput): Promise<JobResult> {
   try {
     const fullPrompt = buildPrompt(job);
     const cwd = homedir();
-    const args = [codexPath, "exec", fullPrompt, "-C", cwd, "--ephemeral", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox"];
+    const args = [codexPath, "exec", fullPrompt, "-C", cwd, "--json", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox"];
     if (model && model !== "default") {
       args.splice(3, 0, "-m", model);
     }
@@ -56,13 +57,30 @@ export async function runJob(job: JobInput): Promise<JobResult> {
     const exitCode = await proc.exited;
     const duration_ms = Math.round(performance.now() - startMs);
 
+    // Parse JSONL events for session ID and final agent message
+    let agentText = "";
+    let sessionId = "";
+    for (const line of stdout.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        const event = JSON.parse(line);
+        if (event.type === "thread.started" && event.thread_id) {
+          sessionId = event.thread_id;
+        }
+        if (event.type === "item.completed" && event.item?.type === "agent_message") {
+          agentText = event.item.text || "";
+        }
+      } catch {}
+    }
+
     const ok = exitCode === 0;
     const result: JobResult = {
       job: job.name,
       timestamp,
       status: ok ? "ok" : "error",
-      result: stdout.trim(),
+      result: agentText.trim(),
       duration_ms,
+      session_id: sessionId || undefined,
       error: ok ? undefined : stderr.trim() || `exit code ${exitCode}`,
     };
 
@@ -72,6 +90,7 @@ export async function runJob(job: JobInput): Promise<JobResult> {
       status: result.status,
       result: result.result.slice(0, 2000),
       duration_ms: result.duration_ms,
+      session_id: result.session_id,
       error: result.error,
     };
     appendAudit(auditEntry);
