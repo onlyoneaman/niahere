@@ -19,6 +19,11 @@
         "description": "Talk to Nia or manage sessions",
         "usage_hint": "[new | help | <message>]",
         "should_escape": false
+      },
+      {
+        "command": "/nia-new",
+        "description": "Start a fresh conversation",
+        "should_escape": false
       }
     ]
   },
@@ -26,16 +31,28 @@
     "scopes": {
       "bot": [
         "app_mentions:read",
+        "bookmarks:write",
         "channels:history",
+        "channels:join",
         "channels:read",
         "chat:write",
         "commands",
+        "files:read",
+        "files:write",
         "groups:history",
+        "groups:read",
         "im:history",
         "im:read",
         "im:write",
+        "links:read",
+        "links:write",
         "mpim:history",
-        "users:read"
+        "pins:write",
+        "reactions:read",
+        "reactions:write",
+        "users:read",
+        "users:read.email",
+        "users.profile:read"
       ]
     }
   },
