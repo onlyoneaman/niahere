@@ -224,9 +224,35 @@ class SlackChannel implements Channel {
       const isMention = botUserId && msg.text?.includes(`<@${botUserId}>`);
       const hasFiles = msg.files && msg.files.length > 0;
 
-      if (!isDm && !isMention && !hasFiles) return;
-      // In channels, still require mention even with files
-      if (!isDm && !isMention) return;
+      // In threads where Nia already has a session (in-memory or DB), listen without @mention
+      let isActiveThread = false;
+      if (!isDm && msg.thread_ts) {
+        const channelName = await resolveChannelName(app, msg.channel);
+        const threadKey = `${channelName}-t${msg.thread_ts}`;
+        if (chats.has(threadKey)) {
+          isActiveThread = true;
+        } else {
+          // Check DB for a persisted session from a previous daemon run
+          const prefix = roomPrefix(threadKey);
+          const latestRoom = roomName(threadKey, await Session.getLatestRoomIndex(prefix));
+          const sessionId = await Session.getLatest(latestRoom);
+          isActiveThread = sessionId !== null;
+        }
+      }
+
+      if (!isDm && !isMention && !isActiveThread) {
+        log.debug({
+          channel: msg.channel,
+          text: (msg.text || "").slice(0, 80),
+          thread_ts: msg.thread_ts,
+          isDm,
+          isMention: !!isMention,
+          isActiveThread,
+          activeChats: [...chats.keys()],
+          reason: !msg.thread_ts ? "no mention in channel" : "no active session for thread",
+        }, "slack message ignored");
+        return;
+      }
 
       // Strip the @mention
       let text = msg.text || "";
@@ -266,6 +292,28 @@ class SlackChannel implements Channel {
         const threadTs = msg.thread_ts || msg.ts; // existing thread or start new one
         key = `${channelName}-t${threadTs}`;
         replyThreadTs = threadTs;
+      }
+
+      // When replying in a thread, fetch thread context so Nia can see the full conversation
+      if (msg.thread_ts) {
+        try {
+          const replies = await client.conversations.replies({
+            channel: msg.channel,
+            ts: msg.thread_ts,
+            limit: 20,
+          });
+          const threadMessages = (replies.messages || [])
+            .filter((m: any) => m.ts !== msg.ts) // exclude the triggering message
+            .map((m: any) => {
+              const sender = m.bot_id ? "bot" : (m.user || "unknown");
+              return `[${sender}]: ${m.text || "(no text)"}`;
+            });
+          if (threadMessages.length > 0) {
+            text = `[Thread context]\n${threadMessages.join("\n")}\n\n[Current message]\n${text}`;
+          }
+        } catch (err) {
+          log.warn({ err, channel: msg.channel, thread_ts: msg.thread_ts }, "failed to fetch thread context");
+        }
       }
 
       log.info({ channel: msg.channel, key, text: text.slice(0, 100), isDm, attachments: attachments?.length || 0 }, "slack message received");
