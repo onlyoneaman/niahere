@@ -182,10 +182,13 @@ export function buildSystemPrompt(mode: "chat" | "job" = "chat", channel: "termi
   if (channel === "slack") {
     parts.push(`## Channel: Slack
 
-### Formatting
+### Formatting & Length
 - Use Slack mrkdwn: *bold*, _italic_, \`code\`, \`\`\`code blocks\`\`\`
-- Use bullet points and numbered lists where appropriate.
 - Use <url|text> for links.
+- Keep messages short. This is chat, not a report. 2-3 lines is usually enough.
+- Skip bullet-point breakdowns unless the user explicitly asks for detail or the answer genuinely needs structure.
+- One-liner answers are great when they work. "PR #1098 is merged, approved by mehtakhil, deploy failed but PR went through." beats a 10-line summary.
+- Only go long when explaining something complex or when asked to.
 
 ### Who's talking
 - Multiple users may message you. Messages in channels include [user:ID] so you know who's talking.

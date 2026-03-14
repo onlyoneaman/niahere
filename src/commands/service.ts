@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, writeFileSync, unlinkSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { getPaths } from "../utils/paths";
+import { findDaemonPids } from "../core/daemon";
 
 const PLIST_NAME = "com.niahere.agent";
 const SYSTEMD_UNIT = "niahere.service";
@@ -171,4 +172,41 @@ export function isServiceInstalled(): boolean {
   if (process.platform === "darwin") return isLaunchdInstalled();
   if (process.platform === "linux") return isSystemdInstalled();
   return false;
+}
+
+/** Restart via service manager. Waits for old process to fully exit before starting new one. */
+export async function restartService(): Promise<void> {
+  if (process.platform === "darwin") {
+    const path = plistPath();
+    // Unload — sends SIGTERM and disables KeepAlive respawn
+    const unload = Bun.spawn(["launchctl", "unload", path], { stdout: "pipe", stderr: "pipe" });
+    if (await unload.exited !== 0) {
+      const stderr = await new Response(unload.stderr).text();
+      console.error(`  warning: launchctl unload failed: ${stderr.trim()}`);
+    }
+    // Wait for old daemon to fully exit (graceful shutdown may take time for active engines)
+    await waitForDaemonExit(310_000);
+    // Load — starts a fresh single instance
+    const load = Bun.spawn(["launchctl", "load", path], { stdout: "pipe", stderr: "pipe" });
+    if (await load.exited !== 0) {
+      const stderr = await new Response(load.stderr).text();
+      console.error(`  warning: launchctl load failed: ${stderr.trim()}`);
+    }
+  } else if (process.platform === "linux") {
+    // systemd restart handles stop-wait-start internally
+    const restart = Bun.spawn(["systemctl", "--user", "restart", SYSTEMD_UNIT], { stdout: "pipe", stderr: "pipe" });
+    await restart.exited;
+  }
+}
+
+async function waitForDaemonExit(timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (findDaemonPids().length === 0) return;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  // Force kill any stragglers
+  for (const pid of findDaemonPids()) {
+    try { process.kill(pid, "SIGKILL"); } catch {}
+  }
 }

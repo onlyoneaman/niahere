@@ -85,35 +85,58 @@ export function stopDaemon(): boolean {
 
   // Kill all daemon processes — pidfile PID plus any orphans.
   const killed = killAllDaemons(pidfilePid);
-  return pidfilePid !== null || killed > 0;
+  if (killed === 0 && pidfilePid === null) return false;
+
+  // Wait for processes to finish (up to 5 min for active engines, then SIGKILL)
+  waitForExit(310_000);
+  return true;
 }
 
-/** Find and SIGTERM all `niahere ... run` processes except ourselves. */
-function killAllDaemons(knownPid?: number | null): number {
-  const toKill = new Set<number>();
-  if (knownPid) toKill.add(knownPid);
+/** Poll until no daemon processes remain. Escalate to SIGKILL after timeout. */
+function waitForExit(timeoutMs: number): void {
+  const deadline = Date.now() + timeoutMs;
 
-  try {
-    const result = Bun.spawnSync(["pgrep", "-f", "niahere/src/cli.* run"]);
-    const stdout = new TextDecoder().decode(result.stdout).trim();
-    if (stdout) {
-      for (const line of stdout.split("\n")) {
-        const pid = parseInt(line, 10);
-        if (!isNaN(pid)) toKill.add(pid);
-      }
-    }
-  } catch {
-    // pgrep not available — fall through with just knownPid
+  while (Date.now() < deadline) {
+    const alive = findDaemonPids();
+    if (alive.length === 0) return;
+    Bun.sleepSync(100);
   }
 
-  toKill.delete(process.pid);
+  // Still alive — escalate to SIGKILL
+  const remaining = findDaemonPids();
+  for (const pid of remaining) {
+    try { process.kill(pid, "SIGKILL"); } catch {}
+  }
+
+  // Brief wait for SIGKILL to take effect
+  const killDeadline = Date.now() + 2_000;
+  while (Date.now() < killDeadline) {
+    if (findDaemonPids().length === 0) return;
+    Bun.sleepSync(50);
+  }
+}
+
+/** Return PIDs of running daemon processes (excluding ourselves). */
+export function findDaemonPids(): number[] {
+  try {
+    const result = Bun.spawnSync(["pgrep", "-f", "niahere/src/cli.* run$"]);
+    const stdout = new TextDecoder().decode(result.stdout).trim();
+    if (!stdout) return [];
+    return stdout.split("\n")
+      .map((l) => parseInt(l, 10))
+      .filter((pid) => !isNaN(pid) && pid !== process.pid);
+  } catch {
+    return [];
+  }
+}
+
+/** SIGTERM all running daemon processes (pidfile PID + any found via pgrep). */
+function killAllDaemons(knownPid?: number | null): number {
+  const toKill = new Set<number>(findDaemonPids());
+  if (knownPid && knownPid !== process.pid) toKill.add(knownPid);
 
   for (const pid of toKill) {
-    try {
-      process.kill(pid, "SIGTERM");
-    } catch {
-      // Already dead
-    }
+    try { process.kill(pid, "SIGTERM"); } catch {}
   }
   return toKill.size;
 }
@@ -124,6 +147,18 @@ export async function runDaemon(): Promise<void> {
   delete process.env.CLAUDECODE;
   delete process.env.CLAUDE_CODE_ENTRYPOINT;
   delete process.env.CLAUDE_AGENT_SDK_VERSION;
+
+  // Startup guard: if another daemon is alive, exit immediately
+  const existingPid = readPid();
+  if (existingPid !== null && existingPid !== process.pid) {
+    try {
+      process.kill(existingPid, 0); // Check if alive
+      log.warn({ existingPid, myPid: process.pid }, "another daemon is already running, exiting");
+      process.exit(1);
+    } catch {
+      // Dead PID in pidfile — safe to take over
+    }
+  }
 
   writePid(process.pid);
   log.info({ pid: process.pid }, "daemon started");
@@ -210,7 +245,7 @@ export async function runDaemon(): Promise<void> {
       const engines = await ActiveEngine.list();
       if (engines.length > 0) {
         log.info({ count: engines.length }, "waiting for active engines to finish");
-        const deadline = Date.now() + 30_000;
+        const deadline = Date.now() + 300_000;
         while (Date.now() < deadline) {
           const remaining = await ActiveEngine.list();
           if (remaining.length === 0) break;

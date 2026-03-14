@@ -30,6 +30,48 @@ if (command && !["init", "help", "version", "-v", "--version"].includes(command)
   mkdirSync(getNiaHome(), { recursive: true });
 }
 
+const STARTUP_MARKERS: Record<string, string> = {
+  telegram: "telegram bot polling started",
+  slack: "slack bot started",
+  scheduler: "scheduler started",
+};
+
+async function awaitStartup(timeout = 60_000): Promise<void> {
+  const { daemonLog } = getPaths();
+  const config = getConfig();
+  const expecting = new Set<string>();
+  if (config.telegram_bot_token) expecting.add("telegram");
+  if (config.slack_bot_token && config.slack_app_token) expecting.add("slack");
+  expecting.add("scheduler");
+
+  if (expecting.size === 0) return;
+
+  const { readFileSync } = await import("fs");
+  const ready = new Set<string>();
+  let logOffset = 0;
+  try { logOffset = readFileSync(daemonLog, "utf8").length; } catch {}
+
+  const startTime = Date.now();
+  while (ready.size < expecting.size && Date.now() - startTime < timeout) {
+    await new Promise((r) => setTimeout(r, 500));
+    let content = "";
+    try { content = readFileSync(daemonLog, "utf8").slice(logOffset); } catch { continue; }
+
+    for (const name of expecting) {
+      if (ready.has(name)) continue;
+      if (content.includes(STARTUP_MARKERS[name])) {
+        ready.add(name);
+        console.log(`  \u2713 ${name}`);
+      }
+    }
+  }
+
+  const pending = [...expecting].filter((e) => !ready.has(e));
+  if (pending.length > 0) {
+    console.log(`  \u26A0 timed out waiting for: ${pending.join(", ")}`);
+  }
+}
+
 switch (command) {
   case "version":
   case "-v":
@@ -42,16 +84,26 @@ switch (command) {
   case "start": {
     if (isRunning()) fail(`nia is already running (pid: ${readPid()})`);
     const { registerService } = await import("../commands/service");
-    await registerService();
-    console.log(`nia started (pid: ${startDaemon()})`);
+    await registerService(); // launchd/systemd starts the daemon via RunAtLoad/enable --now
+    // Give service manager a moment to spawn the process and write pidfile
+    await new Promise((r) => setTimeout(r, 1000));
+    // Only spawn manually if no service manager picked it up
+    if (!isRunning()) {
+      startDaemon();
+    }
+    const pid = readPid();
+    console.log(`nia starting${pid ? ` (pid: ${pid})` : ""}...`);
+    await awaitStartup();
+    console.log("nia started");
     break;
   }
 
   case "stop": {
     if (!isRunning()) fail("nia is not running");
-    stopDaemon();
+    // Unregister service first to prevent KeepAlive from respawning after kill
     const { unregisterService } = await import("../commands/service");
     await unregisterService();
+    stopDaemon();
     console.log("nia stopped");
     break;
   }
@@ -62,8 +114,18 @@ switch (command) {
   }
 
   case "restart": {
-    if (isRunning()) stopDaemon();
-    console.log(`nia restarted (pid: ${startDaemon()})`);
+    const { isServiceInstalled, restartService } = await import("../commands/service");
+    if (isServiceInstalled()) {
+      // Service-aware: unload (stops KeepAlive respawn), kill, then reload
+      await restartService();
+    } else {
+      stopDaemon();
+      startDaemon();
+    }
+    const restartPid = readPid();
+    console.log(`nia restarting${restartPid ? ` (pid: ${restartPid})` : ""}...`);
+    await awaitStartup();
+    console.log("nia restarted");
     break;
   }
 
