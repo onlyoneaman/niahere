@@ -80,41 +80,42 @@ export function startDaemon(): number {
 }
 
 export function stopDaemon(): boolean {
-  const pid = readPid();
-  if (pid === null) return false;
-
-  try {
-    process.kill(pid, "SIGTERM");
-  } catch {
-    // Already dead
-  }
-
+  const pidfilePid = readPid();
   removePid();
 
-  // Kill any orphan daemon processes not tracked by the pidfile.
-  // This happens when the daemon was started multiple times (e.g. from
-  // different terminals) or when a previous stop didn't clean up.
-  try {
-    const result = Bun.spawnSync(["pgrep", "-f", "niahere/src/cli.*\\brun$"]);
-    const pids = new TextDecoder()
-      .decode(result.stdout)
-      .trim()
-      .split("\n")
-      .map((p) => parseInt(p, 10))
-      .filter((p) => !isNaN(p) && p !== pid && p !== process.pid);
+  // Kill all daemon processes — pidfile PID plus any orphans.
+  const killed = killAllDaemons(pidfilePid);
+  return pidfilePid !== null || killed > 0;
+}
 
-    for (const orphan of pids) {
-      try {
-        process.kill(orphan, "SIGTERM");
-      } catch {
-        // Already dead
+/** Find and SIGTERM all `niahere ... run` processes except ourselves. */
+function killAllDaemons(knownPid?: number | null): number {
+  const toKill = new Set<number>();
+  if (knownPid) toKill.add(knownPid);
+
+  try {
+    const result = Bun.spawnSync(["pgrep", "-f", "niahere/src/cli.* run"]);
+    const stdout = new TextDecoder().decode(result.stdout).trim();
+    if (stdout) {
+      for (const line of stdout.split("\n")) {
+        const pid = parseInt(line, 10);
+        if (!isNaN(pid)) toKill.add(pid);
       }
     }
   } catch {
-    // pgrep not available or failed — not critical
+    // pgrep not available — fall through with just knownPid
   }
 
-  return true;
+  toKill.delete(process.pid);
+
+  for (const pid of toKill) {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      // Already dead
+    }
+  }
+  return toKill.size;
 }
 
 export async function runDaemon(): Promise<void> {
