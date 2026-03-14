@@ -1,22 +1,23 @@
 # nia
 
-A personal AI assistant that runs as a background daemon. Handles scheduled jobs, terminal chat, and Telegram — powered by Claude.
+A personal AI assistant that runs as a background daemon. Handles scheduled jobs, terminal chat, Telegram, and Slack — powered by Claude.
 
 - npm package: [`niahere`](https://www.npmjs.com/package/niahere)
 - CLI command: `nia`
+- Website: [niahere.com](https://niahere.com)
 
 ## Quick Start
 
 ```bash
 bun install -g niahere
-nia init          # guided setup (database, telegram, persona)
+nia init          # guided setup (database, channels, persona, visual identity)
 nia start         # starts daemon + registers OS service
 ```
 
 ## Commands
 
 ```
-nia init                       — interactive setup (db, telegram, persona)
+nia init                       — interactive setup (db, channels, persona, images)
 nia start / stop               — daemon + OS service (launchd/systemd)
 nia restart                    — restart daemon
 nia status                     — show daemon, jobs, channels, chat rooms
@@ -24,7 +25,7 @@ nia chat [-r|--resume]         — interactive terminal chat
 nia run <prompt>               — one-shot prompt execution
 nia history [room]             — recent messages
 nia logs [-f]                  — daemon logs (follow with -f)
-nia send <message>             — send a message via Telegram
+nia send <message>             — send a message via configured channel
 nia skills                     — list available skills
 nia test [-v]                  — run tests
 nia version                    — show version
@@ -43,12 +44,14 @@ nia job import                 — import YAML jobs from jobs/ dir
 
 ## Features
 
-- **Jobs & crons** — jobs run during active hours, crons run 24/7. Stored in PostgreSQL, auto-reload via LISTEN/NOTIFY.
+- **Jobs & crons** — jobs run during active hours, crons run 24/7. Stored in PostgreSQL, auto-reload via LISTEN/NOTIFY. Full JSONL traces stored per run with Codex session IDs for inspection.
 - **Terminal chat** — REPL with session resume support
-- **Telegram** — bot with access control, streaming responses, rich activity status (shows thinking, tool use, commands)
-- **Persona system** — customizable identity, soul, owner profile, and auto-memory
+- **Telegram** — bot with access control, typing indicator while processing, no placeholder messages
+- **Slack** — Socket Mode bot with thinking emoji reactions, thread awareness (auto-listens to follow-ups without @mention), thread context fetching
+- **Persona system** — customizable identity, soul, owner profile, and on-demand memory
+- **Visual identity** — AI-generated profile pictures via Gemini, customizable during `nia init`
 - **Cross-platform service** — launchd (macOS), systemd (Linux), or plain daemon
-- **Skills** — loads user skills from `~/.shared/skills/`, `~/.claude/skills/`, `~/.codex/skills/`
+- **Skills** — loads user skills from `~/.shared/skills/`, `~/.claude/skills/`, `~/.codex/skills/`, and bundled skills
 
 ## Architecture
 
@@ -56,12 +59,15 @@ All config and data lives in `~/.niahere/`:
 
 ```
 ~/.niahere/
-  config.yaml       — database, telegram, model, timezone, active hours, log level
+  config.yaml       — database, channels, model, timezone, active hours, gemini key
   self/
     identity.md     — agent personality and voice
     owner.md        — who runs this agent
-    soul.md         — operating principles and rules
-    memory.md       — auto-maintained learnings
+    soul.md         — how the agent works
+    memory.md       — persistent learnings (read/written on demand, not loaded into context)
+  images/
+    reference.png   — visual identity reference image
+    profile.png     — profile picture for Telegram/Slack
   tmp/
     nia.pid, daemon.log, cron-state.json, cron-audit.jsonl
 ```
@@ -71,6 +77,7 @@ All config and data lives in `~/.niahere/`:
 - [Bun](https://bun.sh) runtime
 - PostgreSQL database
 - Claude API access (via `@anthropic-ai/claude-agent-sdk`)
+- Gemini API key (optional, for image generation)
 
 ## Author
 
