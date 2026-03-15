@@ -91,10 +91,12 @@ skills/
 tests/
   core/                  # Daemon, runner, scheduler tests
   chat/                  # Identity, engine tests
+  channels/              # Channel registry tests
   db/                    # Model tests
   mcp/                   # MCP tool tests
+  prompts/               # Prompt loading tests
   types/                 # Attachment utility tests
-  utils/                 # Config, paths, time tests
+  utils/                 # Config, paths, time, format tests
 ```
 
 ## Config
