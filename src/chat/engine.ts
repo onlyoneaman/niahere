@@ -1,4 +1,5 @@
 import { query, type Query } from "@anthropic-ai/claude-agent-sdk";
+// @ts-ignore — SDK re-exports this type but tsc can't resolve the path under Bun
 import type { MessageParam } from "@anthropic-ai/sdk/resources";
 import { existsSync } from "fs";
 import { join } from "path";
@@ -305,9 +306,9 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
 
           if (message.type === "result" && pending) {
             if (!message.is_error) {
-              const resultText = message.result;
-              const costUsd = message.total_cost_usd;
-              const turns = message.num_turns;
+              const resultText = (message as any).result as string;
+              const costUsd = (message as any).total_cost_usd as number;
+              const turns = (message as any).num_turns as number;
 
               if (sessionId && resultText) {
                 await Message.save({

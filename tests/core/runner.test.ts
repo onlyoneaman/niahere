@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync, readFileSync } from "fs";
 import { runJob } from "../../src/core/runner";
 import { resetConfig } from "../../src/utils/config";
-import type { JobInput } from "../../src/core/runner";
+import type { JobInput } from "../../src/types";
 
 const TEST_DIR = "/tmp/test-nia-runner";
 

@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, rmSync, readFileSync } from "fs";
-import { appendAudit, readAudit, readState, writeState, type AuditEntry, type CronState } from "../../src/utils/logger";
+import { appendAudit, readAudit, readState, writeState } from "../../src/utils/logger";
+import type { AuditEntry, CronState } from "../../src/types";
 
 const TEST_DIR = "/tmp/test-nia-logger";
 

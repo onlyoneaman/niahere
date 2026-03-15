@@ -17,6 +17,5 @@ export interface RecentMessage {
   room: string;
   sender: string;
   content: string;
-  isFromAgent: boolean;
   createdAt: string;
 }

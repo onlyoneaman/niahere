@@ -8,7 +8,9 @@
     "stop": "bun run src/cli/index.ts stop",
     "status": "bun run src/cli/index.ts status",
     "dev": "bun run src/cli/index.ts run",
-    "test": "bun test",
+    "test": "tsc --noEmit && LOG_LEVEL=silent bun test --reporter=dots",
+    "test:bun": "bun test",
+    "typecheck": "tsc --noEmit",
     "seed": "bun run src/db/seed.ts"
   },
   "keywords": [

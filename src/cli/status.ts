@@ -2,6 +2,7 @@ import { isRunning, readPid } from "../core/daemon";
 import { readState } from "../utils/logger";
 import { getConfig } from "../utils/config";
 import { localTime } from "../utils/time";
+import { maskToken, safeDate, dateSortValue, formatTimeLine } from "../utils/format";
 import { Message, ActiveEngine, Job } from "../db/models";
 import type { ScheduleType, JobStateStatus, RoomStats } from "../types";
 import { withDb } from "../db/connection";
@@ -51,51 +52,6 @@ function parseStatusArgs(argv: string[]): StatusOptions {
   return opts;
 }
 
-function maskToken(token: string | null): string {
-  return token ? `...${token.slice(-6)}` : "";
-}
-
-function safeDate(value: string | null | undefined): Date | null {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function dateSortValue(value: string | null | undefined): number {
-  const date = safeDate(value);
-  return date ? date.getTime() : Number.MAX_SAFE_INTEGER;
-}
-
-function relativeTime(date: Date, now = new Date()): string {
-  const deltaMs = date.getTime() - now.getTime();
-  const totalSeconds = Math.round(Math.abs(deltaMs) / 1000);
-
-  if (totalSeconds < 5) return "just now";
-
-  const units: Array<[string, number]> = [
-    ["d", 24 * 60 * 60],
-    ["h", 60 * 60],
-    ["m", 60],
-    ["s", 1],
-  ];
-
-  const parts: string[] = [];
-  let secondsLeft = totalSeconds;
-  for (const [label, factor] of units) {
-    const amount = Math.floor(secondsLeft / factor);
-    if (amount > 0 && parts.length < 2) parts.push(`${amount}${label}`);
-    secondsLeft %= factor;
-  }
-
-  const text = parts.length > 0 ? parts.join(" ") : "1s";
-  return deltaMs > 0 ? `in ${text}` : `${text} ago`;
-}
-
-function formatTimeLine(date: string | null | undefined, now = new Date()): string {
-  const parsed = safeDate(date);
-  if (!parsed) return "unknown";
-  return `${relativeTime(parsed, now)} (${localTime(parsed)})`;
-}
 
 export async function statusCommand(argv: string[] = []): Promise<void> {
   const options = parseStatusArgs(argv);

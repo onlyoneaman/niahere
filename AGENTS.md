@@ -129,7 +129,9 @@ Env vars override config: `DATABASE_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_I
 
 ```bash
 bun install            # Install dependencies
-bun test               # Run all tests
+npm run test           # Typecheck + run all tests
+npm run test:bun       # Run tests only (skip typecheck)
+npm run typecheck      # TypeScript type check only
 bun run dev            # Run daemon in foreground
 ```
 
@@ -177,4 +179,4 @@ When making changes, keep these files in sync:
 - **CLI help text** (`src/cli/index.ts` default case) — update when: adding/renaming subcommands
 - **Slack manifest** (`defaults/channels/slack-manifest.json`) — update when: adding Slack API features
 
-Run `bun test` after changes to catch broken imports.
+Run `npm run test` after changes to catch type errors and broken imports.

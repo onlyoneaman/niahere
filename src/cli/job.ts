@@ -203,12 +203,13 @@ export async function jobCommand(): Promise<void> {
       const name = process.argv[4];
       if (!name) fail("Usage: nia job run <name>");
 
-      let job: { name: string; schedule: string; prompt: string } | null = null;
+      let found: { name: string; schedule: string; prompt: string } | null = null;
       try {
-        await withDb(async () => { job = await Job.get(name); });
+        await withDb(async () => { found = await Job.get(name); });
       } catch { /* DB unavailable */ }
 
-      if (!job) fail(`Job not found: ${name}`);
+      if (!found) fail(`Job not found: ${name}`);
+      const job = found as { name: string; schedule: string; prompt: string };
 
       console.log(`Running job: ${job.name} (model: ${getConfig().model})`);
       const result = await runJob(job);

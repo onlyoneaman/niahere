@@ -46,14 +46,13 @@ class SlackChannel implements Channel {
     const channelNames = new Map<string, string>();
 
     async function resolveChannelName(app: App, channelId: string): Promise<string> {
-      let name = channelNames.get(channelId);
-      if (name) return name;
+      const cached = channelNames.get(channelId);
+      if (cached) return cached;
+      let name = channelId;
       try {
         const info = await app.client.conversations.info({ channel: channelId });
         name = (info.channel as any)?.name || channelId;
-      } catch {
-        name = channelId;
-      }
+      } catch {}
       channelNames.set(channelId, name);
       return name;
     }
