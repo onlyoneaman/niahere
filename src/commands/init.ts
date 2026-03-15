@@ -119,10 +119,10 @@ export async function runInit(): Promise<void> {
     const exSl = (exCh.slack || {}) as Record<string, unknown>;
 
     let telegramToken = "";
-    let telegramChatId: number | null = (exTg.chat_id as number) || (existing.telegram_chat_id as number) || null;
-    let telegramOpen = exTg.open === true || existing.telegram_open === true;
+    let telegramChatId: number | null = (exTg.chat_id as number) || null;
+    let telegramOpen = exTg.open === true;
 
-    const existingToken = (exTg.bot_token as string) || (existing.telegram_bot_token as string) || "";
+    const existingToken = (exTg.bot_token as string) || "";
 
     if (existingToken) {
       const masked = `...${existingToken.slice(-6)}`;
@@ -150,9 +150,9 @@ export async function runInit(): Promise<void> {
     // Slack
     let slackBotToken = "";
     let slackAppToken = "";
-    let slackChannelId = (exSl.channel_id as string) || (existing.slack_channel_id as string) || "";
+    let slackChannelId = (exSl.channel_id as string) || "";
 
-    const existingSlackBot = (exSl.bot_token as string) || (existing.slack_bot_token as string) || "";
+    const existingSlackBot = (exSl.bot_token as string) || "";
 
     if (existingSlackBot) {
       const masked = `...${existingSlackBot.slice(-6)}`;
@@ -160,7 +160,7 @@ export async function runInit(): Promise<void> {
       if (reconfigure.toLowerCase() === "y") {
         const botInput = await ask(rl, "Bot token (xoxb-...)", "");
         slackBotToken = botInput || existingSlackBot;
-        const existingSlackApp = (exSl.app_token as string) || (existing.slack_app_token as string) || "";
+        const existingSlackApp = (exSl.app_token as string) || "";
         const appInput = await ask(rl, "App token (xapp-...)", "");
         slackAppToken = appInput || existingSlackApp;
         if (slackBotToken && slackAppToken) {
@@ -168,8 +168,8 @@ export async function runInit(): Promise<void> {
         }
       } else {
         slackBotToken = existingSlackBot;
-        slackAppToken = (exSl.app_token as string) || (existing.slack_app_token as string) || "";
-        slackChannelId = (exSl.channel_id as string) || (existing.slack_channel_id as string) || "";
+        slackAppToken = (exSl.app_token as string) || "";
+        slackChannelId = (exSl.channel_id as string) || "";
       }
     } else {
       const setupSlack = await ask(rl, "\nSet up Slack? (y/n)", "n");

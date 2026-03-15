@@ -74,12 +74,6 @@ describe("loadConfig", () => {
     expect(config.channels.telegram.open).toBe(false);
   });
 
-  test("supports legacy flat telegram_open for backwards compat", () => {
-    writeFileSync(`${TEST_DIR}/config.yaml`, `telegram_open: true\n`);
-    const config = loadConfig();
-    expect(config.channels.telegram.open).toBe(true);
-  });
-
   test("nested channels format loads correctly", () => {
     writeFileSync(`${TEST_DIR}/config.yaml`, [
       "channels:",

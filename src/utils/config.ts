@@ -119,52 +119,41 @@ export function loadConfig(): Config {
     (typeof raw.gemini_api_key === "string" ? raw.gemini_api_key : null);
 
   // --- Channels (nested under `channels:` in yaml) ---
-  // Support both new nested format and legacy flat format for backwards compat
   const ch = (raw.channels || {}) as Record<string, unknown>;
   const chTg = (ch.telegram || {}) as Record<string, unknown>;
   const chSl = (ch.slack || {}) as Record<string, unknown>;
 
-  // Channels enabled
-  const channelsEnabled = ch.enabled !== false && raw.channels_enabled !== false;
+  const channelsEnabled = ch.enabled !== false;
 
-  // Default channel
   const defaultChannel =
-    typeof ch.default === "string" ? ch.default :
-    typeof raw.default_channel === "string" ? raw.default_channel :
-    DEFAULTS.channels.default;
+    typeof ch.default === "string" ? ch.default : DEFAULTS.channels.default;
 
-  // Telegram — env vars override config; support both nested and legacy flat
+  // Telegram — env vars override config
   const tgBotToken =
     process.env.TELEGRAM_BOT_TOKEN ||
-    (typeof chTg.bot_token === "string" ? chTg.bot_token : null) ||
-    (typeof raw.telegram_bot_token === "string" ? raw.telegram_bot_token : null);
+    (typeof chTg.bot_token === "string" ? chTg.bot_token : null);
 
   const tgChatId =
     (process.env.TELEGRAM_CHAT_ID ? Number(process.env.TELEGRAM_CHAT_ID) : null) ||
-    (typeof chTg.chat_id === "number" ? chTg.chat_id : null) ||
-    (typeof raw.telegram_chat_id === "number" ? raw.telegram_chat_id : null);
+    (typeof chTg.chat_id === "number" ? chTg.chat_id : null);
 
-  const tgOpen = chTg.open === true || raw.telegram_open === true;
+  const tgOpen = chTg.open === true;
 
-  // Slack — env vars override config; support both nested and legacy flat
+  // Slack — env vars override config
   const slBotToken =
     process.env.SLACK_BOT_TOKEN ||
-    (typeof chSl.bot_token === "string" ? chSl.bot_token : null) ||
-    (typeof raw.slack_bot_token === "string" ? raw.slack_bot_token : null);
+    (typeof chSl.bot_token === "string" ? chSl.bot_token : null);
 
   const slAppToken =
     process.env.SLACK_APP_TOKEN ||
-    (typeof chSl.app_token === "string" ? chSl.app_token : null) ||
-    (typeof raw.slack_app_token === "string" ? raw.slack_app_token : null);
+    (typeof chSl.app_token === "string" ? chSl.app_token : null);
 
   const slChannelId =
     process.env.SLACK_CHANNEL_ID ||
-    (typeof chSl.channel_id === "string" ? chSl.channel_id : null) ||
-    (typeof raw.slack_channel_id === "string" ? raw.slack_channel_id : null);
+    (typeof chSl.channel_id === "string" ? chSl.channel_id : null);
 
   const slDmUserId =
-    (typeof chSl.dm_user_id === "string" ? chSl.dm_user_id : null) ||
-    (typeof raw.slack_dm_user_id === "string" ? raw.slack_dm_user_id : null);
+    typeof chSl.dm_user_id === "string" ? chSl.dm_user_id : null;
 
   return {
     model,
