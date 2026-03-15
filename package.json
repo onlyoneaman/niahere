@@ -1,6 +1,6 @@
 {
   "name": "niahere",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "A personal AI assistant daemon — scheduled jobs, chat across Telegram and Slack, persona system, and visual identity.",
   "type": "module",
   "scripts": {
@@ -11,8 +11,7 @@
     "test": "tsc --noEmit && LOG_LEVEL=silent bun test --reporter=dots",
     "test:bun": "bun test",
     "typecheck": "tsc --noEmit",
-    "seed": "bun run src/db/seed.ts",
-    "postinstall": "command -v bun >/dev/null 2>&1 || echo '\\n⚠ niahere requires Bun runtime.\\nInstall: curl -fsSL https://bun.sh/install | bash\\n'"
+    "seed": "bun run src/db/seed.ts"
   },
   "keywords": [
     "ai",
@@ -28,9 +27,10 @@
     "bun": ">=1.0.0"
   },
   "bin": {
-    "nia": "src/cli/index.ts"
+    "nia": "bin/nia"
   },
   "files": [
+    "bin/",
     "src/",
     "defaults/",
     "skills/",
