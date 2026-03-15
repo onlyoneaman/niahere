@@ -37,6 +37,7 @@ src/
   commands/
     init.ts              # Interactive setup wizard (db, channels, persona, gemini, visual identity)
     service.ts           # OS service registration (launchd/systemd), service-aware restart
+    db.ts                # Database setup (install postgres, create db, migrate)
   db/
     connection.ts        # Lazy postgres init, withDb() helper
     migrate.ts           # SQL migration runner
@@ -162,6 +163,10 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 - **Service:** `nia start` registers OS service (launchd/systemd). `nia restart` is service-aware.
 - **Skills:** Scanned from project `skills/`, `~/.niahere/skills/`, `~/.shared/skills/`, `~/.claude/skills/`, `~/.codex/skills/`
 - **Paths:** All from `getPaths()` → `getNiaHome()` (`NIA_HOME` env or `~/.niahere/`)
+- **One-shot jobs:** `once` schedule type auto-disables after execution, hidden from `nia status`
+- **Dev mode:** `nia channels off` disables Telegram/Slack for local development
+- **DB setup:** `nia db setup` installs PostgreSQL (brew on macOS), creates database, runs migrations. Also offered during `nia init` if DB connection fails.
+- **npm install:** `bin/nia` shell wrapper checks for Bun, offers to install it, resolves package path via realpath for nvm/global installs
 
 ## Code Style
 
