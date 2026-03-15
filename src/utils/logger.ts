@@ -21,6 +21,35 @@ export interface JobState {
 
 export type CronState = Record<string, JobState>;
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function hasNumber(value: unknown): value is number {
+  return typeof value === "number";
+}
+
+function isJobState(value: unknown): value is JobState {
+  return (
+    isObject(value) &&
+    hasString(value.lastRun) &&
+    (value.status === "ok" || value.status === "error" || value.status === "running") &&
+    hasNumber(value.duration_ms)
+  );
+}
+
+function isCronState(value: unknown): value is CronState {
+  if (!isObject(value)) return false;
+  for (const [k, v] of Object.entries(value)) {
+    if (!hasString(k) || !isJobState(v)) return false;
+  }
+  return true;
+}
+
 export function appendAudit(entry: AuditEntry): void {
   const { cronAudit } = getPaths();
   mkdirSync(dirname(cronAudit), { recursive: true });
@@ -32,7 +61,8 @@ export function readState(): CronState {
   if (!existsSync(cronState)) return {};
 
   try {
-    return JSON.parse(readFileSync(cronState, "utf8"));
+    const parsed = JSON.parse(readFileSync(cronState, "utf8"));
+    return isCronState(parsed) ? parsed : {};
   } catch {
     return {};
   }
