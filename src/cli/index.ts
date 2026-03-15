@@ -238,6 +238,12 @@ switch (command) {
     break;
   }
 
+  case "db": {
+    const { dbCommand } = await import("../commands/db");
+    await dbCommand();
+    break;
+  }
+
   case "test": {
     const verbose = process.argv.includes("-v") || process.argv.includes("--verbose");
     const extraArgs = process.argv.slice(3).filter((a) => a !== "-v" && a !== "--verbose");
@@ -285,6 +291,7 @@ switch (command) {
     console.log("  history [room]      — recent messages");
     console.log("  logs [-f]           — daemon logs");
     console.log("  job <sub>           — manage jobs");
+    console.log("  db <sub>            — database setup/status/migrate");
     console.log("  skills              — list available skills");
     console.log("  send [-c ch] <msg>  — send a message via channel");
     console.log("  telegram <token>    — configure telegram");

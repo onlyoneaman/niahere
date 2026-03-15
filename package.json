@@ -11,7 +11,8 @@
     "test": "tsc --noEmit && LOG_LEVEL=silent bun test --reporter=dots",
     "test:bun": "bun test",
     "typecheck": "tsc --noEmit",
-    "seed": "bun run src/db/seed.ts"
+    "seed": "bun run src/db/seed.ts",
+    "release": "npm version patch && npm publish && git push"
   },
   "keywords": [
     "ai",

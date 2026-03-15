@@ -114,7 +114,13 @@ export async function runInit(): Promise<void> {
     } catch (err) {
       const msg = errMsg(err);
       console.log(`  \u2717 could not connect: ${msg}`);
-      console.log(`  (you can fix this later in ${paths.config})\n`);
+      const setupDb = await ask(rl, "  Set up PostgreSQL now? (y/n)", "y");
+      if (setupDb.toLowerCase() === "y") {
+        const { dbSetup } = await import("./db");
+        await dbSetup();
+      } else {
+        console.log(`  (run 'nia db setup' later)\n`);
+      }
     }
     delete process.env.DATABASE_URL;
 
