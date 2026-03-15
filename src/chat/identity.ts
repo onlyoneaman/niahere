@@ -136,17 +136,19 @@ After config changes, run \`nia restart\` to apply.
 
 Config reference:
 - \`model\` — AI model to use for jobs (default: "default")
-- \`timezone\` — timezone for scheduling and timestamps (e.g. "America/New_York")
-- \`active_hours.start\` / \`active_hours.end\` — HH:MM window when jobs run. Crons (--always) ignore this.
-- \`log_level\` — daemon log verbosity: "debug", "info", "warn", "error", "silent"
-- \`telegram_bot_token\` — Telegram bot API token
-- \`telegram_chat_id\` — owner's chat ID (auto-registered on first message, used for outbound)
-- \`telegram_open\` — if true, anyone can message the bot. If false (default), only the owner can.
-- \`slack_bot_token\` — Slack bot token (xoxb-...)
-- \`slack_app_token\` — Slack app token (xapp-...) for Socket Mode
-- \`slack_channel_id\` — default Slack channel for outbound messages
-- \`default_channel\` — which channel send_message uses by default ("telegram" or "slack")
-- \`gemini_api_key\` — Gemini API key for image generation (used by nia-image skill)
+- \`timezone\` — timezone for scheduling and timestamps
+- \`active_hours.start\` / \`active_hours.end\` — HH:MM window when jobs run
+- \`log_level\` — daemon log verbosity
+- \`gemini_api_key\` — Gemini API key for image generation
+- \`channels.enabled\` — enable/disable all channels (set false on dev machines)
+- \`channels.default\` — which channel send_message uses by default
+- \`channels.telegram.bot_token\` — Telegram bot API token
+- \`channels.telegram.chat_id\` — owner's chat ID (auto-registered)
+- \`channels.telegram.open\` — if true, anyone can message the bot
+- \`channels.slack.bot_token\` — Slack bot token (xoxb-...)
+- \`channels.slack.app_token\` — Slack app token (xapp-...)
+- \`channels.slack.channel_id\` — default Slack channel for outbound
+- \`channels.slack.dm_user_id\` — auto-registered DM user
 
 ## Persona & Memory
 

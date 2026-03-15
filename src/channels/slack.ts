@@ -41,13 +41,13 @@ class SlackChannel implements Channel {
 
   async start(): Promise<void> {
     const config = getConfig();
-    const botToken = config.slack_bot_token!;
-    const appToken = config.slack_app_token!;
+    const botToken = config.channels.slack.bot_token!;
+    const appToken = config.channels.slack.app_token!;
 
     await runMigrations();
 
-    this.defaultChannelId = config.slack_channel_id;
-    this.dmUserId = config.slack_dm_user_id;
+    this.defaultChannelId = config.channels.slack.channel_id;
+    this.dmUserId = config.channels.slack.dm_user_id;
 
     const chats = new Map<string, ChatState>();
     const channelNames = new Map<string, string>();
@@ -277,7 +277,7 @@ class SlackChannel implements Channel {
       // Auto-register DM user for outbound messages
       if (isDm && !self.dmUserId && msg.user) {
         self.dmUserId = msg.user;
-        updateRawConfig({ slack_dm_user_id: msg.user });
+        updateRawConfig({ channels: { slack: { dm_user_id: msg.user } } });
         log.info({ userId: msg.user }, "auto-registered slack DM user");
       }
 
@@ -401,6 +401,6 @@ class SlackChannel implements Channel {
 
 registerChannel(() => {
   const config = getConfig();
-  if (!config.slack_bot_token || !config.slack_app_token) return null;
+  if (!config.channels.slack.bot_token || !config.channels.slack.app_token) return null;
   return new SlackChannel();
 });

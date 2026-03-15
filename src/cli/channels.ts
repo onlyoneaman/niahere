@@ -36,8 +36,8 @@ export function telegramCommand(): void {
 
   if (!token) {
     const config = getConfig();
-    if (config.telegram_bot_token) {
-      console.log(`Telegram: configured (...${config.telegram_bot_token.slice(-6)})`);
+    if (config.channels.telegram.bot_token) {
+      console.log(`Telegram: configured (...${config.channels.telegram.bot_token.slice(-6)})`);
     } else {
       console.log("Telegram: not configured");
     }
@@ -45,9 +45,9 @@ export function telegramCommand(): void {
     return;
   }
 
-  const fields: Record<string, unknown> = { telegram_bot_token: token };
-  if (chatId) fields.telegram_chat_id = Number(chatId);
-  updateRawConfig(fields);
+  const tg: Record<string, unknown> = { bot_token: token };
+  if (chatId) tg.chat_id = Number(chatId);
+  updateRawConfig({ channels: { telegram: tg } });
 
   console.log(`Telegram bot token saved to ${getPaths().config}`);
   if (chatId) console.log(`Chat ID: ${chatId}`);
@@ -60,8 +60,8 @@ export function slackCommand(): void {
 
   if (!botToken) {
     const config = getConfig();
-    if (config.slack_bot_token) {
-      console.log(`Slack: configured (...${config.slack_bot_token.slice(-6)})`);
+    if (config.channels.slack.bot_token) {
+      console.log(`Slack: configured (...${config.channels.slack.bot_token.slice(-6)})`);
     } else {
       console.log("Slack: not configured");
     }
@@ -72,10 +72,10 @@ export function slackCommand(): void {
 
   if (!appToken) fail("App token required. Usage: nia slack <bot-token> <app-token> [channel-id]");
 
-  const slackFields: Record<string, unknown> = { slack_bot_token: botToken, slack_app_token: appToken };
+  const sl: Record<string, unknown> = { bot_token: botToken, app_token: appToken };
   const channelId = process.argv[5];
-  if (channelId) slackFields.slack_channel_id = channelId;
-  updateRawConfig(slackFields);
+  if (channelId) sl.channel_id = channelId;
+  updateRawConfig({ channels: { slack: sl } });
 
   console.log(`Slack tokens saved to ${getPaths().config}`);
   if (channelId) console.log(`Channel ID: ${channelId}`);

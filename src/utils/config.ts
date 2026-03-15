@@ -4,21 +4,34 @@ import yaml from "js-yaml";
 import { getPaths } from "./paths";
 import { log } from "./log";
 
+export interface TelegramConfig {
+  bot_token: string | null;
+  chat_id: number | null;
+  open: boolean;
+}
+
+export interface SlackConfig {
+  bot_token: string | null;
+  app_token: string | null;
+  channel_id: string | null;
+  dm_user_id: string | null;
+}
+
+export interface ChannelsConfig {
+  enabled: boolean;
+  default: string;
+  telegram: TelegramConfig;
+  slack: SlackConfig;
+}
+
 export interface Config {
   model: string;
   timezone: string;
   activeHours: { start: string; end: string };
   database_url: string;
-  telegram_bot_token: string | null;
-  telegram_chat_id: number | null;
-  telegram_open: boolean;
-  slack_bot_token: string | null;
-  slack_app_token: string | null;
-  slack_channel_id: string | null;
-  slack_dm_user_id: string | null;
-  default_channel: string;
   log_level: string;
   gemini_api_key: string | null;
+  channels: ChannelsConfig;
 }
 
 const TIME_RE = /^\d{2}:\d{2}$/;
@@ -28,16 +41,14 @@ const DEFAULTS: Config = {
   timezone: process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone,
   activeHours: { start: "00:00", end: "23:59" },
   database_url: "postgres://localhost:5432/niahere",
-  telegram_bot_token: null,
-  telegram_chat_id: null,
-  telegram_open: false,
-  slack_bot_token: null,
-  slack_app_token: null,
-  slack_channel_id: null,
-  slack_dm_user_id: null,
-  default_channel: "telegram",
   log_level: "info",
   gemini_api_key: null,
+  channels: {
+    enabled: true,
+    default: "telegram",
+    telegram: { bot_token: null, chat_id: null, open: false },
+    slack: { bot_token: null, app_token: null, channel_id: null, dm_user_id: null },
+  },
 };
 
 let _config: Config | null = null;
@@ -97,37 +108,6 @@ export function loadConfig(): Config {
     process.env.DATABASE_URL ||
     (typeof raw.database_url === "string" ? raw.database_url : DEFAULTS.database_url);
 
-  // Telegram — env vars override config
-  const telegram_bot_token =
-    process.env.TELEGRAM_BOT_TOKEN ||
-    (typeof raw.telegram_bot_token === "string" ? raw.telegram_bot_token : null);
-
-  const telegram_chat_id =
-    (process.env.TELEGRAM_CHAT_ID ? Number(process.env.TELEGRAM_CHAT_ID) : null) ||
-    (typeof raw.telegram_chat_id === "number" ? raw.telegram_chat_id : null);
-
-  const telegram_open = raw.telegram_open === true;
-
-  // Slack — env vars override config
-  const slack_bot_token =
-    process.env.SLACK_BOT_TOKEN ||
-    (typeof raw.slack_bot_token === "string" ? raw.slack_bot_token : null);
-
-  const slack_app_token =
-    process.env.SLACK_APP_TOKEN ||
-    (typeof raw.slack_app_token === "string" ? raw.slack_app_token : null);
-
-  const slack_channel_id =
-    process.env.SLACK_CHANNEL_ID ||
-    (typeof raw.slack_channel_id === "string" ? raw.slack_channel_id : null);
-
-  const slack_dm_user_id =
-    typeof raw.slack_dm_user_id === "string" ? raw.slack_dm_user_id : null;
-
-  // Default channel for outbound messages
-  const default_channel =
-    typeof raw.default_channel === "string" ? raw.default_channel : DEFAULTS.default_channel;
-
   // Log level — env var overrides config
   const log_level =
     process.env.LOG_LEVEL ||
@@ -138,21 +118,67 @@ export function loadConfig(): Config {
     process.env.GEMINI_API_KEY ||
     (typeof raw.gemini_api_key === "string" ? raw.gemini_api_key : null);
 
+  // --- Channels (nested under `channels:` in yaml) ---
+  // Support both new nested format and legacy flat format for backwards compat
+  const ch = (raw.channels || {}) as Record<string, unknown>;
+  const chTg = (ch.telegram || {}) as Record<string, unknown>;
+  const chSl = (ch.slack || {}) as Record<string, unknown>;
+
+  // Channels enabled
+  const channelsEnabled = ch.enabled !== false && raw.channels_enabled !== false;
+
+  // Default channel
+  const defaultChannel =
+    typeof ch.default === "string" ? ch.default :
+    typeof raw.default_channel === "string" ? raw.default_channel :
+    DEFAULTS.channels.default;
+
+  // Telegram — env vars override config; support both nested and legacy flat
+  const tgBotToken =
+    process.env.TELEGRAM_BOT_TOKEN ||
+    (typeof chTg.bot_token === "string" ? chTg.bot_token : null) ||
+    (typeof raw.telegram_bot_token === "string" ? raw.telegram_bot_token : null);
+
+  const tgChatId =
+    (process.env.TELEGRAM_CHAT_ID ? Number(process.env.TELEGRAM_CHAT_ID) : null) ||
+    (typeof chTg.chat_id === "number" ? chTg.chat_id : null) ||
+    (typeof raw.telegram_chat_id === "number" ? raw.telegram_chat_id : null);
+
+  const tgOpen = chTg.open === true || raw.telegram_open === true;
+
+  // Slack — env vars override config; support both nested and legacy flat
+  const slBotToken =
+    process.env.SLACK_BOT_TOKEN ||
+    (typeof chSl.bot_token === "string" ? chSl.bot_token : null) ||
+    (typeof raw.slack_bot_token === "string" ? raw.slack_bot_token : null);
+
+  const slAppToken =
+    process.env.SLACK_APP_TOKEN ||
+    (typeof chSl.app_token === "string" ? chSl.app_token : null) ||
+    (typeof raw.slack_app_token === "string" ? raw.slack_app_token : null);
+
+  const slChannelId =
+    process.env.SLACK_CHANNEL_ID ||
+    (typeof chSl.channel_id === "string" ? chSl.channel_id : null) ||
+    (typeof raw.slack_channel_id === "string" ? raw.slack_channel_id : null);
+
+  const slDmUserId =
+    (typeof chSl.dm_user_id === "string" ? chSl.dm_user_id : null) ||
+    (typeof raw.slack_dm_user_id === "string" ? raw.slack_dm_user_id : null);
+
   return {
     model,
     timezone,
     activeHours: { start, end },
     database_url,
-    telegram_bot_token,
-    telegram_chat_id,
-    telegram_open,
-    slack_bot_token,
-    slack_app_token,
-    slack_channel_id,
-    slack_dm_user_id,
-    default_channel,
     log_level,
     gemini_api_key,
+    channels: {
+      enabled: channelsEnabled,
+      default: defaultChannel,
+      telegram: { bot_token: tgBotToken, chat_id: tgChatId, open: tgOpen },
+      slack: { bot_token: slBotToken, app_token: slAppToken, channel_id: slChannelId, dm_user_id: slDmUserId },
+    },
   };
 }
 
@@ -168,10 +194,24 @@ export function readRawConfig(): Record<string, unknown> {
   }
 }
 
-/** Merge fields into config.yaml and write back. */
+/** Deep merge source into target (mutates target). */
+function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): void {
+  for (const key of Object.keys(source)) {
+    const sv = source[key];
+    const tv = target[key];
+    if (sv && typeof sv === "object" && !Array.isArray(sv) && tv && typeof tv === "object" && !Array.isArray(tv)) {
+      deepMerge(tv as Record<string, unknown>, sv as Record<string, unknown>);
+    } else {
+      target[key] = sv;
+    }
+  }
+}
+
+/** Deep-merge fields into config.yaml and write back. */
 export function updateRawConfig(fields: Record<string, unknown>): void {
   const { config } = getPaths();
-  const raw = { ...readRawConfig(), ...fields };
+  const raw = readRawConfig();
+  deepMerge(raw, fields);
   mkdirSync(dirname(config), { recursive: true });
   writeFileSync(config, yaml.dump(raw, { lineWidth: -1 }));
   resetConfig();

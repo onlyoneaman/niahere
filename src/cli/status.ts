@@ -122,27 +122,27 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
 
   const channels = {
     telegram: {
-      configured: Boolean(config.telegram_bot_token),
-      status: !config.telegram_bot_token
+      configured: Boolean(config.channels.telegram.bot_token),
+      status: !config.channels.telegram.bot_token
         ? "not configured"
-        : running
-          ? "active"
-          : "configured",
-      tokenSuffix: config.telegram_bot_token ? maskToken(config.telegram_bot_token) : null,
+        : !config.channels.enabled
+          ? "disabled"
+          : running ? "active" : "configured",
+      tokenSuffix: config.channels.telegram.bot_token ? maskToken(config.channels.telegram.bot_token) : null,
     },
     slack: {
-      configured: Boolean(config.slack_bot_token),
-      appTokenConfigured: Boolean(config.slack_app_token),
-      status: !config.slack_bot_token
+      configured: Boolean(config.channels.slack.bot_token),
+      appTokenConfigured: Boolean(config.channels.slack.app_token),
+      status: !config.channels.slack.bot_token
         ? "not configured"
-        : running
-          ? config.slack_app_token
-            ? "active"
-            : "configured (missing app token)"
-          : "configured",
-      tokenSuffix: config.slack_bot_token ? maskToken(config.slack_bot_token) : null,
+        : !config.channels.enabled
+          ? "disabled"
+          : running
+            ? config.channels.slack.app_token ? "active" : "configured (missing app token)"
+            : "configured",
+      tokenSuffix: config.channels.slack.bot_token ? maskToken(config.channels.slack.bot_token) : null,
     },
-    defaultChannel: config.default_channel,
+    defaultChannel: config.channels.default,
   };
 
   if (options.json) {

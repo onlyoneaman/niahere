@@ -114,11 +114,15 @@ export async function runInit(): Promise<void> {
     delete process.env.DATABASE_URL;
 
     // Telegram
-    let telegramToken = "";
-    let telegramChatId: number | null = (existing.telegram_chat_id as number) || null;
-    let telegramOpen = existing.telegram_open === true;
+    const exCh = (existing.channels || {}) as Record<string, unknown>;
+    const exTg = (exCh.telegram || {}) as Record<string, unknown>;
+    const exSl = (exCh.slack || {}) as Record<string, unknown>;
 
-    const existingToken = (existing.telegram_bot_token as string) || "";
+    let telegramToken = "";
+    let telegramChatId: number | null = (exTg.chat_id as number) || (existing.telegram_chat_id as number) || null;
+    let telegramOpen = exTg.open === true || existing.telegram_open === true;
+
+    const existingToken = (exTg.bot_token as string) || (existing.telegram_bot_token as string) || "";
 
     if (existingToken) {
       const masked = `...${existingToken.slice(-6)}`;
@@ -146,9 +150,9 @@ export async function runInit(): Promise<void> {
     // Slack
     let slackBotToken = "";
     let slackAppToken = "";
-    let slackChannelId = (existing.slack_channel_id as string) || "";
+    let slackChannelId = (exSl.channel_id as string) || (existing.slack_channel_id as string) || "";
 
-    const existingSlackBot = (existing.slack_bot_token as string) || "";
+    const existingSlackBot = (exSl.bot_token as string) || (existing.slack_bot_token as string) || "";
 
     if (existingSlackBot) {
       const masked = `...${existingSlackBot.slice(-6)}`;
@@ -156,7 +160,7 @@ export async function runInit(): Promise<void> {
       if (reconfigure.toLowerCase() === "y") {
         const botInput = await ask(rl, "Bot token (xoxb-...)", "");
         slackBotToken = botInput || existingSlackBot;
-        const existingSlackApp = (existing.slack_app_token as string) || "";
+        const existingSlackApp = (exSl.app_token as string) || (existing.slack_app_token as string) || "";
         const appInput = await ask(rl, "App token (xapp-...)", "");
         slackAppToken = appInput || existingSlackApp;
         if (slackBotToken && slackAppToken) {
@@ -164,8 +168,8 @@ export async function runInit(): Promise<void> {
         }
       } else {
         slackBotToken = existingSlackBot;
-        slackAppToken = (existing.slack_app_token as string) || "";
-        slackChannelId = (existing.slack_channel_id as string) || "";
+        slackAppToken = (exSl.app_token as string) || (existing.slack_app_token as string) || "";
+        slackChannelId = (exSl.channel_id as string) || (existing.slack_channel_id as string) || "";
       }
     } else {
       const setupSlack = await ask(rl, "\nSet up Slack? (y/n)", "n");
@@ -365,25 +369,27 @@ export async function runInit(): Promise<void> {
       active_hours: { start: activeStart, end: activeEnd },
     };
 
-    if (telegramToken) {
-      config.telegram_bot_token = telegramToken;
-      if (telegramChatId) config.telegram_chat_id = telegramChatId;
-      config.telegram_open = telegramOpen;
-    }
-
-    if (slackBotToken && slackAppToken) {
-      config.slack_bot_token = slackBotToken;
-      config.slack_app_token = slackAppToken;
-      if (slackChannelId) config.slack_channel_id = slackChannelId;
-    }
-
     if (geminiApiKey) {
       config.gemini_api_key = geminiApiKey;
     }
 
-    // Set default channel based on what's configured
+    // Channels config (nested)
+    const channels: Record<string, unknown> = {};
+    if (telegramToken) {
+      const tg: Record<string, unknown> = { bot_token: telegramToken, open: telegramOpen };
+      if (telegramChatId) tg.chat_id = telegramChatId;
+      channels.telegram = tg;
+    }
+    if (slackBotToken && slackAppToken) {
+      const sl: Record<string, unknown> = { bot_token: slackBotToken, app_token: slackAppToken };
+      if (slackChannelId) sl.channel_id = slackChannelId;
+      channels.slack = sl;
+    }
     if (slackBotToken && !telegramToken) {
-      config.default_channel = "slack";
+      channels.default = "slack";
+    }
+    if (Object.keys(channels).length > 0) {
+      config.channels = channels;
     }
 
     writeFileSync(paths.config, yaml.dump(config, { lineWidth: -1 }));

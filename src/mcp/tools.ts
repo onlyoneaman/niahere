@@ -79,8 +79,8 @@ async function sendDirect(target: string, text: string): Promise<void> {
   const config = getConfig();
 
   if (target === "telegram") {
-    const token = config.telegram_bot_token;
-    const chatId = config.telegram_chat_id;
+    const token = config.channels.telegram.bot_token;
+    const chatId = config.channels.telegram.chat_id;
     if (!token) throw new Error("Telegram not configured (no bot token)");
     if (!chatId) throw new Error("No Telegram chat ID — send a message to the bot first");
     const { Bot } = await import("grammy");
@@ -90,8 +90,8 @@ async function sendDirect(target: string, text: string): Promise<void> {
   }
 
   if (target === "slack") {
-    const token = config.slack_bot_token;
-    const recipient = config.slack_channel_id || config.slack_dm_user_id;
+    const token = config.channels.slack.bot_token;
+    const recipient = config.channels.slack.channel_id || config.channels.slack.dm_user_id;
     if (!token) throw new Error("Slack not configured (no bot token)");
     if (!recipient) throw new Error("No Slack recipient — DM the bot first, or set slack_channel_id in config");
     const { App } = await import("@slack/bolt");
@@ -108,8 +108,8 @@ async function sendMediaDirect(target: string, data: Buffer, mimeType: string, f
   const config = getConfig();
 
   if (target === "telegram") {
-    const token = config.telegram_bot_token;
-    const chatId = config.telegram_chat_id;
+    const token = config.channels.telegram.bot_token;
+    const chatId = config.channels.telegram.chat_id;
     if (!token) throw new Error("Telegram not configured (no bot token)");
     if (!chatId) throw new Error("No Telegram chat ID — send a message to the bot first");
     const { Bot, InputFile } = await import("grammy");
@@ -124,8 +124,8 @@ async function sendMediaDirect(target: string, data: Buffer, mimeType: string, f
   }
 
   if (target === "slack") {
-    const token = config.slack_bot_token;
-    const recipient = config.slack_channel_id || config.slack_dm_user_id;
+    const token = config.channels.slack.bot_token;
+    const recipient = config.channels.slack.channel_id || config.channels.slack.dm_user_id;
     if (!token) throw new Error("Slack not configured (no bot token)");
     if (!recipient) throw new Error("No Slack recipient — DM the bot first, or set slack_channel_id in config");
     const { App } = await import("@slack/bolt");
@@ -143,7 +143,7 @@ async function sendMediaDirect(target: string, data: Buffer, mimeType: string, f
 
 export async function sendMessage(text: string, channelName?: string, mediaPath?: string): Promise<string> {
   const config = getConfig();
-  const target = channelName || config.default_channel;
+  const target = channelName || config.channels.default;
 
   // Use started channel if available (daemon), otherwise call API directly (CLI)
   const channel = getChannel(target);
@@ -182,10 +182,10 @@ export async function sendMessage(text: string, channelName?: string, mediaPath?
     try {
       let room: string | undefined;
       if (target === "telegram") {
-        const chatId = config.telegram_chat_id;
+        const chatId = config.channels.telegram.chat_id;
         if (chatId) room = `tg-${chatId}`;
       } else if (target === "slack") {
-        const channelId = config.slack_channel_id;
+        const channelId = config.channels.slack.channel_id;
         if (channelId) room = `slack-${channelId}`;
       }
 

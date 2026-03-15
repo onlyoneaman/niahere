@@ -62,16 +62,44 @@ describe("loadConfig", () => {
     expect(config.activeHours.end).toBe("23:59");
   });
 
-  test("parses telegram_open as boolean", () => {
-    writeFileSync(`${TEST_DIR}/config.yaml`, `telegram_open: true\n`);
+  test("parses nested channels.telegram.open", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, `channels:\n  telegram:\n    open: true\n`);
     const config = loadConfig();
-    expect(config.telegram_open).toBe(true);
+    expect(config.channels.telegram.open).toBe(true);
   });
 
-  test("telegram_open defaults to false", () => {
+  test("channels.telegram.open defaults to false", () => {
     writeFileSync(`${TEST_DIR}/config.yaml`, `model: default\n`);
     const config = loadConfig();
-    expect(config.telegram_open).toBe(false);
+    expect(config.channels.telegram.open).toBe(false);
+  });
+
+  test("supports legacy flat telegram_open for backwards compat", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, `telegram_open: true\n`);
+    const config = loadConfig();
+    expect(config.channels.telegram.open).toBe(true);
+  });
+
+  test("nested channels format loads correctly", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, [
+      "channels:",
+      "  enabled: false",
+      "  default: slack",
+      "  telegram:",
+      "    bot_token: test-token",
+      "    chat_id: 12345",
+      "  slack:",
+      "    bot_token: xoxb-test",
+      "    app_token: xapp-test",
+      "",
+    ].join("\n"));
+    const config = loadConfig();
+    expect(config.channels.enabled).toBe(false);
+    expect(config.channels.default).toBe("slack");
+    expect(config.channels.telegram.bot_token).toBe("test-token");
+    expect(config.channels.telegram.chat_id).toBe(12345);
+    expect(config.channels.slack.bot_token).toBe("xoxb-test");
+    expect(config.channels.slack.app_token).toBe("xapp-test");
   });
 
   test("env var overrides database_url", () => {

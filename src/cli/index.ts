@@ -40,8 +40,10 @@ async function awaitStartup(timeout = 60_000): Promise<void> {
   const { daemonLog } = getPaths();
   const config = getConfig();
   const expecting = new Set<string>();
-  if (config.telegram_bot_token) expecting.add("telegram");
-  if (config.slack_bot_token && config.slack_app_token) expecting.add("slack");
+  if (config.channels.enabled) {
+    if (config.channels.telegram.bot_token) expecting.add("telegram");
+    if (config.channels.slack.bot_token && config.channels.slack.app_token) expecting.add("slack");
+  }
   expecting.add("scheduler");
 
   if (expecting.size === 0) return;
@@ -218,6 +220,21 @@ switch (command) {
 
   case "slack": {
     slackCommand();
+    break;
+  }
+
+  case "channels": {
+    const sub = process.argv[3];
+    const { updateRawConfig } = await import("../utils/config");
+    if (sub === "on") {
+      updateRawConfig({ channels: { enabled: true } });
+      console.log("channels enabled — restart to apply");
+    } else if (sub === "off") {
+      updateRawConfig({ channels: { enabled: false } });
+      console.log("channels disabled — restart to apply");
+    } else {
+      console.log(`channels: ${getConfig().channels.enabled ? "on" : "off"}`);
+    }
     break;
   }
 

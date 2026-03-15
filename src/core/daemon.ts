@@ -196,9 +196,14 @@ export async function runDaemon(): Promise<void> {
     log.error({ err }, "failed to initialize MCP server");
   }
 
-  // Start channels (telegram, etc.)
+  // Start channels (telegram, slack, etc.)
   let channels: Channel[] = [];
-  channels = await startChannels();
+  const config = getConfig();
+  if (config.channels.enabled) {
+    channels = await startChannels();
+  } else {
+    log.info("channels disabled (channels_enabled: false)");
+  }
 
   // Recompute next_run_at for jobs that don't have one (legacy cron jobs)
   try {

@@ -45,7 +45,7 @@ class TelegramChannel implements Channel {
   private async downloadFile(fileId: string): Promise<Buffer> {
     if (!this.bot) throw new Error("Telegram not started");
     const file = await this.bot.api.getFile(fileId);
-    const token = getConfig().telegram_bot_token!;
+    const token = getConfig().channels.telegram.bot_token!;
     const url = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
@@ -54,11 +54,11 @@ class TelegramChannel implements Channel {
 
   async start(): Promise<void> {
     const config = getConfig();
-    const token = config.telegram_bot_token!;
+    const token = config.channels.telegram.bot_token!;
 
     await runMigrations();
 
-    this.outboundChatId = config.telegram_chat_id;
+    this.outboundChatId = config.channels.telegram.chat_id;
 
     const chats = new Map<number, ChatState>();
 
@@ -111,13 +111,13 @@ class TelegramChannel implements Channel {
       state.lock = state.lock.then(fn, fn);
     }
 
-    const isOpen = config.telegram_open;
+    const isOpen = config.channels.telegram.open;
     const self = this;
 
     function registerOutbound(chatId: number): void {
       if (self.outboundChatId) return;
       self.outboundChatId = chatId;
-      updateRawConfig({ telegram_chat_id: chatId });
+      updateRawConfig({ channels: { telegram: { chat_id: chatId } } });
       log.info({ chatId }, "auto-registered outbound chat ID");
     }
 
