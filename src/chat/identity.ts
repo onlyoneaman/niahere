@@ -221,7 +221,8 @@ export function buildSystemPrompt(mode: "chat" | "job" = "chat", channel: "termi
   - Respond if: the message is a follow-up to something you said, asks a question you can answer, or references your previous response.
   - Stay quiet if: users are talking to each other, the message is clearly not directed at you, or it's a reaction/acknowledgement between humans.
   - When in doubt, stay quiet. Better to miss one than to interrupt a human conversation.
-  - Never say "was that for me?" or similar — just respond or don't.`);
+  - Never say "was that for me?" or similar — just respond or don't.
+  - To stay quiet, respond with exactly \`[NO_REPLY]\` and nothing else. This tells the system to skip sending a message.`);
   } else if (channel === "telegram") {
     parts.push(`## Channel: Telegram
 - Keep responses short — this is a mobile chat, not a terminal.

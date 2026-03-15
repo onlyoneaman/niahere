@@ -338,10 +338,15 @@ class SlackChannel implements Channel {
 
           await client.reactions.remove({ channel: msg.channel, timestamp: msg.ts, name: "thinking_face" }).catch(() => {});
 
-          const reply = result.trim() || "(no response)";
+          const reply = result.trim();
+
+          // [NO_REPLY] or empty = agent chose not to respond (thread judgement)
+          if (!reply || reply === "[NO_REPLY]") {
+            log.info({ channel: msg.channel, key }, "slack: agent chose not to reply");
+            return;
+          }
 
           if (replyThreadTs) {
-            // Reply in thread
             await client.chat.postMessage({
               channel: msg.channel,
               text: reply,
