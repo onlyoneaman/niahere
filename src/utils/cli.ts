@@ -19,7 +19,6 @@ export function pickFromList(
       if (idx >= 0 && idx < items.length) {
         resolve(items[idx].name);
       } else {
-        // Try matching by name
         const match = items.find((it) => it.name === answer.trim());
         resolve(match ? match.name : "");
       }

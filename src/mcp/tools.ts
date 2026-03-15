@@ -1,11 +1,12 @@
 import { readFileSync, existsSync } from "fs";
+import type { ScheduleType } from "../types";
 import { basename } from "path";
 import { Job, Message, Session } from "../db/models";
 import { computeInitialNextRun } from "../core/scheduler";
 import { getConfig } from "../utils/config";
 import { getChannel } from "../channels/registry";
 import { log } from "../utils/log";
-import { classifyMime } from "../types/attachment";
+import { classifyMime } from "../utils/attachment";
 
 export async function listJobs(): Promise<string> {
   const jobs = await Job.list();
@@ -17,7 +18,7 @@ export async function addJob(args: {
   name: string;
   schedule: string;
   prompt: string;
-  schedule_type?: "cron" | "interval" | "once";
+  schedule_type?: ScheduleType;
   always?: boolean;
 }): Promise<string> {
   const scheduleType = args.schedule_type || "cron";

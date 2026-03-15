@@ -1,4 +1,5 @@
 import { getSql } from "../connection";
+import type { ScheduleType } from "../../types";
 
 export interface Job {
   name: string;
@@ -6,7 +7,7 @@ export interface Job {
   prompt: string;
   enabled: boolean;
   always: boolean;
-  scheduleType: "cron" | "interval" | "once";
+  scheduleType: ScheduleType;
   nextRunAt: string | null;
   lastRunAt: string | null;
   createdAt: string;
@@ -38,7 +39,7 @@ export async function create(
   schedule: string,
   prompt: string,
   always = false,
-  scheduleType: "cron" | "interval" | "once" = "cron",
+  scheduleType: ScheduleType = "cron",
   nextRunAt?: Date,
 ): Promise<void> {
   const sql = getSql();

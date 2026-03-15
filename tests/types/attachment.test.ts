@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import sharp from "sharp";
-import { classifyMime, validateAttachment, prepareImage } from "../../src/types/attachment";
+import { classifyMime, validateAttachment, prepareImage } from "../../src/utils/attachment";
 
 describe("classifyMime", () => {
   test("classifies image types", () => {

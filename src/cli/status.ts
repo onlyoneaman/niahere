@@ -3,7 +3,7 @@ import { readState } from "../utils/logger";
 import { getConfig } from "../utils/config";
 import { localTime } from "../utils/time";
 import { Message, ActiveEngine, Job } from "../db/models";
-import type { RoomStats } from "../db/models/message";
+import type { ScheduleType, JobStateStatus, RoomStats } from "../types";
 import { withDb } from "../db/connection";
 import { errMsg } from "../utils/errors";
 
@@ -18,8 +18,8 @@ type JobStatusLine = {
   schedule: string;
   enabled: boolean;
   always: boolean;
-  scheduleType: "cron" | "interval" | "once";
-  status: "ok" | "error" | "running" | "never";
+  scheduleType: ScheduleType;
+  status: JobStateStatus | "never";
   lastRun: string | null;
   nextRunAt: string | null;
   durationMs: number | null;

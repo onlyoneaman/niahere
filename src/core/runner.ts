@@ -1,11 +1,8 @@
 import { homedir } from "os";
 import { existsSync } from "fs";
-export interface JobInput {
-  name: string;
-  schedule: string;
-  prompt: string;
-}
-import { appendAudit, readState, writeState, type AuditEntry, type JobState } from "../utils/logger";
+import type { JobInput, JobResult } from "../types";
+import { appendAudit, readState, writeState } from "../utils/logger";
+import type { AuditEntry, JobState } from "../types";
 import { getConfig } from "../utils/config";
 import { buildSystemPrompt } from "../chat/identity";
 
@@ -13,15 +10,6 @@ import { buildSystemPrompt } from "../chat/identity";
 const CODEX_CANDIDATES = ["/opt/homebrew/bin/codex", "/usr/local/bin/codex"];
 const codexPath = CODEX_CANDIDATES.find((p) => existsSync(p)) || "codex";
 
-export interface JobResult {
-  job: string;
-  timestamp: string;
-  status: "ok" | "error";
-  result: string;
-  duration_ms: number;
-  session_id?: string;
-  error?: string;
-}
 
 function buildPrompt(job: JobInput): string {
   const systemPrompt = buildSystemPrompt("job");

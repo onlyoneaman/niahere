@@ -1,25 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname } from "path";
 import { getPaths } from "./paths";
-
-export interface AuditEntry {
-  job: string;
-  timestamp: string;
-  status: "ok" | "error";
-  result: string;
-  duration_ms: number;
-  session_id?: string;
-  error?: string;
-}
-
-export interface JobState {
-  lastRun: string;
-  status: "ok" | "error" | "running";
-  duration_ms: number;
-  error?: string;
-}
-
-export type CronState = Record<string, JobState>;
+import type { AuditEntry, JobState, CronState } from "../types";
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

@@ -6,37 +6,9 @@ import { homedir } from "os";
 import { randomUUID } from "crypto";
 import { buildSystemPrompt } from "./identity";
 import { Session, Message, ActiveEngine } from "../db/models";
-import type { Attachment } from "../types/attachment";
+import type { Attachment, SendResult, StreamCallback, ActivityCallback, SendCallbacks, ChatEngine, EngineOptions } from "../types";
 
 const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
-
-export interface SendResult {
-  result: string;
-  costUsd: number;
-  turns: number;
-}
-
-export type StreamCallback = (textSoFar: string) => void;
-export type ActivityCallback = (status: string) => void;
-
-export interface SendCallbacks {
-  onStream?: StreamCallback;
-  onActivity?: ActivityCallback;
-}
-
-export interface ChatEngine {
-  sessionId: string | null;
-  room: string;
-  send(userMessage: string, callbacks?: SendCallbacks, attachments?: Attachment[]): Promise<SendResult>;
-  close(): void;
-}
-
-export interface EngineOptions {
-  room: string;
-  channel: string;
-  resume: boolean;
-  mcpServers?: Record<string, unknown>;
-}
 
 interface SDKUserMessage {
   type: "user";

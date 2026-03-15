@@ -8,7 +8,7 @@ import { Message } from "../db/models";
 import { withDb } from "../db/connection";
 import { getNiaHome, getPaths } from "../utils/paths";
 import { errMsg } from "../utils/errors";
-import { fail } from "./helpers";
+import { fail } from "../utils/cli";
 import { jobCommand } from "./job";
 import { statusCommand } from "./status";
 import { sendCommand, telegramCommand, slackCommand } from "./channels";

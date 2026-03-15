@@ -1,4 +1,4 @@
-import type { Channel, ChannelFactory } from "./channel";
+import type { Channel, ChannelFactory } from "../types";
 
 const factories: ChannelFactory[] = [];
 const started: Map<string, Channel> = new Map();

@@ -1,12 +1,5 @@
 import { getSql } from "../connection";
-
-export interface SaveMessageParams {
-  sessionId: string;
-  room: string;
-  sender: string;
-  content: string;
-  isFromAgent: boolean;
-}
+import type { SaveMessageParams, RoomStats, RecentMessage } from "../../types";
 
 export async function save(params: SaveMessageParams): Promise<void> {
   const sql = getSql();
@@ -14,20 +7,6 @@ export async function save(params: SaveMessageParams): Promise<void> {
     INSERT INTO messages (session_id, room, sender, content, is_from_agent)
     VALUES (${params.sessionId}, ${params.room}, ${params.sender}, ${params.content}, ${params.isFromAgent})
   `;
-}
-
-export interface RoomStats {
-  room: string;
-  sessions: number;
-  messages: number;
-  lastActivity: string | null;
-}
-
-export interface RecentMessage {
-  room: string;
-  sender: string;
-  content: string;
-  createdAt: string;
 }
 
 export async function getRecent(limit = 20, room?: string): Promise<RecentMessage[]> {

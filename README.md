@@ -39,7 +39,8 @@ nia job remove <name>          — delete a job
 nia job enable / disable <n>   — toggle a job
 nia job run <name>             — run a job once
 nia job log [name]             — show recent run history
-nia job import                 — import YAML jobs from jobs/ dir
+nia channels                   — show channel status (on/off)
+nia channels on / off          — enable/disable channels
 ```
 
 ## Features

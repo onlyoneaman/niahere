@@ -3,36 +3,8 @@ import { dirname } from "path";
 import yaml from "js-yaml";
 import { getPaths } from "./paths";
 import { log } from "./log";
-
-export interface TelegramConfig {
-  bot_token: string | null;
-  chat_id: number | null;
-  open: boolean;
-}
-
-export interface SlackConfig {
-  bot_token: string | null;
-  app_token: string | null;
-  channel_id: string | null;
-  dm_user_id: string | null;
-}
-
-export interface ChannelsConfig {
-  enabled: boolean;
-  default: string;
-  telegram: TelegramConfig;
-  slack: SlackConfig;
-}
-
-export interface Config {
-  model: string;
-  timezone: string;
-  activeHours: { start: string; end: string };
-  database_url: string;
-  log_level: string;
-  gemini_api_key: string | null;
-  channels: ChannelsConfig;
-}
+import { DEFAULT_DATABASE_URL } from "../constants";
+import type { Config } from "../types";
 
 const TIME_RE = /^\d{2}:\d{2}$/;
 
@@ -40,7 +12,7 @@ const DEFAULTS: Config = {
   model: "default",
   timezone: process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone,
   activeHours: { start: "00:00", end: "23:59" },
-  database_url: "postgres://localhost:5432/niahere",
+  database_url: DEFAULT_DATABASE_URL,
   log_level: "info",
   gemini_api_key: null,
   channels: {

@@ -96,7 +96,8 @@ export async function runInit(): Promise<void> {
     }
 
     // Database URL
-    const defaultDb = (existing.database_url as string) || "postgres://localhost:5432/niahere";
+    const { DEFAULT_DATABASE_URL } = await import("../constants");
+    const defaultDb = (existing.database_url as string) || DEFAULT_DATABASE_URL;
     const dbUrl = await ask(rl, "Database URL", defaultDb);
 
     // Test connection + migrate

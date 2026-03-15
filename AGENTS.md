@@ -18,87 +18,112 @@
 src/
   cli/
     index.ts             # Entry point, command routing
-    job.ts               # Job subcommands (list, show, status, add, run, log, etc.)
-    helpers.ts           # Shared CLI helpers (fail, pickFromList)
+    job.ts               # Job subcommands (list, show, status, add, run, log)
+    channels.ts          # Channel CLI commands (send, telegram, slack)
     status.ts            # Status command output
   core/
-    daemon.ts            # Daemon lifecycle, cron scheduling, active hours, LISTEN/NOTIFY
-    runner.ts            # Job execution via Codex CLI (--json mode, session ID capture)
-    cron.ts              # YAML job file parsing (legacy)
-    scheduler.ts         # Job scheduling and due-time queries
+    daemon.ts            # Daemon lifecycle, service-aware restart, startup guard
+    runner.ts            # Job execution via Codex CLI (--json, session ID capture)
+    scheduler.ts         # Job scheduling, due-time queries, cron/interval/once
   chat/
     engine.ts            # Chat engine — Claude SDK query(), sessions, streaming
-    identity.ts          # Persona loading, skill scanning, system prompt building
+    identity.ts          # Persona loading, skill scanning, system prompt assembly
     repl.ts              # Terminal REPL chat interface
   channels/
-    channel.ts           # Channel interface + registry
-    index.ts             # Start/stop all channels
-    telegram.ts          # Telegram bot (grammY) — typing indicator, no placeholder messages
-    slack.ts             # Slack bot (Bolt, Socket Mode) — thinking emoji, thread awareness, context fetching
+    index.ts             # Register, start/stop all channels
+    registry.ts          # Channel factory registry
+    telegram.ts          # Telegram bot (grammY) — typing indicator
+    slack.ts             # Slack bot (Bolt, Socket Mode) — thinking emoji, thread awareness
   commands/
     init.ts              # Interactive setup wizard (db, channels, persona, gemini, visual identity)
-    service.ts           # OS service registration (launchd/systemd)
+    service.ts           # OS service registration (launchd/systemd), service-aware restart
   db/
     connection.ts        # Lazy postgres init, withDb() helper
     migrate.ts           # SQL migration runner
     migrations/          # Numbered .ts migration files
     seed.ts              # DB seed script
     models/
-      job.ts             # Job CRUD + pg_notify on mutations (has `always` flag for crons)
+      job.ts             # Job CRUD + pg_notify on mutations
       message.ts         # Chat message storage + room stats
       session.ts         # Session tracking
-      active-engine.ts   # Active engine registry
+      active_engine.ts   # Active engine registry
   mcp/
     server.ts            # MCP tool server (jobs, messaging, history)
-    tools/               # MCP tool handlers
+    tools.ts             # MCP tool handlers
+  prompts/
+    index.ts             # Prompt loading and interpolation
+    environment.md       # Environment/config/memory prompt template
+    mode-chat.md         # Chat mode instructions
+    mode-job.md          # Job mode instructions
+    channel-slack.md     # Slack-specific rules (formatting, security, thread judgement)
+    channel-telegram.md  # Telegram-specific rules
+  types/                 # All type definitions (types, interfaces, enums only)
+    index.ts             # Barrel export
+    enums.ts             # JobStatus, ScheduleType, Mode, AttachmentType, ChannelName
+    config.ts            # Config, ChannelsConfig, TelegramConfig, SlackConfig
+    paths.ts             # Paths interface
+    attachment.ts        # Attachment interface
+    audit.ts             # AuditEntry, JobState, CronState
+    job.ts               # JobInput, JobResult
+    engine.ts            # SendResult, ChatEngine, EngineOptions, callbacks
+    channel.ts           # Channel, ChannelFactory
+    chat-state.ts        # ChatState (shared between channel implementations)
+    message.ts           # SaveMessageParams, RoomStats, RecentMessage
+  constants/
+    index.ts             # DEFAULT_DATABASE_URL + barrel
+    attachment.ts        # MAX_ATTACHMENT_SIZE, IMAGE_MIMES, JPEG_QUALITY
   utils/
-    config.ts            # Unified config from ~/.niahere/config.yaml
-    paths.ts             # All paths resolve from ~/.niahere/
+    config.ts            # Config loading from ~/.niahere/config.yaml
+    paths.ts             # Path resolution from NIA_HOME
+    cli.ts               # CLI helpers (fail, pickFromList)
     errors.ts            # errMsg() helper
     log.ts               # Pino logger
     logger.ts            # JSONL audit log + cron state file
     time.ts              # Local timezone formatting
-  types/
-    attachment.ts        # Attachment types for image/document handling
+    duration.ts          # Duration string parsing
+    attachment.ts        # classifyMime, validateAttachment, prepareImage
 defaults/
   self/                  # Template files for nia init (identity, soul, owner, memory)
   channels/
     slack-manifest.json  # Slack app manifest with all required scopes
 skills/
-  nia-image/             # Visual identity generation skill
-    SKILL.md             # Skill definition
-    scripts/
-      generate_image.py  # Gemini image generation script
-    assets/              # Default reference + profile images
-    references/
-      prompt-guide.md    # Structured prompt system and templates
+  nia-image/             # Visual identity generation skill (Gemini)
 tests/
-  core/                  # Daemon, cron, runner tests
-  chat/                  # Identity/persona tests
+  core/                  # Daemon, runner, scheduler tests
+  chat/                  # Identity, engine tests
   db/                    # Model tests
+  mcp/                   # MCP tool tests
+  types/                 # Attachment utility tests
   utils/                 # Config, paths, time tests
 ```
 
 ## Config
 
-All config lives in `~/.niahere/config.yaml`. Env vars override config values:
+All config lives in `~/.niahere/config.yaml` with nested channel structure:
 
-| Config key           | Env override          | Default                          |
-|---------------------|-----------------------|----------------------------------|
-| `database_url`      | `DATABASE_URL`        | `postgres://localhost:5432/niahere` |
-| `telegram_bot_token`| `TELEGRAM_BOT_TOKEN`  | null                             |
-| `telegram_chat_id`  | `TELEGRAM_CHAT_ID`    | null (auto-registered on first message) |
-| `telegram_open`     | —                     | false (only owner can message)   |
-| `slack_bot_token`   | `SLACK_BOT_TOKEN`     | null                             |
-| `slack_app_token`   | `SLACK_APP_TOKEN`     | null                             |
-| `slack_channel_id`  | `SLACK_CHANNEL_ID`    | null                             |
-| `slack_dm_user_id`  | —                     | null (auto-registered on first DM) |
-| `default_channel`   | —                     | `telegram`                       |
-| `gemini_api_key`    | `GEMINI_API_KEY`      | null                             |
-| `log_level`         | `LOG_LEVEL`           | `info`                           |
-| `model`             | —                     | `default`                        |
-| `timezone`          | —                     | system timezone                  |
-| `active_hours`      | —                     | `{ start: "00:00", end: "23:59" }` |
+```yaml
+database_url: postgres://localhost:5432/niahere
+model: default
+timezone: Asia/Calcutta
+log_level: info
+gemini_api_key: ...
+active_hours:
+  start: '11:00'
+  end: '02:00'
+channels:
+  enabled: true
+  default: telegram
+  telegram:
+    bot_token: ...
+    chat_id: 823887567
+    open: false
+  slack:
+    bot_token: xoxb-...
+    app_token: xapp-...
+    dm_user_id: U06PBA2P680
+```
+
+Env vars override config: `DATABASE_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_CHANNEL_ID`, `GEMINI_API_KEY`, `LOG_LEVEL`.
 
 ## Build & Test
 
@@ -110,39 +135,46 @@ bun run dev            # Run daemon in foreground
 
 Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig()` in cleanup.
 
+## Code Organization
+
+- **Types** in `src/types/` — all interfaces, type aliases, enums. No functions or constants.
+- **Constants** in `src/constants/` — all constant values. No functions or types.
+- **Utils** in `src/utils/` — shared utility functions. Import types from `../types`.
+- **Prompts** in `src/prompts/` — markdown templates + loader. Interpolated at runtime.
+- Import types directly from `../types`, functions from their module. No re-export chains.
+
 ## Key Patterns
 
 - **Lazy DB:** `getSql()` creates connection on first use, `withDb()` wraps migrate+execute+close
 - **LISTEN/NOTIFY:** Job mutations call `pg_notify('nia_jobs')`, daemon listens and auto-reloads schedules
 - **Jobs vs crons:** Jobs respect `active_hours`, crons (`always: true`) run 24/7. Both use the same `jobs` table.
-- **Job execution:** Jobs run via `codex exec --json`, output parsed for session ID and agent message. Session ID stored in audit for `codex resume` inspection. Full Codex sessions persisted at `~/.codex/sessions/`.
-- **Telegram:** Typing indicator (`sendChatAction`) shown while processing. No placeholder messages — final response sent as a fresh message.
-- **Slack:** Thinking emoji reaction (🤔) added while processing, removed on completion. Thread awareness: once nia replies in a thread, she auto-listens to follow-ups without needing @mention (checks in-memory map + DB). Thread context fetched via `conversations.replies` so nia sees the full conversation.
-- **Slack manifest:** `defaults/channels/slack-manifest.json` includes all required scopes (reactions, files, channels:join, users.profile, pins, bookmarks, links). Update manifest in Slack dashboard when scopes change.
-- **Persona:** 3 files loaded into system prompt: `identity.md`, `owner.md`, `soul.md`. Memory (`memory.md`) is read/written on demand, not loaded automatically.
-- **Templates:** `defaults/self/` contains templates with `{{placeholders}}`, interpolated during `nia init`
-- **Visual identity:** Images stored at `~/.niahere/images/`. Script looks for user reference there first, falls back to skill defaults. Generated during `nia init` if Gemini key is configured.
-- **Service:** `nia start` auto-registers OS service (launchd on macOS, systemd on Linux)
+- **Job execution:** Jobs run via `codex exec --json`, output parsed for session ID and agent message. Session ID stored in audit for `codex resume` inspection.
+- **Channel registration:** Channels export factory functions, `registerAllChannels()` wires them up explicitly. No side-effect imports.
+- **Daemon lifecycle:** Blocking stop (waits for engines, escalates to SIGKILL). Service-aware restart via launchctl/systemd. Startup guard prevents duplicate daemons.
+- **Telegram:** Typing indicator while processing. Final response sent as fresh message.
+- **Slack:** Thinking emoji reaction while processing. Thread awareness (auto-listens without @mention). Thread context fetched via `conversations.replies`. `[NO_REPLY]` sentinel for silent thread judgement. Owner vs non-owner access control.
+- **Persona:** 3 files loaded: `identity.md`, `owner.md`, `soul.md`. Memory read/written on demand.
+- **Visual identity:** Images at `~/.niahere/images/`. Generated during `nia init` via Gemini.
+- **Service:** `nia start` registers OS service (launchd/systemd). `nia restart` is service-aware.
 - **Skills:** Scanned from project `skills/`, `~/.niahere/skills/`, `~/.shared/skills/`, `~/.claude/skills/`, `~/.codex/skills/`
-- **Error helpers:** Use `errMsg(err)` instead of `err instanceof Error ? err.message : String(err)`
-- **Paths:** All paths from `getPaths()` which resolves from `getNiaHome()` (`NIA_HOME` env or `~/.niahere/`)
+- **Paths:** All from `getPaths()` → `getNiaHome()` (`NIA_HOME` env or `~/.niahere/`)
 
 ## Code Style
 
 - TypeScript, strict mode, ESNext target
 - Semicolons required
-- Imports: node builtins first, then deps, then local
+- Imports: node builtins first, then deps, then local. Types from `types/`, functions from their module.
+- Types only in `src/types/`, constants only in `src/constants/`, utils in `src/utils/`
 - Local timestamps via `localTime()` — never raw `toISOString()` for display
-- Keep modules small: core/ for daemon logic, chat/ for AI interactions, utils/ for shared helpers
 
 ## Keeping Docs Updated
 
 When making changes, keep these files in sync:
 
-- **AGENTS.md** — update when: adding/moving files, changing config schema, adding key patterns, modifying architecture
-- **README.md** — update when: adding/changing CLI commands, adding features, changing setup steps
-- **System prompt** (`src/chat/identity.ts` `buildEnvironmentContext()`) — update when: adding CLI commands the agent should know about, changing job/config behavior
-- **CLI help text** (`src/cli/index.ts` default case, `src/cli/job.ts` default case) — update when: adding/renaming subcommands
-- **Slack manifest** (`defaults/channels/slack-manifest.json`) — update when: adding new Slack API features that need scopes
+- **AGENTS.md** — update when: adding/moving files, changing config schema, adding key patterns
+- **README.md** — update when: adding/changing CLI commands, features, setup steps
+- **Prompts** (`src/prompts/*.md`) — update when: changing channel behavior, formatting rules, security policies
+- **CLI help text** (`src/cli/index.ts` default case) — update when: adding/renaming subcommands
+- **Slack manifest** (`defaults/channels/slack-manifest.json`) — update when: adding Slack API features
 
-Run `nia test` after doc changes to catch any broken imports.
+Run `bun test` after changes to catch broken imports.

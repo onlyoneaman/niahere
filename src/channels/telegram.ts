@@ -1,20 +1,12 @@
 import { Bot, InputFile } from "grammy";
-import type { Channel } from "./channel";
-import { registerChannel } from "./registry";
-import { createChatEngine, type ChatEngine } from "../chat/engine";
-import { getConfig } from "../utils/config";
-import { updateRawConfig } from "../utils/config";
+import { createChatEngine } from "../chat/engine";
+import type { Channel, ChatState, Attachment } from "../types";
+import { getConfig, updateRawConfig } from "../utils/config";
 import { runMigrations } from "../db/migrate";
 import { Session } from "../db/models";
 import { log } from "../utils/log";
 import { getMcpServers } from "../mcp";
-import { type Attachment, classifyMime, validateAttachment, prepareImage } from "../types/attachment";
-
-interface ChatState {
-  engine: ChatEngine;
-  roomIndex: number;
-  lock: Promise<void>;
-}
+import { classifyMime, validateAttachment, prepareImage } from "../utils/attachment";
 
 
 class TelegramChannel implements Channel {
@@ -268,7 +260,7 @@ class TelegramChannel implements Channel {
   }
 }
 
-registerChannel(() => {
-  if (!getConfig().telegram_bot_token) return null;
+export function createTelegramChannel(): TelegramChannel | null {
+  if (!getConfig().channels.telegram.bot_token) return null;
   return new TelegramChannel();
-});
+}

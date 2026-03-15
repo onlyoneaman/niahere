@@ -1,19 +1,12 @@
 import { App } from "@slack/bolt";
-import type { Channel } from "./channel";
-import { registerChannel } from "./registry";
-import { createChatEngine, type ChatEngine } from "../chat/engine";
+import { createChatEngine } from "../chat/engine";
+import type { Channel, ChatState, Attachment } from "../types";
 import { getConfig, updateRawConfig } from "../utils/config";
 import { runMigrations } from "../db/migrate";
 import { Session } from "../db/models";
 import { log } from "../utils/log";
 import { getMcpServers } from "../mcp";
-import { type Attachment, classifyMime, validateAttachment, prepareImage } from "../types/attachment";
-
-interface ChatState {
-  engine: ChatEngine;
-  roomIndex: number;
-  lock: Promise<void>;
-}
+import { classifyMime, validateAttachment, prepareImage } from "../utils/attachment";
 
 class SlackChannel implements Channel {
   name = "slack";
@@ -399,8 +392,8 @@ class SlackChannel implements Channel {
   }
 }
 
-registerChannel(() => {
+export function createSlackChannel(): SlackChannel | null {
   const config = getConfig();
   if (!config.channels.slack.bot_token || !config.channels.slack.app_token) return null;
   return new SlackChannel();
-});
+}

@@ -1,19 +1,6 @@
 import { resolve } from "path";
 import { homedir } from "os";
-
-export interface Paths {
-  home: string;
-  pid: string;
-  daemonLog: string;
-  cronState: string;
-  cronAudit: string;
-  config: string;
-  jobsDir: string;
-  selfDir: string;
-  beadsDir: string;
-  skillsDir: string;
-  imagesDir: string;
-}
+import type { Paths } from "../types";
 
 export function getNiaHome(): string {
   return process.env.NIA_HOME || resolve(homedir(), ".niahere");

@@ -6,12 +6,11 @@ import { log } from "../utils/log";
 import { ActiveEngine } from "../db/models";
 import { runMigrations } from "../db/migrate";
 import { closeDb, getSql } from "../db/connection";
-import { startChannels, stopChannels, type Channel } from "../channels";
+import { registerAllChannels, startChannels, stopChannels } from "../channels";
+import type { Channel } from "../types";
 import { startScheduler, stopScheduler, recomputeAllNextRuns } from "./scheduler";
 import { createNiaMcpServer } from "../mcp/server";
 import { setMcpServers } from "../mcp";
-import "../channels/telegram"; // side-effect: registers channel factory
-import "../channels/slack"; // side-effect: registers channel factory
 
 export function writePid(pid: number): void {
   const { pid: pidPath } = getPaths();
@@ -196,7 +195,8 @@ export async function runDaemon(): Promise<void> {
     log.error({ err }, "failed to initialize MCP server");
   }
 
-  // Start channels (telegram, slack, etc.)
+  // Register and start channels
+  registerAllChannels();
   let channels: Channel[] = [];
   const config = getConfig();
   if (config.channels.enabled) {

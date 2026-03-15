@@ -2,7 +2,7 @@ import { getConfig, updateRawConfig } from "../utils/config";
 import { withDb } from "../db/connection";
 import { getPaths } from "../utils/paths";
 import { errMsg } from "../utils/errors";
-import { fail } from "./helpers";
+import { fail } from "../utils/cli";
 
 export async function sendCommand(): Promise<void> {
   const args = process.argv.slice(3);

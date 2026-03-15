@@ -1,12 +1,13 @@
 import { CronExpressionParser } from "cron-parser";
 import { parseDuration } from "../utils/duration";
+import type { ScheduleType } from "../types";
 import { Job } from "../db/models";
 import { runJob } from "./runner";
 import { getConfig } from "../utils/config";
 import { log } from "../utils/log";
 
 export function computeNextRun(
-  scheduleType: "cron" | "interval" | "once",
+  scheduleType: ScheduleType,
   schedule: string,
   timezone: string,
   lastRunAt?: Date,
@@ -27,7 +28,7 @@ export function computeNextRun(
 }
 
 export function computeInitialNextRun(
-  scheduleType: "cron" | "interval" | "once",
+  scheduleType: ScheduleType,
   schedule: string,
   timezone: string,
 ): Date {

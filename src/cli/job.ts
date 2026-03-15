@@ -2,13 +2,13 @@ import * as readline from "readline";
 import { CronExpressionParser } from "cron-parser";
 import { readState, readAudit } from "../utils/logger";
 import { getConfig } from "../utils/config";
-import { parseJobs } from "../core/cron";
 import { runJob } from "../core/runner";
 import { localTime } from "../utils/time";
 import { Job } from "../db/models";
 import { withDb } from "../db/connection";
+import type { ScheduleType } from "../types";
 import { errMsg } from "../utils/errors";
-import { fail, pickFromList } from "./helpers";
+import { fail, pickFromList } from "../utils/cli";
 import { computeInitialNextRun } from "../core/scheduler";
 
 async function pickJob(prompt = "Pick a job"): Promise<string> {
@@ -64,7 +64,7 @@ export async function jobCommand(): Promise<void> {
       let cliArgs = process.argv.slice(4).filter((a) => a !== "--always");
 
       // Parse --type flag
-      let scheduleType: "cron" | "interval" | "once" = "cron";
+      let scheduleType: ScheduleType = "cron";
       const typeIdx = cliArgs.indexOf("--type");
       if (typeIdx !== -1 && cliArgs[typeIdx + 1]) {
         const val = cliArgs[typeIdx + 1];
@@ -129,32 +129,6 @@ export async function jobCommand(): Promise<void> {
         });
       } catch (err) {
         fail(`Failed: ${errMsg(err)}`);
-      }
-      break;
-    }
-
-    case "import": {
-      const yamlJobs = parseJobs();
-      if (yamlJobs.length === 0) {
-        console.log("No YAML job files found in jobs/");
-        break;
-      }
-
-      try {
-        await withDb(async () => {
-          let imported = 0;
-          let skipped = 0;
-          for (const job of yamlJobs) {
-            if (await Job.get(job.name)) { skipped++; continue; }
-            await Job.create(job.name, job.schedule, job.prompt);
-            if (!job.enabled) await Job.update(job.name, { enabled: false });
-            imported++;
-          }
-          console.log(`Imported ${imported} job${imported !== 1 ? "s" : ""}${skipped > 0 ? ` (${skipped} already exist)` : ""}`);
-          if (imported > 0) console.log("Jobs will be picked up automatically.");
-        });
-      } catch (err) {
-        fail(`Failed to import: ${errMsg(err)}`);
       }
       break;
     }
@@ -234,10 +208,6 @@ export async function jobCommand(): Promise<void> {
         await withDb(async () => { job = await Job.get(name); });
       } catch { /* DB unavailable */ }
 
-      if (!job) {
-        const found = parseJobs().find((j) => j.name === name);
-        if (found) job = found;
-      }
       if (!job) fail(`Job not found: ${name}`);
 
       console.log(`Running job: ${job.name} (model: ${getConfig().model})`);

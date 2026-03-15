@@ -1,9 +1,16 @@
-import type { Channel } from "./channel";
-import { getFactories, registerChannel, trackStarted, clearStarted } from "./registry";
+import type { Channel } from "../types";
+import { registerChannel, getFactories, trackStarted, clearStarted } from "./registry";
 import { log } from "../utils/log";
+import { createTelegramChannel } from "./telegram";
+import { createSlackChannel } from "./slack";
 
-export { registerChannel };
 export { getChannel } from "./registry";
+
+/** Register all built-in channel factories. Call once at startup. */
+export function registerAllChannels(): void {
+  registerChannel(() => createTelegramChannel());
+  registerChannel(() => createSlackChannel());
+}
 
 export async function startChannels(): Promise<Channel[]> {
   const channels: Channel[] = [];
@@ -36,5 +43,3 @@ export async function stopChannels(channels: Channel[]): Promise<void> {
   }
   clearStarted();
 }
-
-export type { Channel, ChannelFactory } from "./channel";
