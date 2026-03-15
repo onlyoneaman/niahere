@@ -19,4 +19,14 @@ if ! command -v bun >/dev/null 2>&1; then
     exit 1
   fi
 fi
-exec bun "$(dirname "$0")/../src/cli/index.ts" "$@"
+
+# Resolve symlink to find the actual package directory
+SCRIPT="$0"
+while [ -L "$SCRIPT" ]; do
+  DIR="$(cd "$(dirname "$SCRIPT")" && pwd)"
+  SCRIPT="$(readlink "$SCRIPT")"
+  case "$SCRIPT" in /*) ;; *) SCRIPT="$DIR/$SCRIPT" ;; esac
+done
+PACKAGE_DIR="$(cd "$(dirname "$SCRIPT")/.." && pwd)"
+
+exec bun "$PACKAGE_DIR/src/cli/index.ts" "$@"
