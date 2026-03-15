@@ -1,17 +1,28 @@
 #!/bin/sh
-if ! command -v bun >/dev/null 2>&1; then
+
+# Check if bun is available (including ~/.bun/bin which may not be in PATH yet)
+BUN_CMD=""
+if command -v bun >/dev/null 2>&1; then
+  BUN_CMD="bun"
+elif [ -x "$HOME/.bun/bin/bun" ]; then
+  BUN_CMD="$HOME/.bun/bin/bun"
+fi
+
+if [ -z "$BUN_CMD" ]; then
   echo "niahere requires Bun runtime."
   printf "Install Bun now? (y/n) "
   read -r answer
   if [ "$answer" = "y" ] || [ "$answer" = "Y" ]; then
     curl -fsSL https://bun.sh/install | bash
-    export BUN_INSTALL="$HOME/.bun"
-    export PATH="$BUN_INSTALL/bin:$PATH"
-    if ! command -v bun >/dev/null 2>&1; then
+    BUN_CMD="$HOME/.bun/bin/bun"
+    if [ ! -x "$BUN_CMD" ]; then
       echo "Bun install failed. Install manually: curl -fsSL https://bun.sh/install | bash"
       exit 1
     fi
+    echo ""
     echo "Bun installed. Continuing..."
+    echo "(Open a new terminal for bun to be in PATH permanently)"
+    echo ""
   else
     echo ""
     echo "Install manually: curl -fsSL https://bun.sh/install | bash"
@@ -20,14 +31,12 @@ if ! command -v bun >/dev/null 2>&1; then
   fi
 fi
 
-# Resolve the real path of this script (follows all symlinks)
-REAL="$(realpath "$0" 2>/dev/null)" || REAL="$(perl -MCwd -e 'print Cwd::realpath($ARGV[0])' "$0" 2>/dev/null)" || REAL="$0"
-# Go up from bin/ to package root
+# Resolve the real path of this script (follows symlinks)
+REAL="$(realpath "$0" 2>/dev/null)" || REAL="$0"
 PACKAGE_DIR="$(dirname "$REAL")/.."
 ENTRY="$PACKAGE_DIR/src/cli/index.ts"
 
 if [ ! -f "$ENTRY" ]; then
-  # Fallback: try npm global root
   ENTRY="$(npm root -g 2>/dev/null)/niahere/src/cli/index.ts"
 fi
 
@@ -36,4 +45,4 @@ if [ ! -f "$ENTRY" ]; then
   exit 1
 fi
 
-exec bun "$ENTRY" "$@"
+exec "$BUN_CMD" "$ENTRY" "$@"
