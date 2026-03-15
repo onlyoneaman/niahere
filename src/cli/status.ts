@@ -291,8 +291,10 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
         const icon = info.status === "ok" ? "\u2713" : info.status === "error" ? "\u2717" : "\u2217";
         console.log(`  ${icon} ${name}: ${info.status} (last: ${last}, ${info.duration_ms}ms)`);
       }
+    } else if (dbError) {
+      console.log(`\nJobs: database unavailable (${errMsg(dbError)})`);
     } else {
-      console.log("\nJobs: unavailable (no job state in file)");
+      console.log("\nJobs: none");
     }
   }
 
