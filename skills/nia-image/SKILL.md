@@ -21,13 +21,13 @@ Generate photorealistic images of Nia with consistent identity across different 
 ## Assets
 
 The script looks for references in this order:
-1. `~/.niahere/images/reference.png` — user's custom reference (takes priority)
+1. `~/.niahere/images/reference.webp` — user's custom reference (takes priority)
 2. `assets/nia-reference.webp` — default shipped with niahere
 
 | Location | Purpose |
 |----------|---------|
-| `~/.niahere/images/reference.png` | User's reference image |
-| `~/.niahere/images/profile.png` | User's profile picture (for Telegram/Slack) |
+| `~/.niahere/images/reference.webp` | User's reference image |
+| `~/.niahere/images/profile.webp` | User's profile picture (for Telegram/Slack) |
 | `~/.niahere/images/` | Output directory for new generations |
 | `assets/nia-reference.webp` | Default reference (fallback) |
 | `assets/nia-profile.webp` | Default profile picture (fallback) |

@@ -52,8 +52,12 @@ async function offerBeadsShellExport(rl: readline.Interface, beadsDir: string): 
   if (answer.toLowerCase() !== "y") return;
 
   appendFileSync(rcFile, `\n# Beads global task DB\n${exportLine}\n`);
+  // Apply to current process so it takes effect immediately
+  const parts = exportLine.replace("$HOME", homedir()).split("=");
+  if (parts.length === 2) {
+    process.env[parts[0].replace("export ", "")] = parts[1].replace(/"/g, "");
+  }
   console.log(`  \u2713 added BEADS_DIR to ${rcFile.replace(homedir(), "~")}`);
-  console.log(`  Run 'source ${rcFile.replace(homedir(), "~")}' or open a new terminal.`);
 }
 
 function loadTemplate(name: string, vars: Record<string, string> = {}): string {
@@ -144,6 +148,7 @@ export async function runInit(): Promise<void> {
         if (telegramToken) {
           const openInput = await ask(rl, "Allow anyone to message? (y/n)", "n");
           telegramOpen = openInput.toLowerCase() === "y";
+          console.log("  Tip: Send a message to your bot to activate outbound messaging.");
         }
       }
     }
@@ -181,7 +186,8 @@ export async function runInit(): Promise<void> {
         const createUrl = `https://api.slack.com/apps?new_app=1&manifest_json=${encodeURIComponent(manifest)}`;
 
         console.log("\n  Opening Slack app creation page...");
-        Bun.spawn(["open", createUrl], { stdio: ["ignore", "ignore", "ignore"] });
+        const openCmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+        Bun.spawn([openCmd, createUrl], { stdio: ["ignore", "ignore", "ignore"] });
         console.log("  1. Click 'Create' to create the app");
         console.log("  2. Go to 'OAuth & Permissions' → Install to workspace → copy Bot Token (xoxb-...)");
         console.log("  3. Go to 'Basic Information' → 'App-Level Tokens' → create one with connections:write → copy (xapp-...)\n");
@@ -299,7 +305,7 @@ export async function runInit(): Promise<void> {
     // Visual identity
     const imagesDir = `${home}/images`;
     mkdirSync(imagesDir, { recursive: true });
-    const hasUserReference = existsSync(`${imagesDir}/reference.png`);
+    const hasUserReference = existsSync(`${imagesDir}/reference.webp`);
     const hasDefaultReference = existsSync(`${SKILL_ASSETS_DIR}/nia-reference.webp`);
 
     if (geminiApiKey && !hasUserReference) {
@@ -317,23 +323,23 @@ export async function runInit(): Promise<void> {
             "--api-key", geminiApiKey,
             "--aspect-ratio", "9:16",
             "--prompt", prompt,
-            "--output", `${imagesDir}/reference.png`,
+            "--output", `${imagesDir}/reference.webp`,
           ], { stdout: "pipe", stderr: "pipe" });
           const exitCode = await proc.exited;
           if (exitCode === 0) {
-            console.log(`  \u2713 generated reference image at ${imagesDir}/reference.png`);
+            console.log(`  \u2713 generated reference image at ${imagesDir}/reference.webp`);
             // Also generate a profile picture
             console.log("  Generating profile picture...");
             const profileProc = Bun.spawn([
               "python3", GENERATE_SCRIPT,
-              "--reference", `${imagesDir}/reference.png`,
+              "--reference", `${imagesDir}/reference.webp`,
               "--api-key", geminiApiKey,
               "--aspect-ratio", "1:1",
               "--prompt", `Photorealistic close-up portrait of the same person from the reference. Warm slight smile, direct eye contact, soft ambient side lighting, creamy bokeh background, 85mm f/1.8, shallow depth of field. Same face, same style, natural skin texture, DSLR quality, hyper-detailed.`,
-              "--output", `${imagesDir}/profile.png`,
+              "--output", `${imagesDir}/profile.webp`,
             ], { stdout: "pipe", stderr: "pipe" });
             if (await profileProc.exited === 0) {
-              console.log(`  \u2713 generated profile picture at ${imagesDir}/profile.png`);
+              console.log(`  \u2713 generated profile picture at ${imagesDir}/profile.webp`);
             }
           } else {
             const stderr = await new Response(proc.stderr).text();
@@ -342,10 +348,10 @@ export async function runInit(): Promise<void> {
         } else if (hasDefaultReference) {
           // No description — copy defaults
           const { copyFileSync } = await import("fs");
-          copyFileSync(`${SKILL_ASSETS_DIR}/nia-reference.webp`, `${imagesDir}/reference.png`);
+          copyFileSync(`${SKILL_ASSETS_DIR}/nia-reference.webp`, `${imagesDir}/reference.webp`);
           console.log(`  \u2713 copied default reference image`);
           if (existsSync(`${SKILL_ASSETS_DIR}/nia-profile.webp`)) {
-            copyFileSync(`${SKILL_ASSETS_DIR}/nia-profile.webp`, `${imagesDir}/profile.png`);
+            copyFileSync(`${SKILL_ASSETS_DIR}/nia-profile.webp`, `${imagesDir}/profile.webp`);
             console.log(`  \u2713 copied default profile picture`);
           }
         }
@@ -400,6 +406,7 @@ export async function runInit(): Promise<void> {
     const vars = { agentName, ownerName, ownerRole, ownerLocation, ownerInterests };
     const selfFile = (name: string) => `${paths.selfDir}/${name}`;
 
+    // Identity and owner — always write (template-driven, not user-customized)
     writeFileSync(selfFile("identity.md"), loadTemplate("identity.md", vars));
     console.log(`  \u2713 wrote ${selfFile("identity.md")}`);
 
@@ -411,8 +418,8 @@ export async function runInit(): Promise<void> {
     }
 
     // Soul and memory — only create if missing (user may have customized)
-    writeIfMissing(selfFile("soul.md"), loadTemplate("soul.md"), selfFile("soul.md"));
-    writeIfMissing(selfFile("memory.md"), loadTemplate("memory.md"), selfFile("memory.md"));
+    writeIfMissing(selfFile("soul.md"), loadTemplate("soul.md", vars), selfFile("soul.md"));
+    writeIfMissing(selfFile("memory.md"), loadTemplate("memory.md", vars), selfFile("memory.md"));
 
     resetConfig();
 

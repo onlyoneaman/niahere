@@ -67,8 +67,8 @@ All config and data lives in `~/.niahere/`:
     soul.md         — how the agent works
     memory.md       — persistent learnings (read/written on demand, not loaded into context)
   images/
-    reference.png   — visual identity reference image
-    profile.png     — profile picture for Telegram/Slack
+    reference.webp   — visual identity reference image
+    profile.webp     — profile picture for Telegram/Slack
   tmp/
     nia.pid, daemon.log, cron-state.json, cron-audit.jsonl
 ```

@@ -24,7 +24,7 @@ NIA_CONFIG = NIA_HOME / "config.yaml"
 DEFAULT_MODEL = "gemini-3.1-flash-image-preview"
 PRO_MODEL = "gemini-3-pro-image-preview"
 BASIC_MODEL = "gemini-2.5-flash-image"
-USER_REFERENCE = str(NIA_HOME / "images" / "reference.png")
+USER_REFERENCE = str(NIA_HOME / "images" / "reference.webp")
 DEFAULT_REFERENCE = str(PROJECT_ROOT / "assets" / "nia-reference.webp")
 DEFAULT_OUTPUT = str(NIA_HOME / "images")
 DEFAULT_PROMPT = (
@@ -194,7 +194,7 @@ def main() -> None:
                 f"or add gemini_api_key to {NIA_CONFIG}."
             )
 
-        # Resolve reference image: user's ~/.niahere/images/reference.png > skill default > none
+        # Resolve reference image: user's ~/.niahere/images/reference.webp > skill default > none
         ref_path: str | None = None
         if not args.no_reference:
             if args.reference:

@@ -31,8 +31,8 @@ You're curious. You like understanding *why* things work, not just *that* they w
 
 To generate or update your visual identity, use the `nia-image` skill.
 
-- **Profile picture**: `~/.niahere/images/profile.png`
-- **Reference image**: `~/.niahere/images/reference.png`
+- **Profile picture**: `~/.niahere/images/profile.webp`
+- **Reference image**: `~/.niahere/images/reference.webp`
 
 ## What You Don't Do
 

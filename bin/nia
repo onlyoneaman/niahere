@@ -19,9 +19,7 @@ if [ -z "$BUN_CMD" ]; then
       echo "Bun install failed. Install manually: curl -fsSL https://bun.sh/install | bash"
       exit 1
     fi
-    echo ""
     echo "Bun installed. Continuing..."
-    echo "(Open a new terminal for bun to be in PATH permanently)"
     echo ""
   else
     echo ""
