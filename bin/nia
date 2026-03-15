@@ -1,11 +1,22 @@
 #!/bin/sh
 if ! command -v bun >/dev/null 2>&1; then
   echo "niahere requires Bun runtime."
-  echo ""
-  echo "Install Bun:"
-  echo "  curl -fsSL https://bun.sh/install | bash"
-  echo ""
-  echo "Then run: nia $*"
-  exit 1
+  printf "Install Bun now? (y/n) "
+  read -r answer
+  if [ "$answer" = "y" ] || [ "$answer" = "Y" ]; then
+    curl -fsSL https://bun.sh/install | bash
+    export BUN_INSTALL="$HOME/.bun"
+    export PATH="$BUN_INSTALL/bin:$PATH"
+    if ! command -v bun >/dev/null 2>&1; then
+      echo "Bun install failed. Install manually: curl -fsSL https://bun.sh/install | bash"
+      exit 1
+    fi
+    echo "Bun installed. Continuing..."
+  else
+    echo ""
+    echo "Install manually: curl -fsSL https://bun.sh/install | bash"
+    echo "Then run: nia $*"
+    exit 1
+  fi
 fi
 exec bun "$(dirname "$0")/../src/cli/index.ts" "$@"

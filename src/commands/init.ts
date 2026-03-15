@@ -300,7 +300,7 @@ export async function runInit(): Promise<void> {
     const imagesDir = `${home}/images`;
     mkdirSync(imagesDir, { recursive: true });
     const hasUserReference = existsSync(`${imagesDir}/reference.png`);
-    const hasDefaultReference = existsSync(`${SKILL_ASSETS_DIR}/nia-reference.jpg`);
+    const hasDefaultReference = existsSync(`${SKILL_ASSETS_DIR}/nia-reference.webp`);
 
     if (geminiApiKey && !hasUserReference) {
       const setupVisual = await ask(rl, "\nGenerate a visual identity for your agent? (y/n)", "y");
@@ -342,10 +342,10 @@ export async function runInit(): Promise<void> {
         } else if (hasDefaultReference) {
           // No description — copy defaults
           const { copyFileSync } = await import("fs");
-          copyFileSync(`${SKILL_ASSETS_DIR}/nia-reference.jpg`, `${imagesDir}/reference.png`);
+          copyFileSync(`${SKILL_ASSETS_DIR}/nia-reference.webp`, `${imagesDir}/reference.png`);
           console.log(`  \u2713 copied default reference image`);
-          if (existsSync(`${SKILL_ASSETS_DIR}/nia-profile.jpg`)) {
-            copyFileSync(`${SKILL_ASSETS_DIR}/nia-profile.jpg`, `${imagesDir}/profile.png`);
+          if (existsSync(`${SKILL_ASSETS_DIR}/nia-profile.webp`)) {
+            copyFileSync(`${SKILL_ASSETS_DIR}/nia-profile.webp`, `${imagesDir}/profile.png`);
             console.log(`  \u2713 copied default profile picture`);
           }
         }

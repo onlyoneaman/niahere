@@ -22,15 +22,15 @@ Generate photorealistic images of Nia with consistent identity across different 
 
 The script looks for references in this order:
 1. `~/.niahere/images/reference.png` — user's custom reference (takes priority)
-2. `assets/nia-reference.jpg` — default shipped with niahere
+2. `assets/nia-reference.webp` — default shipped with niahere
 
 | Location | Purpose |
 |----------|---------|
 | `~/.niahere/images/reference.png` | User's reference image |
 | `~/.niahere/images/profile.png` | User's profile picture (for Telegram/Slack) |
 | `~/.niahere/images/` | Output directory for new generations |
-| `assets/nia-reference.jpg` | Default reference (fallback) |
-| `assets/nia-profile.jpg` | Default profile picture (fallback) |
+| `assets/nia-reference.webp` | Default reference (fallback) |
+| `assets/nia-profile.webp` | Default profile picture (fallback) |
 
 ## Generation Script
 
@@ -39,7 +39,7 @@ The script looks for references in this order:
 ### Basic Usage
 
 ```bash
-# With reference (default — uses assets/nia-reference.jpg)
+# With reference (default — uses assets/nia-reference.webp)
 python3 scripts/generate_image.py --prompt "your prompt here"
 
 # Without reference (for creating new base images)
@@ -58,7 +58,7 @@ python3 scripts/generate_image.py \
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--prompt` | Default Nia portrait | Image generation prompt |
-| `--reference` | `assets/nia-reference.jpg` | Reference image for identity |
+| `--reference` | `assets/nia-reference.webp` | Reference image for identity |
 | `--no-reference` | false | Generate without reference |
 | `--model` | `gemini-3.1-flash-image-preview` | Gemini model |
 | `--aspect-ratio` | `3:4` | Output ratio |
