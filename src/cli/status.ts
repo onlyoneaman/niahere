@@ -3,68 +3,346 @@ import { readState } from "../utils/logger";
 import { getConfig } from "../utils/config";
 import { localTime } from "../utils/time";
 import { Message, ActiveEngine, Job } from "../db/models";
+import type { RoomStats } from "../db/models/message";
 import { withDb } from "../db/connection";
+import { errMsg } from "../utils/errors";
 
-export async function statusCommand(): Promise<void> {
+type StatusOptions = {
+  json: boolean;
+  all: boolean;
+  roomLimit: number;
+};
+
+type JobStatusLine = {
+  name: string;
+  schedule: string;
+  enabled: boolean;
+  always: boolean;
+  scheduleType: "cron" | "interval" | "once";
+  status: "ok" | "error" | "running" | "never";
+  lastRun: string | null;
+  nextRunAt: string | null;
+  durationMs: number | null;
+  lastRunText: string;
+  nextRunText: string;
+  error?: string;
+};
+
+function parseStatusArgs(argv: string[]): StatusOptions {
+  const opts: StatusOptions = { json: false, all: false, roomLimit: 10 };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--json") {
+      opts.json = true;
+    } else if (arg === "--all") {
+      opts.all = true;
+    } else if (arg === "--rooms" && argv[i + 1]) {
+      const value = Number.parseInt(argv[i + 1], 10);
+      if (Number.isInteger(value) && value > 0) {
+        opts.roomLimit = value;
+        i += 1;
+      }
+    } else if (arg.startsWith("--rooms=")) {
+      const value = Number.parseInt(arg.slice(8), 10);
+      if (Number.isInteger(value) && value > 0) opts.roomLimit = value;
+    }
+  }
+  if (opts.all) opts.roomLimit = Number.MAX_SAFE_INTEGER;
+  return opts;
+}
+
+function maskToken(token: string | null): string {
+  return token ? `...${token.slice(-6)}` : "";
+}
+
+function safeDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function dateSortValue(value: string | null | undefined): number {
+  const date = safeDate(value);
+  return date ? date.getTime() : Number.MAX_SAFE_INTEGER;
+}
+
+function relativeTime(date: Date, now = new Date()): string {
+  const deltaMs = date.getTime() - now.getTime();
+  const totalSeconds = Math.round(Math.abs(deltaMs) / 1000);
+
+  if (totalSeconds < 5) return "just now";
+
+  const units: Array<[string, number]> = [
+    ["d", 24 * 60 * 60],
+    ["h", 60 * 60],
+    ["m", 60],
+    ["s", 1],
+  ];
+
+  const parts: string[] = [];
+  let secondsLeft = totalSeconds;
+  for (const [label, factor] of units) {
+    const amount = Math.floor(secondsLeft / factor);
+    if (amount > 0 && parts.length < 2) parts.push(`${amount}${label}`);
+    secondsLeft %= factor;
+  }
+
+  const text = parts.length > 0 ? parts.join(" ") : "1s";
+  return deltaMs > 0 ? `in ${text}` : `${text} ago`;
+}
+
+function formatTimeLine(date: string | null | undefined, now = new Date()): string {
+  const parsed = safeDate(date);
+  if (!parsed) return "unknown";
+  return `${relativeTime(parsed, now)} (${localTime(parsed)})`;
+}
+
+export async function statusCommand(argv: string[] = []): Promise<void> {
+  const options = parseStatusArgs(argv);
+  const now = new Date();
   const running = isRunning();
   const pid = readPid();
-  console.log(`nia: ${running ? `running (pid: ${pid})` : "stopped"}`);
-
   const config = getConfig();
-  if (config.telegram_bot_token) {
-    const masked = `...${config.telegram_bot_token.slice(-6)}`;
-    console.log(`telegram: ${running ? `active (${masked})` : `configured (${masked}, daemon stopped)`}`);
-  } else {
-    console.log("telegram: not configured");
-  }
+  const state = readState();
 
-  if (config.slack_bot_token) {
-    const masked = `...${config.slack_bot_token.slice(-6)}`;
-    console.log(`slack: ${running ? `active (${masked})` : `configured (${masked}, daemon stopped)`}`);
-  } else {
-    console.log("slack: not configured");
-  }
-
-  if (config.default_channel !== "telegram") {
-    console.log(`default channel: ${config.default_channel}`);
-  }
+  let jobs: Awaited<ReturnType<typeof Job.list>> = [];
+  let engines: Awaited<ReturnType<typeof ActiveEngine.list>> = [];
+  let rooms: RoomStats[] = [];
+  let dbError: unknown = null;
 
   try {
     await withDb(async () => {
-      const jobs = await Job.list();
-      if (jobs.length > 0) {
-        console.log("\nJobs:");
-        const state = readState();
-        for (const job of jobs) {
-          const info = state[job.name];
-          const status = info ? `${info.status} (last: ${localTime(new Date(info.lastRun))}, ${info.duration_ms}ms)` : "never run";
-          console.log(`  ${job.name}: ${job.enabled ? "enabled" : "disabled"} [${job.schedule}] — ${status}`);
-        }
-      }
-
-      const engines = await ActiveEngine.list();
-      console.log(`\nActive engines: ${engines.length === 0 ? "none" : ""}`);
-      for (const e of engines) {
-        console.log(`  ${e.room} (${e.channel}) since ${localTime(new Date(e.startedAt))}`);
-      }
-
-      const rooms = await Message.getRoomStats();
-      if (rooms.length > 0) {
-        console.log("\nChat rooms:");
-        for (const r of rooms) {
-          const last = r.lastActivity ? localTime(new Date(r.lastActivity)) : "never";
-          console.log(`  ${r.room}: ${r.messages} msgs, ${r.sessions} session${r.sessions !== 1 ? "s" : ""} (last: ${last})`);
-        }
-      }
+      jobs = await Job.list();
+      engines = await ActiveEngine.list();
+      rooms = await Message.getRoomStats();
     });
-  } catch {
-    const state = readState();
-    const entries = Object.entries(state);
-    if (entries.length > 0) {
-      console.log("\nJobs (from state file):");
-      for (const [name, info] of entries) {
-        console.log(`  ${name}: ${info.status} (last: ${localTime(new Date(info.lastRun))}, ${info.duration_ms}ms)`);
+  } catch (error) {
+    dbError = error;
+  }
+
+  const channels = {
+    telegram: {
+      configured: Boolean(config.telegram_bot_token),
+      status: !config.telegram_bot_token
+        ? "not configured"
+        : running
+          ? "active"
+          : "configured",
+      tokenSuffix: config.telegram_bot_token ? maskToken(config.telegram_bot_token) : null,
+    },
+    slack: {
+      configured: Boolean(config.slack_bot_token),
+      appTokenConfigured: Boolean(config.slack_app_token),
+      status: !config.slack_bot_token
+        ? "not configured"
+        : running
+          ? config.slack_app_token
+            ? "active"
+            : "configured (missing app token)"
+          : "configured",
+      tokenSuffix: config.slack_bot_token ? maskToken(config.slack_bot_token) : null,
+    },
+    defaultChannel: config.default_channel,
+  };
+
+  if (options.json) {
+    const sortedJobs = [...jobs].sort(
+      (a, b) =>
+        Number(b.enabled) - Number(a.enabled) ||
+        dateSortValue(a.nextRunAt) - dateSortValue(b.nextRunAt) ||
+        a.name.localeCompare(b.name),
+    );
+
+    const jobsPayload: JobStatusLine[] = sortedJobs.map((job) => {
+      const stateInfo = state[job.name];
+      const lastRun = stateInfo?.lastRun ? stateInfo.lastRun : job.lastRunAt ?? null;
+      return {
+        name: job.name,
+        schedule: job.schedule,
+        enabled: job.enabled,
+        always: job.always,
+        scheduleType: job.scheduleType,
+        status: stateInfo?.status ?? (job.lastRunAt ? "ok" : "never"),
+        lastRun: safeDate(lastRun)?.toISOString() ?? null,
+        nextRunAt: safeDate(job.nextRunAt)?.toISOString() ?? null,
+        durationMs: stateInfo?.duration_ms ?? null,
+        error: stateInfo?.error,
+        lastRunText: formatTimeLine(lastRun, now),
+        nextRunText: formatTimeLine(job.nextRunAt, now),
+      };
+    });
+
+    const fallbackJobs = dbError
+      ? Object.entries(state)
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([name, info]) => {
+            const lastRun = safeDate(info.lastRun)?.toISOString() ?? null;
+            return {
+              name,
+              schedule: "unavailable",
+              enabled: false,
+              always: false,
+              scheduleType: "cron",
+              status: info.status,
+              lastRun,
+              nextRunAt: null,
+              durationMs: info.duration_ms,
+              error: info.error,
+              lastRunText: formatTimeLine(lastRun, now),
+              nextRunText: "unknown",
+            };
+          })
+      : [];
+
+    const engineRows = engines
+      .map((engine) => ({
+        room: engine.room,
+        channel: engine.channel,
+        startedAt: safeDate(engine.startedAt)?.toISOString() ?? null,
+        lastPing: safeDate(engine.lastPing)?.toISOString() ?? null,
+        startedAgo: formatTimeLine(engine.startedAt, now),
+        lastPingAgo: formatTimeLine(engine.lastPing, now),
+      }))
+      .sort((a, b) => dateSortValue(b.startedAt) - dateSortValue(a.startedAt));
+
+    const roomRows = rooms
+      .map((room) => ({
+        room: room.room,
+        sessions: room.sessions,
+        messages: room.messages,
+        lastActivity: safeDate(room.lastActivity)?.toISOString() ?? null,
+        lastActivityAgo: formatTimeLine(room.lastActivity, now),
+      }))
+      .sort((a, b) => b.messages - a.messages || dateSortValue(b.lastActivity) - dateSortValue(a.lastActivity));
+
+    const report = {
+      daemon: {
+        running,
+        pid: running ? pid : null,
+        state: running ? "running" : "stopped",
+      },
+      channels,
+      jobs: dbError ? fallbackJobs : jobsPayload,
+      activeEngines: engineRows,
+      rooms: roomRows,
+      counts: {
+        jobs: (dbError ? fallbackJobs.length : jobsPayload.length),
+        activeEngines: engineRows.length,
+        rooms: roomRows.length,
+      },
+      db: {
+        accessible: dbError === null,
+        error: dbError ? errMsg(dbError) : null,
+      },
+    };
+
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+
+  console.log(`nia: ${running ? `running (pid: ${pid})` : "stopped"}`);
+  console.log("Channels:");
+  console.log(
+    `  telegram: ${channels.telegram.status}${
+      channels.telegram.tokenSuffix ? ` (${channels.telegram.tokenSuffix})` : ""
+    }`,
+  );
+  console.log(
+    `  slack: ${channels.slack.status}${
+      channels.slack.tokenSuffix ? ` (${channels.slack.tokenSuffix})` : ""
+    }${channels.slack.configured && !channels.slack.appTokenConfigured ? " (app token needed)" : ""}`,
+  );
+  if (channels.defaultChannel !== "telegram") {
+    console.log(`  default channel: ${channels.defaultChannel}`);
+  }
+
+  if (dbError) {
+    console.log(`  db: unavailable (${errMsg(dbError)})`);
+  } else {
+    console.log("  db: accessible");
+  }
+
+  if (!dbError) {
+    if (jobs.length > 0) {
+      console.log("\nJobs:");
+      const sortedJobs = [...jobs].sort(
+        (a, b) =>
+          Number(b.enabled) - Number(a.enabled) ||
+          dateSortValue(a.nextRunAt) - dateSortValue(b.nextRunAt) ||
+          a.name.localeCompare(b.name),
+      );
+
+      for (const job of sortedJobs) {
+        const stateInfo = state[job.name];
+        const status = stateInfo?.status ?? (job.lastRunAt ? "ok" : "never");
+        const lastRun = stateInfo?.lastRun ?? job.lastRunAt ?? null;
+        const nextRun = job.nextRunAt ?? null;
+        const stale =
+          job.enabled &&
+          status !== "running" &&
+          nextRun !== null &&
+          safeDate(nextRun) !== null &&
+          safeDate(nextRun)!.getTime() <= now.getTime() &&
+          !stateInfo;
+
+        const statusIcon = status === "ok" ? "\u2713" : status === "error" ? "\u2717" : status === "running" ? "\u21bb" : "\u2217";
+        const durationText = stateInfo?.duration_ms === undefined ? "n/a" : `${stateInfo.duration_ms}ms`;
+        const nextText = nextRun ? formatTimeLine(nextRun, now) : "unknown";
+        const lastText = lastRun ? formatTimeLine(lastRun, now) : "never";
+        const staleText = stale ? "  ⚠ stale" : "";
+
+        console.log(`  ${job.enabled ? "\u25cf" : "\u25cb"} ${job.name.padEnd(20)} ${job.enabled ? "enabled" : "disabled"}`);
+        console.log(`      ${statusIcon} ${status}   last: ${lastText}   next: ${nextText}   duration: ${durationText}${staleText}`);
       }
+    } else {
+      console.log("\nJobs: none");
     }
+
+    console.log(`\nActive engines: ${engines.length === 0 ? "none" : ""}`);
+    for (const engine of engines.sort((a, b) => dateSortValue(a.startedAt) - dateSortValue(b.startedAt))) {
+      const started = formatTimeLine(engine.startedAt, now);
+      const ping = formatTimeLine(engine.lastPing, now);
+      console.log(`  ${engine.room} (${engine.channel}) • started ${started} • last ping ${ping}`);
+    }
+
+    const sortedRooms = [...rooms].sort(
+      (a, b) =>
+        b.messages - a.messages ||
+        dateSortValue(b.lastActivity) - dateSortValue(a.lastActivity) ||
+        a.room.localeCompare(b.room),
+    );
+
+    if (sortedRooms.length > 0) {
+      console.log("\nChat rooms:");
+      const toShow = Math.min(sortedRooms.length, options.roomLimit);
+      for (const room of sortedRooms.slice(0, toShow)) {
+        const last = formatTimeLine(room.lastActivity, now);
+        const sessionsText = `${room.sessions} session${room.sessions === 1 ? "" : "s"}`;
+        console.log(`  ${room.room}  ${room.messages} msgs, ${sessionsText} (last: ${last})`);
+      }
+      if (toShow < sortedRooms.length) {
+        console.log(`  ... (+${sortedRooms.length - toShow} more, use --all or --rooms N)`);
+      }
+    } else {
+      console.log("\nChat rooms: none");
+    }
+  } else {
+    const fallbackEntries = Object.entries(state).sort((a, b) => a[0].localeCompare(b[0]));
+    if (fallbackEntries.length > 0) {
+      console.log("\nJobs (from state file):");
+      for (const [name, info] of fallbackEntries) {
+        const last = formatTimeLine(info.lastRun, now);
+        const icon = info.status === "ok" ? "\u2713" : info.status === "error" ? "\u2717" : "\u2217";
+        console.log(`  ${icon} ${name}: ${info.status} (last: ${last}, ${info.duration_ms}ms)`);
+      }
+    } else {
+      console.log("\nJobs: unavailable (no job state in file)");
+    }
+  }
+
+  if (dbError) {
+    console.log("Tip: start with --json for machine-readable output.");
+  } else {
+    console.log("Tip: use --rooms N, --all, or --json for alternate views.");
   }
 }

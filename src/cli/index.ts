@@ -109,7 +109,7 @@ switch (command) {
   }
 
   case "status": {
-    await statusCommand();
+    await statusCommand(process.argv.slice(3));
     break;
   }
 
@@ -262,7 +262,7 @@ switch (command) {
     console.log("  init                — setup nia");
     console.log("  start / stop        — daemon + service control");
     console.log("  restart             — restart daemon");
-    console.log("  status              — show daemon, jobs, channels");
+    console.log("  status [--json --rooms N --all]  — show daemon, jobs, channels");
     console.log("  chat [-r|--resume]  — interactive chat");
     console.log("  run <prompt>        — one-shot execution");
     console.log("  history [room]      — recent messages");
