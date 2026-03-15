@@ -1,5 +1,4 @@
 import { getConfig, updateRawConfig } from "../utils/config";
-import { withDb } from "../db/connection";
 import { getPaths } from "../utils/paths";
 import { errMsg } from "../utils/errors";
 import { fail } from "../utils/cli";
@@ -21,10 +20,8 @@ export async function sendCommand(): Promise<void> {
   const { sendMessage } = await import("../mcp/tools");
 
   try {
-    await withDb(async () => {
-      const result = await sendMessage(message, channel);
-      console.log(result);
-    });
+    const result = await sendMessage(message, channel);
+    console.log(result);
   } catch (err) {
     fail(`Failed to send: ${errMsg(err)}`);
   }

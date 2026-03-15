@@ -228,7 +228,10 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
           a.name.localeCompare(b.name),
       );
 
-      for (const job of sortedJobs) {
+      // Hide completed one-shot jobs
+      const visibleJobs = sortedJobs.filter((j) => !(j.scheduleType === "once" && !j.enabled && j.lastRunAt));
+
+      for (const job of visibleJobs) {
         const stateInfo = state[job.name];
         const status = stateInfo?.status ?? (job.lastRunAt ? "ok" : "never");
         const lastRun = stateInfo?.lastRun ?? job.lastRunAt ?? null;

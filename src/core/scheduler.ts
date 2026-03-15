@@ -99,6 +99,12 @@ async function tick(): Promise<void> {
     await Job.markRun(job.name, nextRun).catch((err) => {
       log.error({ err, job: job.name }, "scheduler: failed to update next_run_at");
     });
+
+    // Auto-disable one-shot jobs after execution
+    if (job.scheduleType === "once") {
+      await Job.update(job.name, { enabled: false }).catch(() => {});
+      log.info({ job: job.name }, "scheduler: one-shot job completed, auto-disabled");
+    }
   }
 }
 
