@@ -20,13 +20,20 @@ if ! command -v bun >/dev/null 2>&1; then
   fi
 fi
 
-# Resolve symlink to find the actual package directory
-SCRIPT="$0"
-while [ -L "$SCRIPT" ]; do
-  DIR="$(cd "$(dirname "$SCRIPT")" && pwd)"
-  SCRIPT="$(readlink "$SCRIPT")"
-  case "$SCRIPT" in /*) ;; *) SCRIPT="$DIR/$SCRIPT" ;; esac
-done
-PACKAGE_DIR="$(cd "$(dirname "$SCRIPT")/.." && pwd)"
+# Resolve the real path of this script (follows all symlinks)
+REAL="$(realpath "$0" 2>/dev/null)" || REAL="$(perl -MCwd -e 'print Cwd::realpath($ARGV[0])' "$0" 2>/dev/null)" || REAL="$0"
+# Go up from bin/ to package root
+PACKAGE_DIR="$(dirname "$REAL")/.."
+ENTRY="$PACKAGE_DIR/src/cli/index.ts"
 
-exec bun "$PACKAGE_DIR/src/cli/index.ts" "$@"
+if [ ! -f "$ENTRY" ]; then
+  # Fallback: try npm global root
+  ENTRY="$(npm root -g 2>/dev/null)/niahere/src/cli/index.ts"
+fi
+
+if [ ! -f "$ENTRY" ]; then
+  echo "Error: could not find niahere. Try: npm i -g niahere"
+  exit 1
+fi
+
+exec bun "$ENTRY" "$@"
