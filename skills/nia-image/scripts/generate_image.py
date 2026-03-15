@@ -25,7 +25,7 @@ DEFAULT_MODEL = "gemini-3.1-flash-image-preview"
 PRO_MODEL = "gemini-3-pro-image-preview"
 BASIC_MODEL = "gemini-2.5-flash-image"
 USER_REFERENCE = str(NIA_HOME / "images" / "reference.png")
-DEFAULT_REFERENCE = str(PROJECT_ROOT / "assets" / "nia-reference.png")
+DEFAULT_REFERENCE = str(PROJECT_ROOT / "assets" / "nia-reference.jpg")
 DEFAULT_OUTPUT = str(NIA_HOME / "images")
 DEFAULT_PROMPT = (
     "Generate a warm, natural portrait matching the reference image. "
