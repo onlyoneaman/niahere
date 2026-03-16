@@ -162,6 +162,17 @@ export async function runDaemon(): Promise<void> {
   writePid(process.pid);
   log.info({ pid: process.pid }, "daemon started");
 
+  // Check for updates (non-blocking, logged only)
+  try {
+    const { checkForUpdate } = await import("../utils/update");
+    const { version } = await import("../../package.json");
+    const update = await checkForUpdate(version);
+    if (update) {
+      log.warn({ current: update.current, latest: update.latest }, "update available — run `npm i -g niahere` to update");
+    }
+  } catch {}
+
+
   // Startup recovery
   try {
     await runMigrations();

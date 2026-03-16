@@ -7,6 +7,7 @@ import { Message, ActiveEngine, Job } from "../db/models";
 import type { ScheduleType, JobStateStatus, RoomStats } from "../types";
 import { withDb } from "../db/connection";
 import { errMsg } from "../utils/errors";
+import { checkForUpdate } from "../utils/update";
 
 type StatusOptions = {
   json: boolean;
@@ -306,4 +307,13 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
   } else {
     console.log("Tip: use --rooms N, --all, or --json for alternate views.");
   }
+
+  // Check for updates (non-blocking, cached 24h)
+  try {
+    const { version } = await import("../../package.json");
+    const update = await checkForUpdate(version);
+    if (update) {
+      console.log(`\n⚠ Update available: ${update.current} → ${update.latest} (run \`npm i -g niahere\` to update)`);
+    }
+  } catch {}
 }
