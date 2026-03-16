@@ -219,7 +219,7 @@ switch (command) {
   }
 
   case "slack": {
-    slackCommand();
+    await slackCommand();
     break;
   }
 

@@ -91,6 +91,28 @@ export async function slackCommand(): Promise<void> {
         console.log(`  Workspace: ${config.channels.slack.workspace} (${config.channels.slack.workspace_url})`);
         console.log(`  Bot: @${config.channels.slack.bot_name} (${config.channels.slack.bot_user_id})`);
       }
+      // Verify auth is working
+      try {
+        const resp = await fetch("https://slack.com/api/auth.test", {
+          headers: { Authorization: `Bearer ${config.channels.slack.bot_token}` },
+        });
+        const data = (await resp.json()) as Record<string, unknown>;
+        if (data.ok) {
+          console.log(`  Auth: \u2713 valid`);
+          // Backfill workspace info if missing
+          if (!config.channels.slack.workspace) {
+            const enriched = await enrichSlackConfig(config.channels.slack.bot_token);
+            if (Object.keys(enriched).length > 0) {
+              updateRawConfig({ channels: { slack: enriched } });
+              console.log("  (workspace info backfilled)");
+            }
+          }
+        } else {
+          console.log(`  Auth: \u2717 ${data.error}`);
+        }
+      } catch (err) {
+        console.log(`  Auth: \u2717 could not reach Slack API`);
+      }
     } else {
       console.log("Slack: not configured");
     }
