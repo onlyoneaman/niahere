@@ -13,12 +13,15 @@ class SlackChannel implements Channel {
   private app: App | null = null;
   private defaultChannelId: string | null = null;
   private dmUserId: string | null = null;
+  /** Timestamps of messages Nia posted proactively (used to detect replies to our own messages) */
+  private outboundTs = new Set<string>();
 
   async sendMessage(text: string): Promise<void> {
     if (!this.app) throw new Error("Slack not started");
     const target = this.defaultChannelId || this.dmUserId;
     if (!target) throw new Error("No Slack recipient — DM the bot first, or set slack_channel_id in config");
-    await this.app.client.chat.postMessage({ channel: target, text });
+    const result = await this.app.client.chat.postMessage({ channel: target, text });
+    if (result.ts) this.outboundTs.add(result.ts);
   }
 
   async sendMedia(data: Buffer, mimeType: string, filename?: string): Promise<void> {
@@ -216,7 +219,8 @@ class SlackChannel implements Channel {
       const isMention = botUserId && msg.text?.includes(`<@${botUserId}>`);
       const hasFiles = msg.files && msg.files.length > 0;
 
-      // In threads where Nia already has a session (in-memory or DB), listen without @mention
+      // In threads where Nia already has a session (in-memory or DB), listen without @mention.
+      // Also catches replies to messages Nia posted proactively (outbound tracking + bot-authored fallback).
       let isActiveThread = false;
       if (!isDm && msg.thread_ts) {
         const channelName = await resolveChannelName(app, msg.channel);
@@ -229,6 +233,30 @@ class SlackChannel implements Channel {
           const latestRoom = roomName(threadKey, await Session.getLatestRoomIndex(prefix));
           const sessionId = await Session.getLatest(latestRoom);
           isActiveThread = sessionId !== null;
+        }
+
+        // Fast path: we tracked this ts when we sent it
+        if (!isActiveThread && self.outboundTs.has(msg.thread_ts)) {
+          isActiveThread = true;
+        }
+
+        // Fallback: check if the thread parent was posted by the bot
+        if (!isActiveThread && botUserId) {
+          try {
+            const parent = await client.conversations.replies({
+              channel: msg.channel,
+              ts: msg.thread_ts,
+              limit: 1,
+              inclusive: true,
+            });
+            const parentMsg = parent.messages?.[0];
+            if (parentMsg && (parentMsg.user === botUserId || parentMsg.bot_id)) {
+              isActiveThread = true;
+              log.debug({ channel: msg.channel, thread_ts: msg.thread_ts }, "thread parent is bot-authored, activating");
+            }
+          } catch (err) {
+            log.warn({ err, channel: msg.channel, thread_ts: msg.thread_ts }, "failed to check thread parent");
+          }
         }
       }
 
