@@ -58,6 +58,18 @@ nia channels on / off          — enable/disable channels
 - **Skills** — loads skills from `~/.shared/skills/`, `~/.claude/skills/`, `~/.codex/skills/`, and bundled skills
 - **Dev mode** — `nia channels off` disables Telegram/Slack for local development without conflicts
 
+## Updating
+
+```bash
+npm i -g niahere         # pulls the latest version from npm
+```
+
+To publish a new version after making changes:
+
+```bash
+npm run release          # bumps patch version, publishes to npm, pushes git tag
+```
+
 ## Architecture
 
 All config and data lives in `~/.niahere/`:

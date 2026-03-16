@@ -176,6 +176,16 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 - Types only in `src/types/`, constants only in `src/constants/`, utils in `src/utils/`
 - Local timestamps via `localTime()` — never raw `toISOString()` for display
 
+## Releasing
+
+After pushing changes, **always bump the version and publish** so that `npm i -g niahere` picks up the latest on other machines:
+
+```bash
+npm run release          # npm version patch && npm publish && git push
+```
+
+This bumps the patch version, publishes to npm, and pushes the version commit + tag. Users update with `npm i -g niahere`.
+
 ## Keeping Docs Updated
 
 When making changes, keep these files in sync:
