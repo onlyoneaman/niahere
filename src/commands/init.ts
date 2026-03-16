@@ -8,6 +8,7 @@ import { runMigrations } from "../db/migrate";
 import { closeDb } from "../db/connection";
 import { startDaemon, isRunning } from "../core/daemon";
 import { errMsg } from "../utils/errors";
+import { enrichSlackConfig } from "../cli/channels";
 import yaml from "js-yaml";
 
 const DEFAULTS_DIR = resolve(import.meta.dir, "../../defaults/self");
@@ -396,6 +397,9 @@ export async function runInit(): Promise<void> {
     if (slackBotToken && slackAppToken) {
       const sl: Record<string, unknown> = { bot_token: slackBotToken, app_token: slackAppToken };
       if (slackChannelId) sl.channel_id = slackChannelId;
+      // Enrich with workspace/bot info from auth.test
+      const enriched = await enrichSlackConfig(slackBotToken);
+      Object.assign(sl, enriched);
       channels.slack = sl;
     }
     if (slackBotToken && !telegramToken) {

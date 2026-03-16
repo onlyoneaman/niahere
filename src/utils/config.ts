@@ -19,7 +19,7 @@ const DEFAULTS: Config = {
     enabled: true,
     default: "telegram",
     telegram: { bot_token: null, chat_id: null, open: false },
-    slack: { bot_token: null, app_token: null, channel_id: null, dm_user_id: null },
+    slack: { bot_token: null, app_token: null, channel_id: null, dm_user_id: null, bot_user_id: null, bot_name: null, workspace: null, workspace_id: null, workspace_url: null },
   },
 };
 
@@ -127,6 +127,17 @@ export function loadConfig(): Config {
   const slDmUserId =
     typeof chSl.dm_user_id === "string" ? chSl.dm_user_id : null;
 
+  const slBotUserId =
+    typeof chSl.bot_user_id === "string" ? chSl.bot_user_id : null;
+  const slBotName =
+    typeof chSl.bot_name === "string" ? chSl.bot_name : null;
+  const slWorkspace =
+    typeof chSl.workspace === "string" ? chSl.workspace : null;
+  const slWorkspaceId =
+    typeof chSl.workspace_id === "string" ? chSl.workspace_id : null;
+  const slWorkspaceUrl =
+    typeof chSl.workspace_url === "string" ? chSl.workspace_url : null;
+
   return {
     model,
     timezone,
@@ -138,7 +149,7 @@ export function loadConfig(): Config {
       enabled: channelsEnabled,
       default: defaultChannel,
       telegram: { bot_token: tgBotToken, chat_id: tgChatId, open: tgOpen },
-      slack: { bot_token: slBotToken, app_token: slAppToken, channel_id: slChannelId, dm_user_id: slDmUserId },
+      slack: { bot_token: slBotToken, app_token: slAppToken, channel_id: slChannelId, dm_user_id: slDmUserId, bot_user_id: slBotUserId, bot_name: slBotName, workspace: slWorkspace, workspace_id: slWorkspaceId, workspace_url: slWorkspaceUrl },
     },
   };
 }

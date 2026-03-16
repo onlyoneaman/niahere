@@ -9,6 +9,11 @@ export interface SlackConfig {
   app_token: string | null;
   channel_id: string | null;
   dm_user_id: string | null;
+  bot_user_id: string | null;
+  bot_name: string | null;
+  workspace: string | null;
+  workspace_id: string | null;
+  workspace_url: string | null;
 }
 
 export interface ChannelsConfig {
