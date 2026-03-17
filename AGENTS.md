@@ -93,6 +93,7 @@ skills/
   llms-txt/              # Create/improve llms.txt for LLM-aware content indexing
   github-link-repo-explorer/  # Clone and explore GitHub repos from links
   pr-reviewer/           # Language-aware PR review (design, security, performance, idioms)
+  frontend-design/       # Anti-AI-slop UI design (typography, color, layout, accessibility)
 tests/
   core/                  # Daemon, runner, scheduler tests
   chat/                  # Identity, engine tests
