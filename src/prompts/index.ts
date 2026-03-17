@@ -35,7 +35,12 @@ export function getEnvironmentPrompt(): string {
 }
 
 export function getModePrompt(mode: Mode): string {
-  return loadPrompt(mode === "chat" ? "mode-chat.md" : "mode-job.md");
+  const parts: string[] = [];
+  const common = loadPrompt("mode-common.md");
+  if (common) parts.push(common);
+  const specific = loadPrompt(mode === "chat" ? "mode-chat.md" : "mode-job.md");
+  if (specific) parts.push(specific);
+  return parts.join("\n\n");
 }
 
 export function getChannelPrompt(channel: string): string {

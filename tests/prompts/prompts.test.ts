@@ -18,16 +18,32 @@ afterEach(() => {
 });
 
 describe("getModePrompt", () => {
-  test("returns chat mode prompt", () => {
+  test("returns chat mode prompt with common standards", () => {
     const prompt = getModePrompt("chat");
+    expect(prompt).toContain("Standards");
     expect(prompt).toContain("Chat");
     expect(prompt).toContain("conversational");
   });
 
-  test("returns job mode prompt", () => {
+  test("returns job mode prompt with common standards", () => {
     const prompt = getModePrompt("job");
+    expect(prompt).toContain("Standards");
     expect(prompt).toContain("Job");
     expect(prompt).toContain("terse");
+  });
+
+  test("common standards include code editing, frontend, and git safety", () => {
+    const prompt = getModePrompt("chat");
+    expect(prompt).toContain("Code editing");
+    expect(prompt).toContain("Frontend & UI");
+    expect(prompt).toContain("Git safety");
+  });
+
+  test("common standards apply to job mode too", () => {
+    const prompt = getModePrompt("job");
+    expect(prompt).toContain("Code editing");
+    expect(prompt).toContain("Frontend & UI");
+    expect(prompt).toContain("Git safety");
   });
 });
 
