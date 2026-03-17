@@ -136,10 +136,58 @@ switch (command) {
     if (prompt) {
       const { createChatEngine } = await import("../chat/engine");
       const { getMcpServers } = await import("../mcp");
+      const DIM = "\x1b[2m";
+      const RST = "\x1b[0m";
+      const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+      let frame = 0;
+      let statusText = "thinking";
+      let spinTimer: ReturnType<typeof setInterval> | null = null;
+      let streamedLen = 0;
+      let streaming = false;
+
+      const renderSpinner = () => {
+        process.stderr.write(`\x1b[2K\r${DIM}  ${FRAMES[frame]} ${statusText}${RST}`);
+        frame = (frame + 1) % FRAMES.length;
+      };
+
       await withDb(async () => {
         const engine = await createChatEngine({ room: "cli-run", channel: "terminal", resume: false, mcpServers: getMcpServers() });
-        const { result } = await engine.send(prompt);
-        console.log(result.trim());
+        spinTimer = setInterval(renderSpinner, 80);
+        renderSpinner();
+
+        const { result, costUsd, turns } = await engine.send(prompt, {
+          onStream(textSoFar) {
+            if (!streaming) {
+              if (spinTimer) { clearInterval(spinTimer); spinTimer = null; }
+              process.stderr.write("\x1b[2K\r");
+              streaming = true;
+            }
+            const chunk = textSoFar.slice(streamedLen);
+            if (chunk) { process.stdout.write(chunk); streamedLen = textSoFar.length; }
+          },
+          onActivity(text) {
+            if (!streaming) statusText = text;
+          },
+        });
+
+        if (spinTimer) { clearInterval(spinTimer); spinTimer = null; }
+
+        if (!streaming && result.trim()) {
+          process.stderr.write("\x1b[2K\r");
+          process.stdout.write(result.trim());
+        } else if (streaming) {
+          const rest = result.slice(streamedLen);
+          if (rest.trim()) process.stdout.write(rest);
+        } else {
+          process.stderr.write("\x1b[2K\r");
+        }
+
+        const costStr = costUsd > 0 ? `$${costUsd.toFixed(4)}` : "";
+        const turnsStr = turns > 0 ? `${turns} turn${turns !== 1 ? "s" : ""}` : "";
+        const meta = [costStr, turnsStr].filter(Boolean).join(" · ");
+        if (meta) process.stderr.write(`\n${DIM}${meta}${RST}`);
+        process.stdout.write("\n");
+
         engine.close();
       });
     } else {
