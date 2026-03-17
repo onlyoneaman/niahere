@@ -4,6 +4,7 @@ import { homedir } from "os";
 import yaml from "js-yaml";
 import { getNiaHome, getPaths } from "../utils/paths";
 import { getEnvironmentPrompt, getModePrompt, getChannelPrompt } from "../prompts";
+import { log } from "../utils/log";
 import type { Mode } from "../types";
 
 // niahere project root (resolved from this file's location)
@@ -51,7 +52,12 @@ function scanSkills(): { name: string; description: string }[] {
       if (!fmMatch) continue;
 
       let meta: Record<string, unknown> = {};
-      try { meta = (yaml.load(fmMatch[1]) as Record<string, unknown>) || {}; } catch { continue; }
+      try {
+        meta = (yaml.load(fmMatch[1]) as Record<string, unknown>) || {};
+      } catch (err) {
+        log.warn({ err, skill: entry.name, path: skillFile }, "failed to parse skill metadata, skipping");
+        continue;
+      }
       const name = (typeof meta.name === "string" ? meta.name : "") || entry.name;
 
       if (seen.has(name)) continue;

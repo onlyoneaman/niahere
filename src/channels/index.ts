@@ -12,12 +12,17 @@ export function registerAllChannels(): void {
   registerChannel(() => createSlackChannel());
 }
 
-export async function startChannels(): Promise<Channel[]> {
+export interface StartResult {
+  started: Channel[];
+  failed: string[];
+}
+
+export async function startChannels(): Promise<StartResult> {
   const pending = getFactories()
     .map((factory) => factory())
     .filter((ch): ch is Channel => ch !== null);
 
-  if (pending.length === 0) return [];
+  if (pending.length === 0) return { started: [], failed: [] };
 
   const results = await Promise.allSettled(
     pending.map(async (channel) => {
@@ -26,19 +31,25 @@ export async function startChannels(): Promise<Channel[]> {
     }),
   );
 
-  const channels: Channel[] = [];
+  const started: Channel[] = [];
+  const failed: string[] = [];
   for (let i = 0; i < results.length; i++) {
     const result = results[i];
     if (result.status === "fulfilled") {
-      channels.push(result.value);
+      started.push(result.value);
       trackStarted(result.value);
       log.info({ channel: result.value.name }, "channel started");
     } else {
+      failed.push(pending[i].name);
       log.error({ err: result.reason, channel: pending[i].name }, "channel failed to start");
     }
   }
 
-  return channels;
+  if (failed.length > 0) {
+    log.warn({ failed }, "some channels failed to start");
+  }
+
+  return { started, failed };
 }
 
 export async function stopChannels(channels: Channel[]): Promise<void> {

@@ -68,9 +68,11 @@ class TelegramChannel implements Channel {
         const prefix = roomPrefix(chatId);
         const idx = await Session.getLatestRoomIndex(prefix);
         const room = roomName(chatId, idx);
+        log.info({ chatId, room }, "telegram: creating chat engine");
         const engine = await createChatEngine({ room, channel: "telegram", resume: true, mcpServers: getMcpServers() });
         state = { engine, roomIndex: idx, lock: Promise.resolve() };
         chats.set(chatId, state);
+        log.info({ chatId, room, activeSessions: chats.size }, "telegram: engine ready");
       }
       return state;
     }
@@ -100,6 +102,8 @@ class TelegramChannel implements Channel {
         fn().catch((err) => log.error({ err, chatId }, "unhandled error in locked handler"));
         return;
       }
+      const queued = state.lock !== Promise.resolve();
+      if (queued) log.debug({ chatId }, "telegram: message queued behind active lock");
       state.lock = state.lock.then(fn, fn);
     }
 

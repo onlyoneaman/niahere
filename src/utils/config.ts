@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import yaml from "js-yaml";
 import { getPaths } from "./paths";
@@ -186,6 +186,10 @@ export function updateRawConfig(fields: Record<string, unknown>): void {
   deepMerge(raw, fields);
   const dir = dirname(config);
   mkdirSync(dir, { recursive: true });
+  // Back up current config before overwriting
+  if (existsSync(config)) {
+    copyFileSync(config, join(dir, "config.yaml.bak"));
+  }
   // Write to temp file then rename for atomic update (prevents corruption on crash)
   const tmp = join(dir, `.config.yaml.tmp.${process.pid}`);
   writeFileSync(tmp, yaml.dump(raw, { lineWidth: -1 }));

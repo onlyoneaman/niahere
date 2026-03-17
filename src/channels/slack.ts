@@ -94,9 +94,11 @@ class SlackChannel implements Channel {
       // daemon restarts (otherwise getState falls back to the old room).
       await Session.create(`placeholder-${room}`, room);
 
+      log.info({ key, room }, "slack: creating chat engine");
       const engine = await createChatEngine({ room, channel: "slack", resume: false, mcpServers: getMcpServers() });
       const state: ChatState = { engine, roomIndex: newIdx, lock: Promise.resolve() };
       chats.set(key, state);
+      log.info({ key, room, activeSessions: chats.size }, "slack: engine ready");
       return state;
     }
 
@@ -106,6 +108,8 @@ class SlackChannel implements Channel {
         fn().catch((err) => log.error({ err, key }, "unhandled error in locked handler"));
         return;
       }
+      const queued = state.lock !== Promise.resolve();
+      if (queued) log.debug({ key }, "slack: message queued behind active lock");
       state.lock = state.lock.then(fn, fn);
     }
 
@@ -347,7 +351,8 @@ class SlackChannel implements Channel {
 
       withLock(key, async () => {
         // Add thinking reaction inside the lock so cleanup is guaranteed
-        await client.reactions.add({ channel: msg.channel, timestamp: msg.ts, name: "thinking_face" }).catch(() => {});
+        await client.reactions.add({ channel: msg.channel, timestamp: msg.ts, name: "thinking_face" })
+          .catch((err) => log.debug({ err, channel: msg.channel }, "slack: failed to add thinking reaction"));
 
         try {
           const { result } = await state.engine.send(text, {
@@ -390,7 +395,8 @@ class SlackChannel implements Channel {
             await say(`[error] ${errText}`);
           }
         } finally {
-          await client.reactions.remove({ channel: msg.channel, timestamp: msg.ts, name: "thinking_face" }).catch(() => {});
+          await client.reactions.remove({ channel: msg.channel, timestamp: msg.ts, name: "thinking_face" })
+            .catch((err) => log.debug({ err, channel: msg.channel }, "slack: failed to remove thinking reaction"));
         }
       });
     });

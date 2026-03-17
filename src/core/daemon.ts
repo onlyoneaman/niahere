@@ -46,6 +46,7 @@ export function isRunning(): boolean {
     process.kill(pid, 0);
     return true;
   } catch {
+    log.warn({ stalePid: pid }, "removing stale pid file (process not running)");
     removePid();
     return false;
   }
@@ -212,7 +213,8 @@ export async function runDaemon(): Promise<void> {
   let channels: Channel[] = [];
   const config = getConfig();
   if (config.channels.enabled) {
-    channels = await startChannels();
+    const result = await startChannels();
+    channels = result.started;
   } else {
     log.info("channels disabled (channels_enabled: false)");
   }

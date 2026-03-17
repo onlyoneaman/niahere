@@ -17,11 +17,11 @@ describe("startChannels", () => {
     clearStarted();
   });
 
-  test("returns empty array when no channels are configured", async () => {
+  test("returns empty result when no channels are configured", async () => {
     // With no tokens configured, factories return null
-    const channels = await startChannels();
-    expect(Array.isArray(channels)).toBe(true);
-    // May be empty if no tokens are set
+    const result = await startChannels();
+    expect(Array.isArray(result.started)).toBe(true);
+    expect(Array.isArray(result.failed)).toBe(true);
   });
 });
 
