@@ -134,8 +134,6 @@ class TelegramChannel implements Channel {
       try {
         const { result } = await state.engine.send(text, {}, attachments);
 
-        clearInterval(typingInterval);
-
         const reply = result.trim() || "(no response)";
         try {
           await bot.api.sendMessage(chatId, reply, { parse_mode: "MarkdownV2" });
@@ -145,11 +143,11 @@ class TelegramChannel implements Channel {
 
         log.info({ chatId, chars: result.length }, "telegram reply sent");
       } catch (err) {
-        clearInterval(typingInterval);
-
         const errText = err instanceof Error ? err.message : String(err);
         log.error({ err, chatId }, "telegram message processing failed");
         await bot.api.sendMessage(chatId, `[error] ${errText}`).catch(() => {});
+      } finally {
+        clearInterval(typingInterval);
       }
     }
 

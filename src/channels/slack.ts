@@ -345,18 +345,16 @@ class SlackChannel implements Channel {
 
       const state = await getState(key);
 
-      // Add thinking reaction while processing
-      await client.reactions.add({ channel: msg.channel, timestamp: msg.ts, name: "thinking_face" }).catch(() => {});
-
       withLock(key, async () => {
+        // Add thinking reaction inside the lock so cleanup is guaranteed
+        await client.reactions.add({ channel: msg.channel, timestamp: msg.ts, name: "thinking_face" }).catch(() => {});
+
         try {
           const { result } = await state.engine.send(text, {
             onActivity(status) {
               log.debug({ status }, "slack engine activity");
             },
           }, attachments);
-
-          await client.reactions.remove({ channel: msg.channel, timestamp: msg.ts, name: "thinking_face" }).catch(() => {});
 
           const reply = result.trim();
 
@@ -378,7 +376,6 @@ class SlackChannel implements Channel {
 
           log.info({ channel: msg.channel, key, chars: reply.length }, "slack reply sent");
         } catch (err) {
-          await client.reactions.remove({ channel: msg.channel, timestamp: msg.ts, name: "thinking_face" }).catch(() => {});
 
           const errText = err instanceof Error ? err.message : String(err);
           log.error({ err, channel: msg.channel }, "slack message processing failed");
@@ -392,6 +389,8 @@ class SlackChannel implements Channel {
           } else {
             await say(`[error] ${errText}`);
           }
+        } finally {
+          await client.reactions.remove({ channel: msg.channel, timestamp: msg.ts, name: "thinking_face" }).catch(() => {});
         }
       });
     });

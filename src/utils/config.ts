@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { dirname } from "path";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "fs";
+import { dirname, join } from "path";
 import yaml from "js-yaml";
 import { getPaths } from "./paths";
 import { log } from "./log";
@@ -179,12 +179,16 @@ function deepMerge(target: Record<string, unknown>, source: Record<string, unkno
   }
 }
 
-/** Deep-merge fields into config.yaml and write back. */
+/** Deep-merge fields into config.yaml and write back atomically. */
 export function updateRawConfig(fields: Record<string, unknown>): void {
   const { config } = getPaths();
   const raw = readRawConfig();
   deepMerge(raw, fields);
-  mkdirSync(dirname(config), { recursive: true });
-  writeFileSync(config, yaml.dump(raw, { lineWidth: -1 }));
+  const dir = dirname(config);
+  mkdirSync(dir, { recursive: true });
+  // Write to temp file then rename for atomic update (prevents corruption on crash)
+  const tmp = join(dir, `.config.yaml.tmp.${process.pid}`);
+  writeFileSync(tmp, yaml.dump(raw, { lineWidth: -1 }));
+  renameSync(tmp, config);
   resetConfig();
 }

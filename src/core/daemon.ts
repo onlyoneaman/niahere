@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { dirname } from "path";
 import { getPaths } from "../utils/paths";
 import { getConfig } from "../utils/config";
@@ -73,6 +73,7 @@ export function startDaemon(): number {
   });
 
   proc.unref();
+  closeSync(logFd); // Child owns the fd now; close parent's copy to prevent leak
   const pid = proc.pid;
   writePid(pid);
   return pid;
