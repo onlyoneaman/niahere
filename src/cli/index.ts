@@ -115,6 +115,12 @@ switch (command) {
     break;
   }
 
+  case "health": {
+    const { healthCommand } = await import("../commands/health");
+    await healthCommand();
+    break;
+  }
+
   case "restart": {
     const { isServiceInstalled, restartService } = await import("../commands/service");
     if (isServiceInstalled()) {
@@ -227,10 +233,23 @@ switch (command) {
   case "logs": {
     const { daemonLog } = getPaths();
     if (!existsSync(daemonLog)) fail("No daemon log found. Is nia running?");
-    const follow = process.argv[3] === "-f" || process.argv[3] === "--follow";
-    const args = follow ? ["tail", "-f", daemonLog] : ["tail", "-50", daemonLog];
-    const proc = Bun.spawn(args, { stdio: ["ignore", "inherit", "inherit"] });
-    await proc.exited;
+    const logArgs = process.argv.slice(3);
+    const follow = logArgs.includes("-f") || logArgs.includes("--follow");
+    // --channel <name> filters logs by channel/component via grep
+    const chIdx = logArgs.indexOf("--channel");
+    const channelFilter = chIdx !== -1 && logArgs[chIdx + 1] ? logArgs[chIdx + 1] : null;
+
+    if (channelFilter) {
+      // Pipe through grep to filter by channel name in structured logs
+      const tailArgs = follow ? ["tail", "-f", daemonLog] : ["tail", "-200", daemonLog];
+      const tail = Bun.spawn(tailArgs, { stdio: ["ignore", "pipe", "inherit"] });
+      const grep = Bun.spawn(["grep", "-i", channelFilter], { stdio: [tail.stdout, "inherit", "inherit"] });
+      await grep.exited;
+    } else {
+      const args = follow ? ["tail", "-f", daemonLog] : ["tail", "-50", daemonLog];
+      const proc = Bun.spawn(args, { stdio: ["ignore", "inherit", "inherit"] });
+      await proc.exited;
+    }
     break;
   }
 
@@ -240,13 +259,15 @@ switch (command) {
   }
 
   case "chat": {
-    const arg = process.argv[3];
-    const mode = (arg === "--new" || arg === "-n")
+    const chatArgs = process.argv.slice(3);
+    const mode = (chatArgs.includes("--new") || chatArgs.includes("-n"))
       ? "new" as const
-      : (arg === "--resume" || arg === "-r")
+      : (chatArgs.includes("--resume") || chatArgs.includes("-r"))
         ? "pick" as const
         : "continue" as const;
-    await startRepl(mode);
+    const chIdx = chatArgs.indexOf("--channel");
+    const simChannel = chIdx !== -1 && chatArgs[chIdx + 1] ? chatArgs[chIdx + 1] : undefined;
+    await startRepl(mode, simChannel);
     break;
   }
 
@@ -392,10 +413,11 @@ switch (command) {
     console.log("  start / stop        — daemon + service control");
     console.log("  restart             — restart daemon");
     console.log("  status [--json --rooms N --all]  — show daemon, jobs, channels");
-    console.log("  chat                — interactive chat (auto-continues last session)");
+    console.log("  health              — check daemon, db, channels, config");
+    console.log("  chat [--channel ch] — interactive chat (--channel simulates a channel)");
     console.log("  run <prompt>        — one-shot execution");
     console.log("  history [room]      — recent messages");
-    console.log("  logs [-f]           — daemon logs");
+    console.log("  logs [-f] [--channel ch]  — daemon logs (filter by channel)");
     console.log("  job <sub>           — manage jobs");
     console.log("  db <sub>            — database setup/status/migrate");
     console.log("  skills              — list available skills");

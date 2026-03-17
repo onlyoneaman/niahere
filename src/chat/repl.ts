@@ -112,7 +112,7 @@ async function pickSession(): Promise<string | null> {
 
 export type ChatMode = "continue" | "new" | "pick";
 
-export async function startRepl(mode: ChatMode = "continue"): Promise<void> {
+export async function startRepl(mode: ChatMode = "continue", simulateChannel?: string): Promise<void> {
   try {
     await runMigrations();
   } catch (err) {
@@ -142,12 +142,14 @@ export async function startRepl(mode: ChatMode = "continue"): Promise<void> {
     resume = true;
   }
 
-  const engine = await createChatEngine({ room: "terminal", channel: "terminal", resume, mcpServers: getMcpServers() });
+  const channel = simulateChannel || "terminal";
+  const engine = await createChatEngine({ room: "terminal", channel, resume, mcpServers: getMcpServers() });
 
   // Welcome
   const isResumed = engine.sessionId && resume;
   const sessionNote = isResumed ? "resumed" : "new session";
-  console.log(`\n${DIM}nia chat${RESET} ${DIM}(${sessionNote})${RESET}`);
+  const channelNote = simulateChannel ? ` as ${simulateChannel}` : "";
+  console.log(`\n${DIM}nia chat${channelNote}${RESET} ${DIM}(${sessionNote})${RESET}`);
   console.log(`${DIM}type /exit to quit${RESET}\n`);
 
   const rl = readline.createInterface({
