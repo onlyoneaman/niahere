@@ -168,7 +168,7 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 - **Daemon lifecycle:** Blocking stop (waits for engines, escalates to SIGKILL). Service-aware restart via launchctl/systemd. Startup guard prevents duplicate daemons.
 - **Telegram:** Typing indicator while processing. Final response sent as fresh message.
 - **Slack:** Thinking emoji reaction while processing. Thread awareness (auto-listens without @mention). Thread context fetched via `conversations.replies`. `[NO_REPLY]` sentinel for silent thread judgement. Owner vs non-owner access control.
-- **Persona:** 3 files loaded: `identity.md`, `owner.md`, `soul.md`. Memory read/written on demand.
+- **Persona:** 4 files loaded: `identity.md`, `owner.md`, `soul.md`, `rules.md`. Memory read/written on demand. `rules.md` is for behavioral overrides and custom instructions — edit it to change how Nia behaves without restarting.
 - **Visual identity:** Images at `~/.niahere/images/`. Generated during `nia init` via Gemini.
 - **Service:** `nia start` registers OS service (launchd/systemd). `nia restart` is service-aware.
 - **Skills:** Scanned from project `skills/`, `~/.niahere/skills/`, `~/.shared/skills/`, `~/.claude/skills/`, `~/.codex/skills/`

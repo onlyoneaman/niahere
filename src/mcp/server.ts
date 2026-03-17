@@ -84,6 +84,26 @@ export function createNiaMcpServer() {
           content: [{ type: "text" as const, text: await handlers.listMessages(args.limit, args.room) }],
         }),
       ),
+      tool(
+        "add_rule",
+        "Add a behavioral rule. Rules are loaded into every session and take effect without restart. Use for 'from now on' / 'always' / 'never' type instructions.",
+        {
+          rule: z.string().describe("The rule to add (e.g. 'stamp updates: 1-2 lines max, no preamble')"),
+        },
+        async (args) => ({
+          content: [{ type: "text" as const, text: handlers.addRule(args.rule) }],
+        }),
+      ),
+      tool(
+        "add_memory",
+        "Save a factual memory for future reference. Memories are read on demand, not loaded automatically. Use for things learned, preferences discovered, or context worth keeping.",
+        {
+          entry: z.string().describe("What to remember (e.g. 'Aman prefers short Slack messages in #tech')"),
+        },
+        async (args) => ({
+          content: [{ type: "text" as const, text: handlers.addMemory(args.entry) }],
+        }),
+      ),
     ],
   });
 }

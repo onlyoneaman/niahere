@@ -1,9 +1,10 @@
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, appendFileSync, existsSync } from "fs";
 import type { ScheduleType } from "../types";
-import { basename } from "path";
+import { basename, join } from "path";
 import { Job, Message, Session } from "../db/models";
 import { computeInitialNextRun } from "../core/scheduler";
 import { getConfig } from "../utils/config";
+import { getPaths } from "../utils/paths";
 import { getChannel } from "../channels/registry";
 import { log } from "../utils/log";
 import { classifyMime } from "../utils/attachment";
@@ -218,4 +219,30 @@ export async function listMessages(limit = 20, room?: string): Promise<string> {
   const messages = await Message.getRecent(limit, room);
   if (messages.length === 0) return "No messages found.";
   return JSON.stringify(messages, null, 2);
+}
+
+export function addRule(rule: string): string {
+  const { selfDir } = getPaths();
+  const rulesPath = join(selfDir, "rules.md");
+  const line = `\n- ${rule}\n`;
+  appendFileSync(rulesPath, line, "utf8");
+  return `Rule added to rules.md. Takes effect on next new session.`;
+}
+
+export function addMemory(entry: string): string {
+  const { selfDir } = getPaths();
+  const memoryPath = join(selfDir, "memory.md");
+  const date = new Date().toISOString().slice(0, 10);
+  const header = `\n## ${date}`;
+
+  const existing = existsSync(memoryPath) ? readFileSync(memoryPath, "utf8") : "";
+  if (existing.includes(header)) {
+    // Append under existing date header
+    const updated = existing.replace(header, `${header}\n- ${entry}`);
+    writeFileSync(memoryPath, updated, "utf8");
+  } else {
+    // New date section
+    appendFileSync(memoryPath, `${header}\n- ${entry}\n`, "utf8");
+  }
+  return `Memory saved.`;
 }

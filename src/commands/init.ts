@@ -427,8 +427,9 @@ export async function runInit(): Promise<void> {
       console.log(`  \u2713 wrote ${selfFile("owner.md")}`);
     }
 
-    // Soul and memory — only create if missing (user may have customized)
+    // Soul, rules, and memory — only create if missing (user may have customized)
     writeIfMissing(selfFile("soul.md"), loadTemplate("soul.md", vars), selfFile("soul.md"));
+    writeIfMissing(selfFile("rules.md"), loadTemplate("rules.md", vars), selfFile("rules.md"));
     writeIfMissing(selfFile("memory.md"), loadTemplate("memory.md", vars), selfFile("memory.md"));
 
     resetConfig();

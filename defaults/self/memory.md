@@ -8,7 +8,7 @@ Write here when:
 - I learned a preference, habit, or pattern worth remembering
 - A workaround was needed that future-me should know about
 
-Format: `- YYYY-MM-DD: what happened and what I learned`
+Entries are grouped by date. Use `add_memory` tool to append, or edit directly.
 
 ---
 

@@ -45,20 +45,38 @@ describe("loadIdentity", () => {
     expect(result).toBe("");
   });
 
-  test("loads identity, owner, and soul files in order (memory not loaded)", () => {
+  test("loads identity, owner, soul, and rules files in order (memory not loaded)", () => {
     writeFileSync(`${TEST_DIR}/self/identity.md`, "I am nia");
     writeFileSync(`${TEST_DIR}/self/owner.md`, "Owner: Aman");
     writeFileSync(`${TEST_DIR}/self/soul.md`, "Be helpful");
+    writeFileSync(`${TEST_DIR}/self/rules.md`, "Keep stamp short");
     writeFileSync(`${TEST_DIR}/self/memory.md`, "Learned: X");
 
     const result = loadIdentity();
     expect(result).toContain("I am nia");
     expect(result).toContain("Owner: Aman");
     expect(result).toContain("Be helpful");
+    expect(result).toContain("Keep stamp short");
     expect(result).not.toContain("Learned: X");
-    // Verify order: identity before owner before soul
+    // Verify order: identity before owner before soul before rules
     expect(result.indexOf("I am nia")).toBeLessThan(result.indexOf("Owner: Aman"));
     expect(result.indexOf("Owner: Aman")).toBeLessThan(result.indexOf("Be helpful"));
+    expect(result.indexOf("Be helpful")).toBeLessThan(result.indexOf("Keep stamp short"));
+  });
+
+  test("loads rules.md when present", () => {
+    writeFileSync(`${TEST_DIR}/self/rules.md`, "stamp: 2 lines max");
+
+    const result = loadIdentity();
+    expect(result).toBe("stamp: 2 lines max");
+  });
+
+  test("works without rules.md", () => {
+    writeFileSync(`${TEST_DIR}/self/identity.md`, "I am nia");
+
+    const result = loadIdentity();
+    expect(result).toBe("I am nia");
+    expect(result).not.toContain("rules");
   });
 
   test("trims whitespace from files", () => {
@@ -111,5 +129,18 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("list_jobs");
     expect(prompt).toContain("add_job");
     expect(prompt).toContain("send_message");
+  });
+
+  test("includes add_rule and add_memory tools", () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain("add_rule");
+    expect(prompt).toContain("add_memory");
+  });
+
+  test("includes rules.md content in system prompt", () => {
+    writeFileSync(`${TEST_DIR}/self/rules.md`, "stamp: keep it short");
+
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain("stamp: keep it short");
   });
 });

@@ -97,4 +97,20 @@ describe("getEnvironmentPrompt", () => {
     const prompt = getEnvironmentPrompt();
     expect(prompt).toContain("Timezone:");
   });
+
+  test("documents add_rule and add_memory tools", () => {
+    const prompt = getEnvironmentPrompt();
+    expect(prompt).toContain("add_rule");
+    expect(prompt).toContain("add_memory");
+  });
+
+  test("documents rules.md in persona files", () => {
+    const prompt = getEnvironmentPrompt();
+    expect(prompt).toContain("rules.md");
+  });
+
+  test("explains rules vs memory distinction", () => {
+    const prompt = getEnvironmentPrompt();
+    expect(prompt).toContain("Rules vs Memory");
+  });
 });
