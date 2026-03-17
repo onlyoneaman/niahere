@@ -8,6 +8,11 @@ import { log } from "../utils/log";
 import { getMcpServers } from "../mcp";
 import { classifyMime, validateAttachment, prepareImage } from "../utils/attachment";
 
+/** Strip markdown backticks so sentinel tokens like [NO_REPLY] match even when the LLM wraps them. */
+function cleanSentinel(text: string): string {
+  return text.replace(/`/g, "").trim();
+}
+
 class SlackChannel implements Channel {
   name = "slack";
   private app: App | null = null;
@@ -364,7 +369,7 @@ class SlackChannel implements Channel {
           const reply = result.trim();
 
           // [NO_REPLY] or empty = agent chose not to respond (thread judgement)
-          if (!reply || reply === "[NO_REPLY]") {
+          if (!reply || cleanSentinel(reply) === "[NO_REPLY]") {
             log.info({ channel: msg.channel, key }, "slack: agent chose not to reply");
             return;
           }
