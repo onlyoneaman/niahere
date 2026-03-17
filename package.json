@@ -1,6 +1,6 @@
 {
   "name": "niahere",
-  "version": "0.2.16",
+  "version": "0.2.17",
   "description": "A personal AI assistant daemon — scheduled jobs, chat across Telegram and Slack, persona system, and visual identity.",
   "type": "module",
   "scripts": {
