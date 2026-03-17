@@ -9,7 +9,7 @@
 - **CLI:** `nia`
 - **AI:** `@anthropic-ai/claude-agent-sdk` (chat), Codex CLI (jobs)
 - **Database:** PostgreSQL (via `postgres` driver)
-- **Image generation:** Gemini API (optional)
+- **Image generation:** OpenAI + Gemini API (optional)
 - **Author:** Aman (amankumar.ai)
 
 ## Directory Structure
@@ -74,7 +74,7 @@ src/
     index.ts             # DEFAULT_DATABASE_URL + barrel
     attachment.ts        # MAX_ATTACHMENT_SIZE, IMAGE_MIMES, JPEG_QUALITY
   utils/
-    config.ts            # Config loading from ~/.niahere/config.yaml
+    config.ts            # Config loading, readRawConfig(), updateRawConfig()
     paths.ts             # Path resolution from NIA_HOME
     cli.ts               # CLI helpers (fail, pickFromList)
     errors.ts            # errMsg() helper
@@ -89,6 +89,10 @@ defaults/
     slack-manifest.json  # Slack app manifest with all required scopes
 skills/
   nia-image/             # Visual identity generation skill (Gemini)
+  image-generation/      # General-purpose image generation (OpenAI + Gemini)
+  llms-txt/              # Create/improve llms.txt for LLM-aware content indexing
+  github-link-repo-explorer/  # Clone and explore GitHub repos from links
+  pr-reviewer/           # Language-aware PR review (design, security, performance, idioms)
 tests/
   core/                  # Daemon, runner, scheduler tests
   chat/                  # Identity, engine tests
@@ -110,6 +114,7 @@ model: default
 timezone: Asia/Calcutta
 log_level: info
 gemini_api_key: ...
+openai_api_key: ...
 active_hours:
   start: '11:00'
   end: '02:00'
@@ -126,7 +131,9 @@ channels:
     dm_user_id: U06PBA2P680
 ```
 
-Env vars override config: `DATABASE_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_CHANNEL_ID`, `GEMINI_API_KEY`, `LOG_LEVEL`.
+Env vars override config: `DATABASE_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_CHANNEL_ID`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, `LOG_LEVEL`.
+
+Config can be managed via CLI: `nia config list`, `nia config get <key>`, `nia config set <key> <value>`. Supports dot notation for nested keys (e.g. `channels.default`).
 
 ## Build & Test
 

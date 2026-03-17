@@ -42,6 +42,10 @@ nia db setup                   — install PostgreSQL + create database + migrat
 nia db migrate                 — run database migrations
 nia db status                  — check database connection
 
+nia config list                — show all config
+nia config get <key>           — get a config value (dot notation supported)
+nia config set <key> <value>   — set a config value
+
 nia channels                   — show channel status (on/off)
 nia channels on / off          — enable/disable channels
 ```
@@ -76,7 +80,7 @@ All config and data lives in `~/.niahere/`:
 
 ```
 ~/.niahere/
-  config.yaml       — database, channels, model, timezone, active hours, gemini key
+  config.yaml       — database, channels, model, timezone, active hours, API keys
   self/
     identity.md     — agent personality and voice
     owner.md        — who runs this agent
@@ -94,7 +98,8 @@ All config and data lives in `~/.niahere/`:
 - [Bun](https://bun.sh) runtime (auto-installed if missing)
 - PostgreSQL (`nia db setup` handles installation)
 - Claude API access (via `@anthropic-ai/claude-agent-sdk`)
-- Gemini API key (optional, for image generation)
+- Gemini API key (optional, for image generation — `nia config set gemini_api_key ...`)
+- OpenAI API key (optional, for image generation — `nia config set openai_api_key ...`)
 
 ## Author
 
