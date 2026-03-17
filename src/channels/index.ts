@@ -13,19 +13,28 @@ export function registerAllChannels(): void {
 }
 
 export async function startChannels(): Promise<Channel[]> {
-  const channels: Channel[] = [];
+  const pending = getFactories()
+    .map((factory) => factory())
+    .filter((ch): ch is Channel => ch !== null);
 
-  for (const factory of getFactories()) {
-    const channel = factory();
-    if (!channel) continue;
+  if (pending.length === 0) return [];
 
-    try {
+  const results = await Promise.allSettled(
+    pending.map(async (channel) => {
       await channel.start();
-      channels.push(channel);
-      trackStarted(channel);
-      log.info({ channel: channel.name }, "channel started");
-    } catch (err) {
-      log.error({ err, channel: channel.name }, "channel failed to start");
+      return channel;
+    }),
+  );
+
+  const channels: Channel[] = [];
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
+    if (result.status === "fulfilled") {
+      channels.push(result.value);
+      trackStarted(result.value);
+      log.info({ channel: result.value.name }, "channel started");
+    } else {
+      log.error({ err: result.reason, channel: pending[i].name }, "channel failed to start");
     }
   }
 
@@ -33,12 +42,19 @@ export async function startChannels(): Promise<Channel[]> {
 }
 
 export async function stopChannels(channels: Channel[]): Promise<void> {
-  for (const channel of channels) {
-    try {
+  const results = await Promise.allSettled(
+    channels.map(async (channel) => {
       await channel.stop();
-      log.info({ channel: channel.name }, "channel stopped");
-    } catch (err) {
-      log.error({ err, channel: channel.name }, "channel failed to stop");
+      return channel;
+    }),
+  );
+
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
+    if (result.status === "fulfilled") {
+      log.info({ channel: result.value.name }, "channel stopped");
+    } else {
+      log.error({ err: result.reason, channel: channels[i].name }, "channel failed to stop");
     }
   }
   clearStarted();
