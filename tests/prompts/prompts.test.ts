@@ -32,20 +32,27 @@ describe("getModePrompt", () => {
 });
 
 describe("getChannelPrompt", () => {
-  test("returns slack channel prompt", () => {
+  test("returns slack channel prompt with common rules", () => {
     const prompt = getChannelPrompt("slack");
+    expect(prompt).toContain("Channel: Common");
     expect(prompt).toContain("Slack");
     expect(prompt).toContain("Slack bold");
   });
 
-  test("returns telegram channel prompt", () => {
+  test("returns telegram channel prompt with common rules", () => {
     const prompt = getChannelPrompt("telegram");
+    expect(prompt).toContain("Channel: Common");
     expect(prompt).toContain("Telegram");
     expect(prompt).toContain("MarkdownV2");
   });
 
-  test("returns empty for unknown channel", () => {
-    expect(getChannelPrompt("discord")).toBe("");
+  test("returns common prompt for unknown non-terminal channel", () => {
+    const prompt = getChannelPrompt("discord");
+    expect(prompt).toContain("Channel: Common");
+  });
+
+  test("returns empty for terminal channel", () => {
+    expect(getChannelPrompt("terminal")).toBe("");
   });
 });
 

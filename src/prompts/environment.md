@@ -45,6 +45,7 @@ Config reference:
 - `active_hours.start` / `active_hours.end` — HH:MM window when jobs run
 - `log_level` — daemon log verbosity
 - `gemini_api_key` — Gemini API key for image generation
+- `openai_api_key` — OpenAI API key for image generation
 - `channels.enabled` — enable/disable all channels (set false on dev machines)
 - `channels.default` — which channel send_message uses by default
 - `channels.telegram.bot_token` — Telegram bot API token

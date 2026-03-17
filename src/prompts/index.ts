@@ -39,5 +39,13 @@ export function getModePrompt(mode: Mode): string {
 }
 
 export function getChannelPrompt(channel: string): string {
-  return loadPrompt(`channel-${channel}.md`);
+  const parts: string[] = [];
+  // Load common channel rules for non-terminal channels
+  if (channel !== "terminal") {
+    const common = loadPrompt("channel-common.md");
+    if (common) parts.push(common);
+  }
+  const specific = loadPrompt(`channel-${channel}.md`);
+  if (specific) parts.push(specific);
+  return parts.join("\n\n");
 }
