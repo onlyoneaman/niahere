@@ -4,6 +4,8 @@ import { runMigrations } from "../db/migrate";
 import { closeDb } from "../db/connection";
 import { getMcpServers, setMcpServers } from "../mcp";
 import { createNiaMcpServer } from "../mcp/server";
+import { Session } from "../db/models";
+import { relativeTime } from "../utils/format";
 
 // ANSI helpers
 const DIM = "\x1b[2m";
@@ -54,7 +56,63 @@ class StatusLine {
   }
 }
 
-export async function startRepl(resume = false): Promise<void> {
+function truncatePreview(text: string, max: number): string {
+  const oneline = text.replace(/\n/g, " ").trim();
+  return oneline.length > max ? oneline.slice(0, max) + "…" : oneline;
+}
+
+async function pickSession(): Promise<string | null> {
+  const sessions = await Session.getRecent("terminal", 10);
+  if (sessions.length === 0) {
+    console.log(`${DIM}no previous sessions${RESET}\n`);
+    return null;
+  }
+
+  const now = new Date();
+  console.log(`\n${DIM}recent sessions:${RESET}\n`);
+
+  for (let i = 0; i < sessions.length; i++) {
+    const s = sessions[i];
+    const age = relativeTime(new Date(s.updatedAt), now);
+    const preview = s.preview ? truncatePreview(s.preview, 50) : "empty session";
+    const msgs = `${s.messageCount} msg${s.messageCount !== 1 ? "s" : ""}`;
+    console.log(`  ${BOLD}${i + 1}${RESET}  ${preview}  ${DIM}${msgs} · ${age}${RESET}`);
+  }
+
+  console.log(`\n  ${DIM}n${RESET}  start new session`);
+  console.log();
+
+  return new Promise<string | null>((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    rl.question(`${DIM}select [1-${sessions.length}, n]:${RESET} `, (answer) => {
+      rl.close();
+      const trimmed = answer.trim().toLowerCase();
+
+      if (trimmed === "n" || trimmed === "new") {
+        resolve(null);
+        return;
+      }
+
+      const idx = parseInt(trimmed, 10);
+      if (idx >= 1 && idx <= sessions.length) {
+        resolve(sessions[idx - 1].id);
+      } else if (trimmed === "" && sessions.length > 0) {
+        // Default: most recent session
+        resolve(sessions[0].id);
+      } else {
+        resolve(null);
+      }
+    });
+  });
+}
+
+export type ChatMode = "continue" | "new" | "pick";
+
+export async function startRepl(mode: ChatMode = "continue"): Promise<void> {
   try {
     await runMigrations();
   } catch (err) {
@@ -72,10 +130,23 @@ export async function startRepl(resume = false): Promise<void> {
     } catch {}
   }
 
+  // Determine session to use
+  let resume: boolean | string = false;
+
+  if (mode === "pick") {
+    const picked = await pickSession();
+    if (picked) {
+      resume = picked;
+    }
+  } else if (mode === "continue") {
+    resume = true;
+  }
+
   const engine = await createChatEngine({ room: "terminal", channel: "terminal", resume, mcpServers: getMcpServers() });
 
   // Welcome
-  const sessionNote = resume && engine.sessionId ? "resumed session" : "new session";
+  const isResumed = engine.sessionId && resume;
+  const sessionNote = isResumed ? "resumed" : "new session";
   console.log(`\n${DIM}nia chat${RESET} ${DIM}(${sessionNote})${RESET}`);
   console.log(`${DIM}type /exit to quit${RESET}\n`);
 

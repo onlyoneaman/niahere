@@ -205,7 +205,13 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
   const systemPrompt = buildSystemPrompt("chat", channel);
   const cwd = homedir();
 
-  let sessionId = resume ? await Session.getLatest(room) : null;
+  let sessionId: string | null = null;
+  if (typeof resume === "string") {
+    // Specific session ID provided
+    sessionId = resume;
+  } else if (resume) {
+    sessionId = await Session.getLatest(room);
+  }
 
   // Verify session file exists on disk before attempting resume
   if (sessionId && !sessionFileExists(sessionId, cwd)) {

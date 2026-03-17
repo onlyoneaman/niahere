@@ -1,5 +1,14 @@
 import { getSql } from "../connection";
 
+export interface SessionSummary {
+  id: string;
+  room: string;
+  createdAt: string;
+  updatedAt: string;
+  preview: string | null;
+  messageCount: number;
+}
+
 export async function getLatest(room: string): Promise<string | null> {
   const sql = getSql();
   const rows = await sql`
@@ -9,6 +18,35 @@ export async function getLatest(room: string): Promise<string | null> {
     LIMIT 1
   `;
   return rows.length > 0 ? rows[0].id : null;
+}
+
+export async function getRecent(room: string, limit = 10): Promise<SessionSummary[]> {
+  const sql = getSql();
+  const rows = await sql`
+    SELECT
+      s.id,
+      s.room,
+      s.created_at,
+      s.updated_at,
+      (
+        SELECT content FROM messages m
+        WHERE m.session_id = s.id AND m.sender = 'user'
+        ORDER BY m.created_at ASC LIMIT 1
+      ) AS preview,
+      (SELECT COUNT(*)::int FROM messages m WHERE m.session_id = s.id) AS message_count
+    FROM sessions s
+    WHERE s.room = ${room}
+    ORDER BY s.updated_at DESC
+    LIMIT ${limit}
+  `;
+  return rows.map((r) => ({
+    id: r.id,
+    room: r.room,
+    createdAt: String(r.created_at),
+    updatedAt: String(r.updated_at),
+    preview: r.preview ? String(r.preview) : null,
+    messageCount: r.message_count,
+  }));
 }
 
 export async function create(id: string, room: string): Promise<void> {

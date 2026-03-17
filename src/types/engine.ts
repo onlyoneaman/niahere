@@ -22,6 +22,7 @@ export interface ChatEngine {
 export interface EngineOptions {
   room: string;
   channel: string;
-  resume: boolean;
+  /** true = resume latest session, or pass a specific session ID */
+  resume: boolean | string;
   mcpServers?: Record<string, unknown>;
 }

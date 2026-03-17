@@ -240,8 +240,13 @@ switch (command) {
   }
 
   case "chat": {
-    const resume = process.argv[3] === "--resume" || process.argv[3] === "-r";
-    await startRepl(resume);
+    const arg = process.argv[3];
+    const mode = (arg === "--new" || arg === "-n")
+      ? "new" as const
+      : (arg === "--resume" || arg === "-r")
+        ? "pick" as const
+        : "continue" as const;
+    await startRepl(mode);
     break;
   }
 
@@ -268,6 +273,59 @@ switch (command) {
 
   case "slack": {
     await slackCommand();
+    break;
+  }
+
+  case "config": {
+    const configSub = process.argv[3];
+    const configKey = process.argv[4];
+    const configVal = process.argv.slice(5).join(" ");
+    const { readRawConfig, updateRawConfig } = await import("../utils/config");
+
+    if (configSub === "set" && configKey) {
+      if (!configVal) fail("Usage: nia config set <key> <value>");
+      // Support dot notation for nested keys (e.g. channels.default)
+      const parts = configKey.split(".");
+      let obj: Record<string, unknown> = {};
+      let cursor = obj;
+      for (let i = 0; i < parts.length - 1; i++) {
+        cursor[parts[i]] = {};
+        cursor = cursor[parts[i]] as Record<string, unknown>;
+      }
+      // Auto-detect booleans and numbers
+      let parsed: unknown = configVal;
+      if (configVal === "true") parsed = true;
+      else if (configVal === "false") parsed = false;
+      else if (/^\d+$/.test(configVal)) parsed = Number(configVal);
+      cursor[parts[parts.length - 1]] = parsed;
+      updateRawConfig(obj);
+      console.log(`${configKey} = ${configVal}`);
+    } else if (configSub === "get" && configKey) {
+      const raw = readRawConfig();
+      const parts = configKey.split(".");
+      let val: unknown = raw;
+      for (const p of parts) {
+        if (val && typeof val === "object") val = (val as Record<string, unknown>)[p];
+        else { val = undefined; break; }
+      }
+      if (val === undefined) {
+        console.log(`${configKey}: (not set)`);
+      } else if (typeof val === "object") {
+        const yaml = (await import("js-yaml")).default;
+        console.log(yaml.dump(val, { lineWidth: -1 }).trim());
+      } else {
+        console.log(`${configKey} = ${val}`);
+      }
+    } else if (!configSub || configSub === "list") {
+      const raw = readRawConfig();
+      const yaml = (await import("js-yaml")).default;
+      console.log(yaml.dump(raw, { lineWidth: -1 }).trim());
+    } else {
+      console.log("Usage: nia config <set|get|list>");
+      console.log("  nia config set <key> <value>  — set a config value");
+      console.log("  nia config get <key>          — get a config value");
+      console.log("  nia config list               — show all config");
+    }
     break;
   }
 
@@ -334,13 +392,14 @@ switch (command) {
     console.log("  start / stop        — daemon + service control");
     console.log("  restart             — restart daemon");
     console.log("  status [--json --rooms N --all]  — show daemon, jobs, channels");
-    console.log("  chat [-r|--resume]  — interactive chat");
+    console.log("  chat                — interactive chat (auto-continues last session)");
     console.log("  run <prompt>        — one-shot execution");
     console.log("  history [room]      — recent messages");
     console.log("  logs [-f]           — daemon logs");
     console.log("  job <sub>           — manage jobs");
     console.log("  db <sub>            — database setup/status/migrate");
     console.log("  skills              — list available skills");
+    console.log("  config <sub>        — get/set/list config values");
     console.log("  send [-c ch] <msg>  — send a message via channel");
     console.log("  telegram <token>    — configure telegram");
     console.log("  slack <bot> <app>   — configure slack");
