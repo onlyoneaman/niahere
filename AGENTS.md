@@ -147,6 +147,8 @@ bun run dev            # Run daemon in foreground
 
 Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig()` in cleanup.
 
+**Keep tests up to date.** When adding, changing, or removing functionality, add, update, or remove the corresponding tests. Good test coverage is expected — don't skip tests for new code paths.
+
 ## Code Organization
 
 - **Types** in `src/types/` — all interfaces, type aliases, enums. No functions or constants.
