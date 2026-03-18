@@ -49,7 +49,7 @@ export async function jobCommand(): Promise<void> {
             for (const job of jobs) {
               const tag = job.always ? "  always" : "";
               const type = job.scheduleType !== "cron" ? ` (${job.scheduleType})` : "";
-              console.log(`  ${job.enabled ? "●" : "○"} ${job.name}  ${job.schedule}${type}${tag}  ${job.prompt.slice(0, 60)}${job.prompt.length > 60 ? "..." : ""}`);
+              console.log(`  ${job.enabled ? "●" : "○"} ${job.name}  ${job.schedule}${type}${tag}`);
             }
           }
         });
