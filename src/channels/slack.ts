@@ -334,16 +334,38 @@ class SlackChannel implements Channel {
           const replies = await client.conversations.replies({
             channel: msg.channel,
             ts: msg.thread_ts,
-            limit: 20,
+            limit: 50,
           });
-          const threadMessages = (replies.messages || [])
-            .filter((m: any) => m.ts !== msg.ts) // exclude the triggering message
-            .map((m: any) => {
-              const sender = m.bot_id ? "bot" : (m.user || "unknown");
-              return `[${sender}]: ${m.text || "(no text)"}`;
-            });
+          const priorMessages = (replies.messages || [])
+            .filter((m: any) => m.ts !== msg.ts); // exclude the triggering message
+
+          const threadMessages = priorMessages.map((m: any) => {
+            const sender = m.bot_id ? "bot" : (m.user || "unknown");
+            const fileHint = m.files?.length ? ` [${m.files.length} file(s) attached]` : "";
+            return `[${sender}]: ${m.text || "(no text)"}${fileHint}`;
+          });
           if (threadMessages.length > 0) {
             text = `[Thread context]\n${threadMessages.join("\n")}\n\n[Current message]\n${text}`;
+          }
+
+          // Download files from recent thread messages (last 5 messages, max 5 files total)
+          if (!attachments) attachments = [];
+          const threadFileBudget = 5 - attachments.length;
+          if (threadFileBudget > 0) {
+            const messagesWithFiles = priorMessages.filter((m: any) => m.files?.length > 0).slice(-5);
+            let threadFilesAdded = 0;
+            for (const m of messagesWithFiles) {
+              if (threadFilesAdded >= threadFileBudget) break;
+              const extracted = await extractSlackAttachments(m.files || []);
+              for (const att of extracted) {
+                if (threadFilesAdded >= threadFileBudget) break;
+                attachments.push(att);
+                threadFilesAdded++;
+              }
+            }
+            if (threadFilesAdded > 0) {
+              log.info({ threadFiles: threadFilesAdded, channel: msg.channel }, "slack: downloaded thread attachments");
+            }
           }
         } catch (err) {
           log.warn({ err, channel: msg.channel, thread_ts: msg.thread_ts }, "failed to fetch thread context");
