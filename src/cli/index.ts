@@ -412,6 +412,14 @@ switch (command) {
     process.exit(exitCode);
   }
 
+  case "validate": {
+    const { validateConfig } = await import("../commands/validate");
+    const result = validateConfig();
+    for (const msg of result.messages) console.log(`  ${msg}`);
+    console.log(result.ok ? "\nConfig is valid." : "\nConfig has errors.");
+    process.exit(result.ok ? 0 : 1);
+  }
+
   case "init": {
     const { runInit } = await import("../commands/init");
     await runInit();
@@ -434,6 +442,7 @@ switch (command) {
     console.log("  memory [show|reset] — view or reset memory.md");
     console.log("  db <sub>            — database setup/status/migrate");
     console.log("  skills              — list available skills");
+    console.log("  validate            — validate config.yaml");
     console.log("  config <sub>        — get/set/list config values");
     console.log("  send [-c ch] <msg>  — send a message via channel");
     console.log("  telegram <token>    — configure telegram");
