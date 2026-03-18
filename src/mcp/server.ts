@@ -85,6 +85,27 @@ export function createNiaMcpServer() {
         }),
       ),
       tool(
+        "add_watch_channel",
+        "Add or update a Slack watch channel. Watch channels receive ALL messages (not just @mentions) and act based on the behavior prompt. Requires daemon restart to take effect.",
+        {
+          name: z.string().describe("Slack channel name (without #), e.g. 'ask-kay-thread-notifications'"),
+          behavior: z.string().describe("What to monitor and how to respond, e.g. 'Monitor thread notifications. Flag failures to #tech.'"),
+        },
+        async (args) => ({
+          content: [{ type: "text" as const, text: handlers.addWatchChannel(args.name, args.behavior) }],
+        }),
+      ),
+      tool(
+        "remove_watch_channel",
+        "Remove a Slack watch channel. Requires daemon restart to take effect.",
+        {
+          name: z.string().describe("Slack channel name to stop watching"),
+        },
+        async (args) => ({
+          content: [{ type: "text" as const, text: handlers.removeWatchChannel(args.name) }],
+        }),
+      ),
+      tool(
         "add_rule",
         "Add a behavioral rule. Rules are loaded into every session and take effect without restart. Use for 'from now on' / 'always' / 'never' type instructions.",
         {

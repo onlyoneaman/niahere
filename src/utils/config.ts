@@ -20,7 +20,7 @@ const DEFAULTS: Config = {
     enabled: true,
     default: "telegram",
     telegram: { bot_token: null, chat_id: null, open: false },
-    slack: { bot_token: null, app_token: null, channel_id: null, dm_user_id: null, bot_user_id: null, bot_name: null, workspace: null, workspace_id: null, workspace_url: null },
+    slack: { bot_token: null, app_token: null, channel_id: null, dm_user_id: null, bot_user_id: null, bot_name: null, workspace: null, workspace_id: null, workspace_url: null, watch: null },
   },
 };
 
@@ -142,6 +142,19 @@ export function loadConfig(): Config {
   const slWorkspaceUrl =
     typeof chSl.workspace_url === "string" ? chSl.workspace_url : null;
 
+  // Slack watch channels
+  const rawWatch = chSl.watch as Record<string, unknown> | undefined;
+  let slWatch: Record<string, { behavior: string }> | null = null;
+  if (rawWatch && typeof rawWatch === "object") {
+    slWatch = {};
+    for (const [name, val] of Object.entries(rawWatch)) {
+      if (val && typeof val === "object" && typeof (val as any).behavior === "string") {
+        slWatch[name] = { behavior: (val as any).behavior };
+      }
+    }
+    if (Object.keys(slWatch).length === 0) slWatch = null;
+  }
+
   return {
     model,
     runner,
@@ -154,7 +167,7 @@ export function loadConfig(): Config {
       enabled: channelsEnabled,
       default: defaultChannel,
       telegram: { bot_token: tgBotToken, chat_id: tgChatId, open: tgOpen },
-      slack: { bot_token: slBotToken, app_token: slAppToken, channel_id: slChannelId, dm_user_id: slDmUserId, bot_user_id: slBotUserId, bot_name: slBotName, workspace: slWorkspace, workspace_id: slWorkspaceId, workspace_url: slWorkspaceUrl },
+      slack: { bot_token: slBotToken, app_token: slAppToken, channel_id: slChannelId, dm_user_id: slDmUserId, bot_user_id: slBotUserId, bot_name: slBotName, workspace: slWorkspace, workspace_id: slWorkspaceId, workspace_url: slWorkspaceUrl, watch: slWatch },
     },
   };
 }

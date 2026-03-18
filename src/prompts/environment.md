@@ -22,6 +22,8 @@ You have MCP tools for managing jobs directly — no need for shell commands:
 - **run_job** — trigger a job to run immediately
 - **send_message** — send a message to the user (via telegram, slack, or default channel). Supports `media_path` to send images/files.
 - **list_messages** — read recent chat history
+- **add_watch_channel** — add a Slack channel for proactive monitoring. Specify channel name and behavior prompt. Requires daemon restart.
+- **remove_watch_channel** — stop watching a Slack channel. Requires daemon restart.
 - **add_rule** — save a behavioral rule (loaded into every session, no restart needed). Use when told "from now on", "always", "never", or "remember to always..."
 - **add_memory** — save a factual memory (read on demand). Use when told "remember that...", or when you learn something surprising worth keeping
 
@@ -57,6 +59,8 @@ Config reference:
 - `channels.slack.app_token` — Slack app token (xapp-...)
 - `channels.slack.channel_id` — default Slack channel for outbound
 - `channels.slack.dm_user_id` — auto-registered DM user
+- `channels.slack.watch` — per-channel proactive monitoring (see Watch mode in Slack docs)
+{{slackWatch}}
 
 ## Persona & Memory
 

@@ -21,6 +21,14 @@ export function getEnvironmentPrompt(): string {
   const paths = getPaths();
   const config = getConfig();
 
+  // Build watch channel summary if Slack is configured with watch channels
+  let slackWatch = "";
+  const watch = config.channels.slack.watch;
+  if (watch) {
+    const entries = Object.entries(watch).map(([name, cfg]) => `  - #${name}: ${cfg.behavior}`);
+    slackWatch = `\nActive watch channels:\n${entries.join("\n")}`;
+  }
+
   return interpolate(loadPrompt("environment.md"), {
     configPath: paths.config,
     dbUrl: config.database_url.replace(/\/\/.*@/, "//***@"),
@@ -31,6 +39,7 @@ export function getEnvironmentPrompt(): string {
     activeEnd: config.activeHours.end,
     model: config.model,
     logLevel: config.log_level,
+    slackWatch,
   });
 }
 

@@ -4,6 +4,10 @@ export interface TelegramConfig {
   open: boolean;
 }
 
+export interface SlackWatchChannel {
+  behavior: string;
+}
+
 export interface SlackConfig {
   bot_token: string | null;
   app_token: string | null;
@@ -14,6 +18,7 @@ export interface SlackConfig {
   workspace: string | null;
   workspace_id: string | null;
   workspace_url: string | null;
+  watch: Record<string, SlackWatchChannel> | null;
 }
 
 export interface ChannelsConfig {

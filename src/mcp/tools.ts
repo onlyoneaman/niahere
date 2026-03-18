@@ -3,7 +3,7 @@ import type { ScheduleType } from "../types";
 import { basename, join } from "path";
 import { Job, Message, Session } from "../db/models";
 import { computeInitialNextRun } from "../core/scheduler";
-import { getConfig } from "../utils/config";
+import { getConfig, readRawConfig, updateRawConfig } from "../utils/config";
 import { getPaths } from "../utils/paths";
 import { getChannel } from "../channels/registry";
 import { log } from "../utils/log";
@@ -227,6 +227,26 @@ export function addRule(rule: string): string {
   const line = `\n- ${rule}\n`;
   appendFileSync(rulesPath, line, "utf8");
   return `Rule added to rules.md. Takes effect on next new session.`;
+}
+
+export function addWatchChannel(name: string, behavior: string): string {
+  const raw = readRawConfig();
+  const channels = (raw.channels || {}) as Record<string, unknown>;
+  const slack = (channels.slack || {}) as Record<string, unknown>;
+  const watch = { ...((slack.watch || {}) as Record<string, unknown>), [name]: { behavior } };
+  updateRawConfig({ channels: { slack: { watch } } });
+  return `Watch channel "${name}" added. Restart daemon to apply.`;
+}
+
+export function removeWatchChannel(name: string): string {
+  const raw = readRawConfig();
+  const channels = (raw.channels || {}) as Record<string, unknown>;
+  const slack = (channels.slack || {}) as Record<string, unknown>;
+  const watch = { ...((slack.watch || {}) as Record<string, unknown>) };
+  if (!watch[name]) return `Watch channel "${name}" not found.`;
+  delete watch[name];
+  updateRawConfig({ channels: { slack: { watch } } });
+  return `Watch channel "${name}" removed. Restart daemon to apply.`;
 }
 
 export function addMemory(entry: string): string {

@@ -132,6 +132,10 @@ class SlackChannel implements Channel {
 
     let botUserId: string | undefined;
 
+    // Watch channels: resolved after app.start() via conversations.list
+    // Maps channel ID → { name, behavior }
+    const watchChannels = new Map<string, { name: string; behavior: string }>();
+
     // Slash command: /nia
     app.command("/nia", async ({ command, ack, respond }) => {
       await ack();
@@ -319,7 +323,11 @@ class SlackChannel implements Channel {
         }
       }
 
-      if (!isDm && !isMention && !isActiveThread) {
+      // Check if this is a watched channel
+      const watchConfig = watchChannels.get(msg.channel);
+      const isWatched = !!watchConfig;
+
+      if (!isDm && !isMention && !isActiveThread && !isWatched) {
         log.debug({
           channel: msg.channel,
           text: (msg.text || "").slice(0, 80),
@@ -422,7 +430,12 @@ class SlackChannel implements Channel {
         }
       }
 
-      log.info({ channel: msg.channel, key, text: text.slice(0, 100), isDm, attachments: attachments?.length || 0 }, "slack message received");
+      // Prepend watch behavior context for watched channels
+      if (watchConfig) {
+        text = `[Watch mode — #${watchConfig.name}]\nBehavior: ${watchConfig.behavior}\nRespond with [NO_REPLY] if no action needed.\n\n${text}`;
+      }
+
+      log.info({ channel: msg.channel, key, text: text.slice(0, 100), isDm, watched: isWatched, attachments: attachments?.length || 0 }, "slack message received");
 
       const state = await getState(key);
 
@@ -487,6 +500,38 @@ class SlackChannel implements Channel {
       log.info({ botUserId }, "slack bot authenticated");
     } catch (err) {
       log.warn({ err }, "could not get slack bot user ID");
+    }
+
+    // Resolve watch channel names → IDs
+    const watchConfig = config.channels.slack.watch;
+    if (watchConfig) {
+      try {
+        const channelList: { id: string; name: string }[] = [];
+        let cursor: string | undefined;
+        do {
+          const resp = await app.client.conversations.list({
+            types: "public_channel,private_channel",
+            limit: 200,
+            cursor,
+          });
+          for (const ch of resp.channels || []) {
+            if (ch.id && ch.name) channelList.push({ id: ch.id, name: ch.name });
+          }
+          cursor = resp.response_metadata?.next_cursor || undefined;
+        } while (cursor);
+
+        for (const [name, cfg] of Object.entries(watchConfig)) {
+          const match = channelList.find((c) => c.name === name);
+          if (match) {
+            watchChannels.set(match.id, { name, behavior: cfg.behavior });
+            log.info({ channel: name, id: match.id }, "slack: watching channel");
+          } else {
+            log.warn({ channel: name }, "slack: watch channel not found");
+          }
+        }
+      } catch (err) {
+        log.warn({ err }, "slack: failed to resolve watch channels");
+      }
     }
 
     log.info("slack bot started (Socket Mode)");
