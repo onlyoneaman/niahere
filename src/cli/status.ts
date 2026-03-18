@@ -8,6 +8,7 @@ import type { ScheduleType, JobStateStatus, RoomStats } from "../types";
 import { withDb } from "../db/connection";
 import { errMsg } from "../utils/errors";
 import { checkForUpdate } from "../utils/update";
+import { ICON_PASS, ICON_FAIL, ICON_RUNNING } from "../utils/cli";
 
 type StatusOptions = {
   json: boolean;
@@ -245,7 +246,7 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
           safeDate(nextRun)!.getTime() <= now.getTime() &&
           !stateInfo;
 
-        const statusIcon = status === "ok" ? "\u2713" : status === "error" ? "\u2717" : status === "running" ? "\u21bb" : "\u2217";
+        const statusIcon = status === "ok" ? ICON_PASS : status === "error" ? ICON_FAIL : status === "running" ? ICON_RUNNING : "\u2217";
         const durationText = stateInfo?.duration_ms === undefined ? "n/a" : `${stateInfo.duration_ms}ms`;
         const nextText = nextRun ? formatTimeLine(nextRun, now) : "unknown";
         const lastText = lastRun ? formatTimeLine(lastRun, now) : "never";
@@ -292,7 +293,7 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
       console.log("\nJobs (from state file):");
       for (const [name, info] of fallbackEntries) {
         const last = formatTimeLine(info.lastRun, now);
-        const icon = info.status === "ok" ? "\u2713" : info.status === "error" ? "\u2717" : "\u2217";
+        const icon = info.status === "ok" ? ICON_PASS : info.status === "error" ? ICON_FAIL : "\u2217";
         console.log(`  ${icon} ${name}: ${info.status} (last: ${last}, ${info.duration_ms}ms)`);
       }
     } else if (dbError) {

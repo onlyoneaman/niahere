@@ -8,7 +8,7 @@ import { Message } from "../db/models";
 import { withDb } from "../db/connection";
 import { getNiaHome, getPaths } from "../utils/paths";
 import { errMsg } from "../utils/errors";
-import { fail } from "../utils/cli";
+import { fail, ICON_PASS, ICON_WARN } from "../utils/cli";
 import { jobCommand } from "./job";
 import { statusCommand } from "./status";
 import { sendCommand, telegramCommand, slackCommand } from "./channels";
@@ -64,14 +64,14 @@ async function awaitStartup(timeout = 60_000): Promise<void> {
       if (ready.has(name)) continue;
       if (content.includes(STARTUP_MARKERS[name])) {
         ready.add(name);
-        console.log(`  \u2713 ${name}`);
+        console.log(`  ${ICON_PASS} ${name}`);
       }
     }
   }
 
   const pending = [...expecting].filter((e) => !ready.has(e));
   if (pending.length > 0) {
-    console.log(`  \u26A0 timed out waiting for: ${pending.join(", ")}`);
+    console.log(`  ${ICON_WARN} timed out waiting for: ${pending.join(", ")}`);
   }
 }
 
@@ -143,9 +143,7 @@ switch (command) {
     if (prompt) {
       const { createChatEngine } = await import("../chat/engine");
       const { getMcpServers } = await import("../mcp");
-      const DIM = "\x1b[2m";
-      const RST = "\x1b[0m";
-      const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+      const { DIM, RESET: RST, CLEAR_LINE, SPINNER: FRAMES } = await import("../utils/cli");
       let frame = 0;
       let statusText = "thinking";
       let spinTimer: ReturnType<typeof setInterval> | null = null;
@@ -153,7 +151,7 @@ switch (command) {
       let streaming = false;
 
       const renderSpinner = () => {
-        process.stderr.write(`\x1b[2K\r${DIM}  ${FRAMES[frame]} ${statusText}${RST}`);
+        process.stderr.write(`${CLEAR_LINE}${DIM}  ${FRAMES[frame]} ${statusText}${RST}`);
         frame = (frame + 1) % FRAMES.length;
       };
 

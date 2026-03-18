@@ -8,7 +8,7 @@ import { Job } from "../db/models";
 import { withDb } from "../db/connection";
 import type { ScheduleType } from "../types";
 import { errMsg } from "../utils/errors";
-import { fail, pickFromList } from "../utils/cli";
+import { fail, pickFromList, ICON_PASS, ICON_FAIL } from "../utils/cli";
 import { computeInitialNextRun } from "../core/scheduler";
 
 async function pickJob(prompt = "Pick a job"): Promise<string> {
@@ -164,7 +164,7 @@ export async function jobCommand(): Promise<void> {
             for (const e of entries) {
               const time = localTime(new Date(e.timestamp));
               const dur = `${e.duration_ms}ms`;
-              const icon = e.status === "ok" ? "\u2713" : "\u2717";
+              const icon = e.status === "ok" ? ICON_PASS : ICON_FAIL;
               const summary = e.error || e.result.slice(0, 60).replace(/\n/g, " ") || "-";
               console.log(`    ${icon} ${time}  ${dur.padStart(8)}  ${summary}`);
             }
@@ -230,7 +230,7 @@ export async function jobCommand(): Promise<void> {
       for (const e of entries) {
         const time = localTime(new Date(e.timestamp));
         const dur = `${e.duration_ms}ms`;
-        const status = e.status === "ok" ? "\u2713" : "\u2717";
+        const status = e.status === "ok" ? ICON_PASS : ICON_FAIL;
         const summary = e.error || e.result.slice(0, 80).replace(/\n/g, " ") || "-";
         console.log(`  ${status} ${time}  ${dur.padStart(8)}  ${e.job}  ${summary}`);
       }

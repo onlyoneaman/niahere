@@ -1,7 +1,7 @@
 import { getConfig, updateRawConfig } from "../utils/config";
 import { getPaths } from "../utils/paths";
 import { errMsg } from "../utils/errors";
-import { fail } from "../utils/cli";
+import { fail, ICON_PASS, ICON_FAIL } from "../utils/cli";
 import { log } from "../utils/log";
 
 export async function sendCommand(): Promise<void> {
@@ -98,7 +98,7 @@ export async function slackCommand(): Promise<void> {
         });
         const data = (await resp.json()) as Record<string, unknown>;
         if (data.ok) {
-          console.log(`  Auth: \u2713 valid`);
+          console.log(`  Auth: ${ICON_PASS} valid`);
           // Backfill workspace info if missing
           if (!config.channels.slack.workspace) {
             const enriched = await enrichSlackConfig(config.channels.slack.bot_token);
@@ -108,10 +108,10 @@ export async function slackCommand(): Promise<void> {
             }
           }
         } else {
-          console.log(`  Auth: \u2717 ${data.error}`);
+          console.log(`  Auth: ${ICON_FAIL} ${data.error}`);
         }
       } catch (err) {
-        console.log(`  Auth: \u2717 could not reach Slack API`);
+        console.log(`  Auth: ${ICON_FAIL} could not reach Slack API`);
       }
     } else {
       console.log("Slack: not configured");

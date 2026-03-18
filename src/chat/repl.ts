@@ -6,16 +6,7 @@ import { getMcpServers, setMcpServers } from "../mcp";
 import { createNiaMcpServer } from "../mcp/server";
 import { Session } from "../db/models";
 import { relativeTime } from "../utils/format";
-
-// ANSI helpers
-const DIM = "\x1b[2m";
-const BOLD = "\x1b[1m";
-const CYAN = "\x1b[36m";
-const RESET = "\x1b[0m";
-const CLEAR_LINE = "\x1b[2K\r";
-
-// Braille spinner frames
-const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+import { DIM, BOLD, CYAN, RESET, CLEAR_LINE, SPINNER } from "../utils/cli";
 
 class StatusLine {
   private frame = 0;

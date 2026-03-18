@@ -1,10 +1,7 @@
 import { existsSync, readFileSync } from "fs";
 import yaml from "js-yaml";
 import { getPaths } from "../utils/paths";
-
-const PASS = "\u2713";
-const FAIL = "\u2717";
-const WARN = "\u26A0";
+import { ICON_PASS as PASS, ICON_FAIL as FAIL, ICON_WARN as WARN } from "../utils/cli";
 
 interface Result {
   ok: boolean;

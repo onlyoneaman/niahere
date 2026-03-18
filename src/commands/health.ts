@@ -98,14 +98,11 @@ export async function healthCommand(): Promise<void> {
   push(checks, "bun", "ok", "v" + bunVersion);
 
   // Output
-  const GREEN = "\x1b[32m";
-  const YELLOW = "\x1b[33m";
-  const RED = "\x1b[31m";
-  const RST = "\x1b[0m";
+  const { GREEN, YELLOW, RED, RESET, ICON_PASS, ICON_FAIL, ICON_WARN } = await import("../utils/cli");
   const icons: Record<string, string> = {
-    ok: GREEN + "\u2713" + RST,
-    warn: YELLOW + "!" + RST,
-    fail: RED + "\u2717" + RST,
+    ok: GREEN + ICON_PASS + RESET,
+    warn: YELLOW + ICON_WARN + RESET,
+    fail: RED + ICON_FAIL + RESET,
   };
 
   console.log();
