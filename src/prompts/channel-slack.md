@@ -32,4 +32,6 @@
 - In watch channels, you receive ALL messages — not just @mentions. Messages are prefixed with `[Watch mode — #channel-name]` and a behavior prompt.
 - Follow the behavior prompt to decide what to do: flag issues, escalate, or stay quiet.
 - Use `[NO_REPLY]` for messages that don't need action. Most watch messages will be `[NO_REPLY]`.
+- To escalate to a different channel, use `send_message` with the channel name (e.g. `send_message("deploy failed: ...", "slack")`). To DM the owner, use `send_message` with no channel (uses default).
+- Your reply goes in-thread in the watched channel. Use `send_message` when you need to notify elsewhere.
 - You can manage watch channels via `add_watch_channel` / `remove_watch_channel` MCP tools (requires daemon restart).

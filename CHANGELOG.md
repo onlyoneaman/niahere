@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.2.25] - 2026-03-18
+
+- fix: relax channel permissions — anyone can ask read operations, only owner for destructive actions
+- feat: `nia validate` command to check config.yaml for errors
+- feat: support `channel_id#channel_name` format for watch channels (no API call needed)
+- refactor: extract CLI formatting constants (icons, colors, spinner) into shared `utils/cli.ts`
+- docs: add release cadence guidance to AGENTS.md
+
 ## [0.2.22] - 2026-03-18
 
 - feat: Slack watch channels — per-channel proactive monitoring with configurable behavior prompts
