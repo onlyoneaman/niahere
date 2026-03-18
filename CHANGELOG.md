@@ -1,0 +1,51 @@
+# Changelog
+
+## [Unreleased]
+
+- feat: Slack watch channels — per-channel proactive monitoring with behavior prompts
+- feat: download and cache thread attachments (images, PDFs) from Slack threads
+- perf: disk-backed file cache for Slack attachments (`~/.niahere/tmp/attachments/`)
+- feat: context prefix on cached attachment filenames for easier debugging
+- feat: increase Slack thread context from 20 to 50 messages
+
+## [0.2.21] - 2026-03-18
+
+- fix: simplify `nia job list` output to one line per job
+- fix: close Claude SDK query handle after job completes (prevents lingering subprocesses)
+- fix: harden `add_memory` to reject log dumps, transcripts, and duplicates
+- feat: add `nia rules` and `nia memory` CLI commands (show/reset)
+
+## [0.2.20] - 2026-03-18
+
+- feat: add Claude Agent SDK as default job runner with codex fallback (`runner: claude|codex` in config)
+- feat: add gh-stamp skill for PR approval comments
+
+## [0.2.19] - 2026-03-17
+
+- feat: add `rules.md` and `add_rule`/`add_memory` MCP tools
+- fix: handle backtick-wrapped `[NO_REPLY]` sentinel in Slack channel
+
+## [0.2.18] - 2026-03-16
+
+- feat: add `nia health`, `logs --channel` filter, `chat --channel` simulate
+- fix: resource leaks and data safety (review findings)
+- fix: observability, validation, safety improvements
+- perf: start and stop channels in parallel
+
+## [0.2.17] - 2026-03-15
+
+- feat: add frontend-design skill, anti-AI-slop + code quality rules to prompts
+- refactor: extract shared standards into mode-common prompt
+- refactor: move security and permissions to channel-common prompt
+
+## [0.2.16] - 2026-03-15
+
+- docs: add CLAUDE.md, add test coverage expectation to AGENTS.md
+
+## [0.2.15] - 2026-03-14
+
+- feat: improve system prompts with Codex-inspired best practices
+
+## [0.2.14] - 2026-03-14
+
+- Initial public release
