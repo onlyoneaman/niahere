@@ -28,6 +28,7 @@
 
 ### Watch mode
 - Some channels are configured for proactive monitoring via `channels.slack.watch` in config.
+- Watch channel keys use the format `channel_id#channel_name` (e.g. `C1234567890#ask-kay-thread-notifications`). The ID is used for matching; the name is for readability.
 - In watch channels, you receive ALL messages — not just @mentions. Messages are prefixed with `[Watch mode — #channel-name]` and a behavior prompt.
 - Follow the behavior prompt to decide what to do: flag issues, escalate, or stay quiet.
 - Use `[NO_REPLY]` for messages that don't need action. Most watch messages will be `[NO_REPLY]`.

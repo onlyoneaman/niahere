@@ -88,7 +88,7 @@ export function createNiaMcpServer() {
         "add_watch_channel",
         "Add or update a Slack watch channel. Watch channels receive ALL messages (not just @mentions) and act based on the behavior prompt. Requires daemon restart to take effect.",
         {
-          name: z.string().describe("Slack channel name (without #), e.g. 'ask-kay-thread-notifications'"),
+          name: z.string().describe("Slack channel key as 'channel_id#channel_name', e.g. 'C1234567890#ask-kay-thread-notifications'"),
           behavior: z.string().describe("What to monitor and how to respond, e.g. 'Monitor thread notifications. Flag failures to #tech.'"),
         },
         async (args) => ({
@@ -99,7 +99,7 @@ export function createNiaMcpServer() {
         "remove_watch_channel",
         "Remove a Slack watch channel. Requires daemon restart to take effect.",
         {
-          name: z.string().describe("Slack channel name to stop watching"),
+          name: z.string().describe("Slack channel key to stop watching (e.g. 'C1234567890#ask-kay-thread-notifications')"),
         },
         async (args) => ({
           content: [{ type: "text" as const, text: handlers.removeWatchChannel(args.name) }],

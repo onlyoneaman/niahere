@@ -59,7 +59,7 @@ Config reference:
 - `channels.slack.app_token` — Slack app token (xapp-...)
 - `channels.slack.channel_id` — default Slack channel for outbound
 - `channels.slack.dm_user_id` — auto-registered DM user
-- `channels.slack.watch` — per-channel proactive monitoring (see Watch mode in Slack docs)
+- `channels.slack.watch` — per-channel proactive monitoring. Keys are `channel_id#channel_name` format.
 {{slackWatch}}
 
 ## Persona & Memory

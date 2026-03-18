@@ -508,36 +508,45 @@ class SlackChannel implements Channel {
       log.warn({ err }, "could not get slack bot user ID");
     }
 
-    // Resolve watch channel names → IDs
-    const watchConfig = config.channels.slack.watch;
-    if (watchConfig) {
-      try {
-        const channelList: { id: string; name: string }[] = [];
-        let cursor: string | undefined;
-        do {
-          const resp = await app.client.conversations.list({
-            types: "public_channel,private_channel",
-            exclude_archived: true,
-            limit: 200,
-            cursor,
-          });
-          for (const ch of resp.channels || []) {
-            if (ch.id && ch.name) channelList.push({ id: ch.id, name: ch.name });
-          }
-          cursor = resp.response_metadata?.next_cursor || undefined;
-        } while (cursor);
-
-        for (const [name, cfg] of Object.entries(watchConfig)) {
-          const match = channelList.find((c) => c.name === name);
-          if (match) {
-            watchChannels.set(match.id, { name, behavior: cfg.behavior });
-            log.info({ channel: name, id: match.id }, "slack: watching channel");
-          } else {
-            log.warn({ channel: name }, "slack: watch channel not found");
+    // Parse watch channels — keys are "channel_id#channel_name" or just "channel_name"
+    const rawWatchConfig = config.channels.slack.watch;
+    if (rawWatchConfig) {
+      for (const [key, cfg] of Object.entries(rawWatchConfig)) {
+        const hashIdx = key.indexOf("#");
+        if (hashIdx !== -1) {
+          // channel_id#channel_name format — use ID directly, no API call needed
+          const id = key.slice(0, hashIdx);
+          const name = key.slice(hashIdx + 1);
+          watchChannels.set(id, { name, behavior: cfg.behavior });
+          log.info({ channel: name, id }, "slack: watching channel");
+        } else {
+          // Legacy: plain channel name — resolve via API
+          try {
+            const channelList: { id: string; name: string }[] = [];
+            let cursor: string | undefined;
+            do {
+              const resp = await app.client.conversations.list({
+                types: "public_channel,private_channel",
+                exclude_archived: true,
+                limit: 200,
+                cursor,
+              });
+              for (const ch of resp.channels || []) {
+                if (ch.id && ch.name) channelList.push({ id: ch.id, name: ch.name });
+              }
+              cursor = resp.response_metadata?.next_cursor || undefined;
+            } while (cursor);
+            const match = channelList.find((c) => c.name === key);
+            if (match) {
+              watchChannels.set(match.id, { name: key, behavior: cfg.behavior });
+              log.info({ channel: key, id: match.id }, "slack: watching channel (resolved by name)");
+            } else {
+              log.warn({ channel: key }, "slack: watch channel not found");
+            }
+          } catch (err) {
+            log.warn({ err, channel: key }, "slack: failed to resolve watch channel");
           }
         }
-      } catch (err) {
-        log.warn({ err }, "slack: failed to resolve watch channels");
       }
     }
 
