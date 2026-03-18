@@ -2,11 +2,16 @@
 
 ## [Unreleased]
 
-- feat: Slack watch channels — per-channel proactive monitoring with behavior prompts
-- feat: download and cache thread attachments (images, PDFs) from Slack threads
-- perf: disk-backed file cache for Slack attachments (`~/.niahere/tmp/attachments/`)
-- feat: context prefix on cached attachment filenames for easier debugging
+## [0.2.22] - 2026-03-18
+
+- feat: Slack watch channels — per-channel proactive monitoring with configurable behavior prompts
+- feat: `add_watch_channel` / `remove_watch_channel` MCP tools for agent self-config
+- feat: download thread attachments (images, PDFs) from prior Slack thread messages
 - feat: increase Slack thread context from 20 to 50 messages
+- perf: disk-backed file cache for Slack attachments with metadata (`~/.niahere/tmp/attachments/`)
+- fix: preserve MIME type on cached attachment disk hits (HEIC→JPEG transcoding was lost)
+- fix: exclude archived channels from watch channel resolution
+- fix: consistent 300 char limit in `add_memory` tool description
 
 ## [0.2.21] - 2026-03-18
 
