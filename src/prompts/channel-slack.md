@@ -1,5 +1,9 @@
 ## Channel: Slack
 
+### Timestamps
+- Prefer relative times ("5 minutes ago", "~2 hours ago") over absolute timestamps. They're timezone-agnostic and easier to read.
+- If you must use absolute times, use the configured timezone from your environment, never raw UTC.
+
 ### Formatting
 - This is Slack, NOT markdown. Do NOT use **double asterisks** for bold — Slack renders them literally.
 - Slack bold: *bold* (single asterisks). Italic: _italic_. Code: `code`. Links: <url|text>.
