@@ -263,16 +263,16 @@ export function addMemory(entry: string): string {
 
   // Deduplicate: skip if a substantially similar entry already exists
   const normalized = trimmed.toLowerCase().replace(/[^a-z0-9 ]/g, "");
-  const lines = existing.split("\n").filter((l) => l.startsWith("- "));
-  for (const line of lines) {
-    const norm = line.slice(2).toLowerCase().replace(/[^a-z0-9 ]/g, "");
-    // Check if >60% of words overlap
-    const newWords = new Set(normalized.split(/\s+/).filter(Boolean));
-    const oldWords = new Set(norm.split(/\s+/).filter(Boolean));
-    if (newWords.size === 0) continue;
-    let overlap = 0;
-    for (const w of newWords) { if (oldWords.has(w)) overlap++; }
-    if (overlap / newWords.size > 0.6) return "Rejected: similar memory already exists.";
+  const newWords = new Set(normalized.split(/\s+/).filter(Boolean));
+  if (newWords.size > 0) {
+    const lines = existing.split("\n").filter((l) => l.startsWith("- "));
+    for (const line of lines) {
+      const norm = line.slice(2).toLowerCase().replace(/[^a-z0-9 ]/g, "");
+      const oldWords = new Set(norm.split(/\s+/).filter(Boolean));
+      let overlap = 0;
+      for (const w of newWords) { if (oldWords.has(w)) overlap++; }
+      if (overlap / newWords.size > 0.6) return "Rejected: similar memory already exists.";
+    }
   }
 
   const date = new Date().toISOString().slice(0, 10);

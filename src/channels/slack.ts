@@ -208,7 +208,7 @@ class SlackChannel implements Channel {
       return Buffer.from(await resp.arrayBuffer());
     }
 
-    async function extractSlackAttachments(files: any[], context?: string): Promise<Attachment[]> {
+    async function extractSlackAttachments(files: any[]): Promise<Attachment[]> {
       const attachments: Attachment[] = [];
       for (const file of files.slice(0, 5)) {
         const mime = file.mimetype || "application/octet-stream";
@@ -223,16 +223,21 @@ class SlackChannel implements Channel {
           continue;
         }
 
-        // Check disk (survives daemon restarts)
+        // Check disk (survives daemon restarts) — keyed by URL hash only (global dedup)
         const hash = urlHash(file.url_private_download);
         const ext = file.name?.split(".").pop() || "bin";
-        const prefix = context ? `slack-${context}-` : "slack-";
-        const diskPath = join(attachDir, `${prefix}${hash}.${ext}`);
-        if (existsSync(diskPath)) {
-          const entry: CachedFile = { path: diskPath, type: attType, mimeType: mime, filename: file.name };
-          fileIndex.set(file.url_private_download, entry);
-          attachments.push(loadCached(entry));
-          continue;
+        const diskPath = join(attachDir, `${hash}.${ext}`);
+        const metaPath = join(attachDir, `${hash}.meta.json`);
+        if (existsSync(diskPath) && existsSync(metaPath)) {
+          try {
+            const meta = JSON.parse(readFileSync(metaPath, "utf8"));
+            const entry: CachedFile = { path: diskPath, type: meta.type || attType, mimeType: meta.mimeType || mime, filename: meta.filename || file.name };
+            fileIndex.set(file.url_private_download, entry);
+            attachments.push(loadCached(entry));
+            continue;
+          } catch {
+            // Corrupt meta — re-download
+          }
         }
 
         try {
@@ -250,8 +255,9 @@ class SlackChannel implements Channel {
             finalMime = prepared.mimeType;
           }
 
-          // Save to disk
+          // Save file + metadata to disk
           writeFileSync(diskPath, finalData);
+          writeFileSync(metaPath, JSON.stringify({ type: attType, mimeType: finalMime, filename: file.name }));
           const entry: CachedFile = { path: diskPath, type: attType, mimeType: finalMime, filename: file.name };
           fileIndex.set(file.url_private_download, entry);
 
@@ -380,7 +386,7 @@ class SlackChannel implements Channel {
       // Download any file attachments
       let attachments: Attachment[] | undefined;
       if (hasFiles) {
-        attachments = await extractSlackAttachments(msg.files!, key);
+        attachments = await extractSlackAttachments(msg.files!);
       }
 
       if (!text && (!attachments || attachments.length === 0)) return;
@@ -414,7 +420,7 @@ class SlackChannel implements Channel {
             let threadFilesAdded = 0;
             for (const m of messagesWithFiles) {
               if (threadFilesAdded >= threadFileBudget) break;
-              const extracted = await extractSlackAttachments(m.files || [], key);
+              const extracted = await extractSlackAttachments(m.files || []);
               for (const att of extracted) {
                 if (threadFilesAdded >= threadFileBudget) break;
                 attachments.push(att);
