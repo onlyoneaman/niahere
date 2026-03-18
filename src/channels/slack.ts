@@ -204,7 +204,7 @@ class SlackChannel implements Channel {
       return Buffer.from(await resp.arrayBuffer());
     }
 
-    async function extractSlackAttachments(files: any[]): Promise<Attachment[]> {
+    async function extractSlackAttachments(files: any[], context?: string): Promise<Attachment[]> {
       const attachments: Attachment[] = [];
       for (const file of files.slice(0, 5)) {
         const mime = file.mimetype || "application/octet-stream";
@@ -222,7 +222,8 @@ class SlackChannel implements Channel {
         // Check disk (survives daemon restarts)
         const hash = urlHash(file.url_private_download);
         const ext = file.name?.split(".").pop() || "bin";
-        const diskPath = join(attachDir, `${hash}.${ext}`);
+        const prefix = context ? `slack-${context}-` : "slack-";
+        const diskPath = join(attachDir, `${prefix}${hash}.${ext}`);
         if (existsSync(diskPath)) {
           const entry: CachedFile = { path: diskPath, type: attType, mimeType: mime, filename: file.name };
           fileIndex.set(file.url_private_download, entry);
@@ -343,15 +344,6 @@ class SlackChannel implements Channel {
         text = `[user:${msg.user}] ${text}`;
       }
 
-      // Download any file attachments
-      let attachments: Attachment[] | undefined;
-      if (hasFiles) {
-        attachments = await extractSlackAttachments(msg.files!);
-      }
-
-      if (!text && (!attachments || attachments.length === 0)) return;
-      if (!text) text = attachments?.some(a => a.type === "image") ? "What's in this image?" : "Here's a file.";
-
       // Auto-register DM user for outbound messages
       if (isDm && !self.dmUserId && msg.user) {
         self.dmUserId = msg.user;
@@ -376,6 +368,15 @@ class SlackChannel implements Channel {
         key = `${channelName}-t${threadTs}`;
         replyThreadTs = threadTs;
       }
+
+      // Download any file attachments
+      let attachments: Attachment[] | undefined;
+      if (hasFiles) {
+        attachments = await extractSlackAttachments(msg.files!, key);
+      }
+
+      if (!text && (!attachments || attachments.length === 0)) return;
+      if (!text) text = attachments?.some(a => a.type === "image") ? "What's in this image?" : "Here's a file.";
 
       // When replying in a thread, fetch thread context so Nia can see the full conversation
       if (msg.thread_ts) {
@@ -405,7 +406,7 @@ class SlackChannel implements Channel {
             let threadFilesAdded = 0;
             for (const m of messagesWithFiles) {
               if (threadFilesAdded >= threadFileBudget) break;
-              const extracted = await extractSlackAttachments(m.files || []);
+              const extracted = await extractSlackAttachments(m.files || [], key);
               for (const att of extracted) {
                 if (threadFilesAdded >= threadFileBudget) break;
                 attachments.push(att);
