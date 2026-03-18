@@ -163,7 +163,7 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 - **Lazy DB:** `getSql()` creates connection on first use, `withDb()` wraps migrate+execute+close
 - **LISTEN/NOTIFY:** Job mutations call `pg_notify('nia_jobs')`, daemon listens and auto-reloads schedules
 - **Jobs vs crons:** Jobs respect `active_hours`, crons (`always: true`) run 24/7. Both use the same `jobs` table.
-- **Job execution:** Jobs run via `codex exec --json`, output parsed for session ID and agent message. Session ID stored in audit for `codex resume` inspection.
+- **Job execution:** Configurable via `runner` in config.yaml — `"claude"` (default, uses Claude Agent SDK `query()`) or `"codex"` (uses `codex exec --json`). Session ID stored in audit for inspection.
 - **Channel registration:** Channels export factory functions, `registerAllChannels()` wires them up explicitly. No side-effect imports.
 - **Daemon lifecycle:** Blocking stop (waits for engines, escalates to SIGKILL). Service-aware restart via launchctl/systemd. Startup guard prevents duplicate daemons.
 - **Telegram:** Typing indicator while processing. Final response sent as fresh message.

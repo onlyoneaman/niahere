@@ -25,6 +25,7 @@ export interface ChannelsConfig {
 
 export interface Config {
   model: string;
+  runner: "claude" | "codex";
   timezone: string;
   activeHours: { start: string; end: string };
   database_url: string;
