@@ -196,6 +196,8 @@ npm run release          # npm version patch && npm publish && git push
 
 This bumps the patch version, publishes to npm, and pushes the version commit + tag. Users update with `npm i -g niahere`.
 
+**Release cadence:** Don't release with every small change. Batch changes and ask for confirmation before releasing. Only release when explicitly asked or when there are meaningful changes worth a version bump.
+
 ## Keeping Docs Updated
 
 When making changes, keep these files in sync:
@@ -203,6 +205,7 @@ When making changes, keep these files in sync:
 - **AGENTS.md** — update when: adding/moving files, changing config schema, adding key patterns
 - **README.md** — update when: adding/changing CLI commands, features, setup steps
 - **Prompts** (`src/prompts/*.md`) — update when: changing channel behavior, formatting rules, security policies
+- **CHANGELOG.md** — update when: releasing. Move `[Unreleased]` items under new version header.
 - **CLI help text** (`src/cli/index.ts` default case) — update when: adding/renaming subcommands
 - **Slack manifest** (`defaults/channels/slack-manifest.json`) — update when: adding Slack API features
 
