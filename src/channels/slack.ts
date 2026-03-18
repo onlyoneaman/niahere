@@ -511,6 +511,7 @@ class SlackChannel implements Channel {
         do {
           const resp = await app.client.conversations.list({
             types: "public_channel,private_channel",
+            exclude_archived: true,
             limit: 200,
             cursor,
           });
