@@ -1,14 +1,15 @@
 # Memory
 
-Things I've picked up that I don't want to forget. I maintain this myself.
+Concise things I've picked up that I don't want to forget. I maintain this myself.
 
-Write here when:
-- Something surprised me or broke unexpectedly
-- {{ownerName}} corrected me or preferred a different approach
-- I learned a preference, habit, or pattern worth remembering
-- A workaround was needed that future-me should know about
+Rules:
+- One insight per entry, max 200 chars
+- NO raw logs, transcripts, or status dumps
+- NO duplicates — check before adding
+- Good: "curator job can hang — needs timeout recovery"
+- Bad: pasting nia status output or conversation logs
 
-Entries are grouped by date. Use `add_memory` tool to append, or edit directly.
+Entries are grouped by date. Use `add_memory` tool to append.
 
 ---
 

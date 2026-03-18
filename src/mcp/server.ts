@@ -96,9 +96,9 @@ export function createNiaMcpServer() {
       ),
       tool(
         "add_memory",
-        "Save a factual memory for future reference. Memories are read on demand, not loaded automatically. Use for things learned, preferences discovered, or context worth keeping.",
+        "Save a concise factual memory for future reference. Memories are read on demand, not loaded automatically. Use for preferences, corrections, or patterns worth keeping. RULES: Max 200 chars. One insight per entry. NO raw logs, NO conversation transcripts, NO status dumps, NO duplicate observations. Bad: pasting nia status output. Good: 'curator job can get stuck in running state — needs timeout recovery'.",
         {
-          entry: z.string().describe("What to remember (e.g. 'Aman prefers short Slack messages in #tech')"),
+          entry: z.string().max(300).describe("A single concise insight (max 200 chars, no raw logs or transcripts)"),
         },
         async (args) => ({
           content: [{ type: "text" as const, text: handlers.addMemory(args.entry) }],

@@ -230,19 +230,39 @@ export function addRule(rule: string): string {
 }
 
 export function addMemory(entry: string): string {
+  // Guard: reject raw logs, transcripts, and overly long entries
+  const trimmed = entry.trim();
+  if (!trimmed) return "Rejected: empty entry.";
+  if (trimmed.length > 300) return "Rejected: too long (max 300 chars). Distill to a single concise insight.";
+  if (trimmed.includes("[Thread context]") || trimmed.includes("[Current messag")) return "Rejected: no raw conversation transcripts.";
+  if (trimmed.split("\n").length > 5) return "Rejected: too many lines. One concise insight per memory.";
+
   const { selfDir } = getPaths();
   const memoryPath = join(selfDir, "memory.md");
+  const existing = existsSync(memoryPath) ? readFileSync(memoryPath, "utf8") : "";
+
+  // Deduplicate: skip if a substantially similar entry already exists
+  const normalized = trimmed.toLowerCase().replace(/[^a-z0-9 ]/g, "");
+  const lines = existing.split("\n").filter((l) => l.startsWith("- "));
+  for (const line of lines) {
+    const norm = line.slice(2).toLowerCase().replace(/[^a-z0-9 ]/g, "");
+    // Check if >60% of words overlap
+    const newWords = new Set(normalized.split(/\s+/).filter(Boolean));
+    const oldWords = new Set(norm.split(/\s+/).filter(Boolean));
+    if (newWords.size === 0) continue;
+    let overlap = 0;
+    for (const w of newWords) { if (oldWords.has(w)) overlap++; }
+    if (overlap / newWords.size > 0.6) return "Rejected: similar memory already exists.";
+  }
+
   const date = new Date().toISOString().slice(0, 10);
   const header = `\n## ${date}`;
 
-  const existing = existsSync(memoryPath) ? readFileSync(memoryPath, "utf8") : "";
   if (existing.includes(header)) {
-    // Append under existing date header
-    const updated = existing.replace(header, `${header}\n- ${entry}`);
+    const updated = existing.replace(header, `${header}\n- ${trimmed}`);
     writeFileSync(memoryPath, updated, "utf8");
   } else {
-    // New date section
-    appendFileSync(memoryPath, `${header}\n- ${entry}\n`, "utf8");
+    appendFileSync(memoryPath, `${header}\n- ${trimmed}\n`, "utf8");
   }
   return `Memory saved.`;
 }
