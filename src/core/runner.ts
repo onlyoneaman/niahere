@@ -91,18 +91,22 @@ async function runJobWithClaude(systemPrompt: string, jobPrompt: string, cwd: st
   let agentText = "";
   let actualSessionId = sessionId;
 
-  for await (const message of handle) {
-    if (message.type === "system" && (message as any).subtype === "init") {
-      actualSessionId = (message as any).session_id || sessionId;
-    }
-    if (message.type === "result") {
-      if (!(message as any).is_error) {
-        agentText = (message as any).result || "";
-      } else {
-        const errors = (message as any).errors;
-        return { agentText: "", sessionId: actualSessionId, error: errors?.join(", ") || "unknown error" };
+  try {
+    for await (const message of handle) {
+      if (message.type === "system" && (message as any).subtype === "init") {
+        actualSessionId = (message as any).session_id || sessionId;
+      }
+      if (message.type === "result") {
+        if (!(message as any).is_error) {
+          agentText = (message as any).result || "";
+        } else {
+          const errors = (message as any).errors;
+          return { agentText: "", sessionId: actualSessionId, error: errors?.join(", ") || "unknown error" };
+        }
       }
     }
+  } finally {
+    handle.close();
   }
 
   return { agentText, sessionId: actualSessionId };
