@@ -1,11 +1,15 @@
 import { App } from "@slack/bolt";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { join } from "path";
+import { createHash } from "crypto";
 import { createChatEngine } from "../chat/engine";
-import type { Channel, ChatState, Attachment } from "../types";
+import type { Channel, ChatState, Attachment, AttachmentType } from "../types";
 import { getConfig, updateRawConfig } from "../utils/config";
 import { runMigrations } from "../db/migrate";
 import { Session } from "../db/models";
 import { log } from "../utils/log";
 import { getMcpServers } from "../mcp";
+import { getNiaHome } from "../utils/paths";
 import { classifyMime, validateAttachment, prepareImage } from "../utils/attachment";
 
 /** Strip markdown backticks so sentinel tokens like [NO_REPLY] match even when the LLM wraps them. */
@@ -172,8 +176,25 @@ class SlackChannel implements Channel {
       await respond("New conversation started.");
     });
 
-    // Cache downloaded files by URL so we don't re-download on every thread message
-    const fileCache = new Map<string, Attachment>();
+    // Disk-backed file cache: download once, read from disk on subsequent requests
+    const attachDir = join(getNiaHome(), "tmp", "attachments");
+    mkdirSync(attachDir, { recursive: true });
+
+    interface CachedFile {
+      path: string;
+      type: AttachmentType;
+      mimeType: string;
+      filename?: string;
+    }
+    const fileIndex = new Map<string, CachedFile>();
+
+    function urlHash(url: string): string {
+      return createHash("sha256").update(url).digest("hex").slice(0, 16);
+    }
+
+    function loadCached(entry: CachedFile): Attachment {
+      return { type: entry.type, data: readFileSync(entry.path), mimeType: entry.mimeType, filename: entry.filename };
+    }
 
     async function downloadSlackFile(url: string): Promise<Buffer> {
       const resp = await fetch(url, {
@@ -191,10 +212,21 @@ class SlackChannel implements Channel {
         if (!attType) continue;
         if (!file.url_private_download) continue;
 
-        // Return cached version if already downloaded
-        const cached = fileCache.get(file.url_private_download);
-        if (cached) {
-          attachments.push(cached);
+        // Check in-memory index first
+        const cached = fileIndex.get(file.url_private_download);
+        if (cached && existsSync(cached.path)) {
+          attachments.push(loadCached(cached));
+          continue;
+        }
+
+        // Check disk (survives daemon restarts)
+        const hash = urlHash(file.url_private_download);
+        const ext = file.name?.split(".").pop() || "bin";
+        const diskPath = join(attachDir, `${hash}.${ext}`);
+        if (existsSync(diskPath)) {
+          const entry: CachedFile = { path: diskPath, type: attType, mimeType: mime, filename: file.name };
+          fileIndex.set(file.url_private_download, entry);
+          attachments.push(loadCached(entry));
           continue;
         }
 
@@ -212,9 +244,13 @@ class SlackChannel implements Channel {
             finalData = prepared.data;
             finalMime = prepared.mimeType;
           }
-          const attachment: Attachment = { type: attType, data: finalData, mimeType: finalMime, filename: file.name };
-          fileCache.set(file.url_private_download, attachment);
-          attachments.push(attachment);
+
+          // Save to disk
+          writeFileSync(diskPath, finalData);
+          const entry: CachedFile = { path: diskPath, type: attType, mimeType: finalMime, filename: file.name };
+          fileIndex.set(file.url_private_download, entry);
+
+          attachments.push({ type: attType, data: finalData, mimeType: finalMime, filename: file.name });
         } catch (err) {
           log.warn({ err, file: file.name }, "failed to download slack file");
         }
