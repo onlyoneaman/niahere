@@ -6,6 +6,7 @@ export interface TelegramConfig {
 
 export interface SlackWatchChannel {
   behavior: string;
+  enabled: boolean;
 }
 
 export interface SlackConfig {

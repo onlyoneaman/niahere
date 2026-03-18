@@ -144,12 +144,13 @@ export function loadConfig(): Config {
 
   // Slack watch channels
   const rawWatch = chSl.watch as Record<string, unknown> | undefined;
-  let slWatch: Record<string, { behavior: string }> | null = null;
+  let slWatch: Record<string, { behavior: string; enabled: boolean }> | null = null;
   if (rawWatch && typeof rawWatch === "object") {
     slWatch = {};
     for (const [name, val] of Object.entries(rawWatch)) {
       if (val && typeof val === "object" && typeof (val as any).behavior === "string") {
-        slWatch[name] = { behavior: (val as any).behavior };
+        const enabled = (val as any).enabled !== false; // default true
+        slWatch[name] = { behavior: (val as any).behavior, enabled };
       }
     }
     if (Object.keys(slWatch).length === 0) slWatch = null;
@@ -199,16 +200,19 @@ function deepMerge(target: Record<string, unknown>, source: Record<string, unkno
 
 /** Deep-merge fields into config.yaml and write back atomically. */
 export function updateRawConfig(fields: Record<string, unknown>): void {
-  const { config } = getPaths();
   const raw = readRawConfig();
   deepMerge(raw, fields);
+  writeRawConfig(raw);
+}
+
+/** Write a full config object to config.yaml atomically (backup + temp + rename). */
+export function writeRawConfig(raw: Record<string, unknown>): void {
+  const { config } = getPaths();
   const dir = dirname(config);
   mkdirSync(dir, { recursive: true });
-  // Back up current config before overwriting
   if (existsSync(config)) {
     copyFileSync(config, join(dir, "config.yaml.bak"));
   }
-  // Write to temp file then rename for atomic update (prevents corruption on crash)
   const tmp = join(dir, `.config.yaml.tmp.${process.pid}`);
   writeFileSync(tmp, yaml.dump(raw, { lineWidth: -1 }));
   renameSync(tmp, config);

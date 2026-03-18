@@ -103,4 +103,60 @@ describe("loadConfig", () => {
     expect(config.database_url).toBe("postgres://env");
     delete process.env.DATABASE_URL;
   });
+
+  test("parses runner field with default claude", () => {
+    const config = loadConfig();
+    expect(config.runner).toBe("claude");
+  });
+
+  test("parses runner: codex", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, `runner: codex\n`);
+    const config = loadConfig();
+    expect(config.runner).toBe("codex");
+  });
+
+  test("invalid runner falls back to claude", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, `runner: invalid\n`);
+    const config = loadConfig();
+    expect(config.runner).toBe("claude");
+  });
+
+  test("parses slack watch channels", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, [
+      "channels:",
+      "  slack:",
+      "    bot_token: xoxb-test",
+      "    watch:",
+      "      C123#test-channel:",
+      "        behavior: Monitor things",
+      "        enabled: true",
+      "      C456#other:",
+      "        behavior: Watch stuff",
+      "        enabled: false",
+    ].join("\n"));
+    const config = loadConfig();
+    expect(config.channels.slack.watch).not.toBeNull();
+    const watch = config.channels.slack.watch!;
+    expect(watch["C123#test-channel"].behavior).toBe("Monitor things");
+    expect(watch["C123#test-channel"].enabled).toBe(true);
+    expect(watch["C456#other"].enabled).toBe(false);
+  });
+
+  test("watch channel enabled defaults to true", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, [
+      "channels:",
+      "  slack:",
+      "    watch:",
+      "      test-ch:",
+      "        behavior: Do stuff",
+    ].join("\n"));
+    const config = loadConfig();
+    expect(config.channels.slack.watch!["test-ch"].enabled).toBe(true);
+  });
+
+  test("watch is null when not configured", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, `channels:\n  slack:\n    bot_token: test\n`);
+    const config = loadConfig();
+    expect(config.channels.slack.watch).toBeNull();
+  });
 });

@@ -3,7 +3,7 @@ import type { ScheduleType } from "../types";
 import { basename, join } from "path";
 import { Job, Message, Session } from "../db/models";
 import { computeInitialNextRun } from "../core/scheduler";
-import { getConfig, readRawConfig, updateRawConfig } from "../utils/config";
+import { getConfig, readRawConfig, updateRawConfig, writeRawConfig } from "../utils/config";
 import { getPaths } from "../utils/paths";
 import { getChannel } from "../channels/registry";
 import { log } from "../utils/log";
@@ -233,20 +233,44 @@ export function addWatchChannel(name: string, behavior: string): string {
   const raw = readRawConfig();
   const channels = (raw.channels || {}) as Record<string, unknown>;
   const slack = (channels.slack || {}) as Record<string, unknown>;
-  const watch = { ...((slack.watch || {}) as Record<string, unknown>), [name]: { behavior } };
+  const watch = { ...((slack.watch || {}) as Record<string, unknown>), [name]: { behavior, enabled: true } };
   updateRawConfig({ channels: { slack: { watch } } });
-  return `Watch channel "${name}" added. Restart daemon to apply.`;
+  return `Watch channel "${name}" added (enabled). Restart daemon to apply.`;
 }
 
 export function removeWatchChannel(name: string): string {
   const raw = readRawConfig();
   const channels = (raw.channels || {}) as Record<string, unknown>;
   const slack = (channels.slack || {}) as Record<string, unknown>;
-  const watch = { ...((slack.watch || {}) as Record<string, unknown>) };
+  const watch = (slack.watch || {}) as Record<string, unknown>;
   if (!watch[name]) return `Watch channel "${name}" not found.`;
   delete watch[name];
-  updateRawConfig({ channels: { slack: { watch } } });
+  writeRawConfig(raw);
   return `Watch channel "${name}" removed. Restart daemon to apply.`;
+}
+
+export function enableWatchChannel(name: string): string {
+  const raw = readRawConfig();
+  const channels = (raw.channels || {}) as Record<string, unknown>;
+  const slack = (channels.slack || {}) as Record<string, unknown>;
+  const watch = (slack.watch || {}) as Record<string, unknown>;
+  if (!watch[name]) return `Watch channel "${name}" not found.`;
+  const entry = watch[name] as Record<string, unknown>;
+  entry.enabled = true;
+  updateRawConfig({ channels: { slack: { watch } } });
+  return `Watch channel "${name}" enabled. Restart daemon to apply.`;
+}
+
+export function disableWatchChannel(name: string): string {
+  const raw = readRawConfig();
+  const channels = (raw.channels || {}) as Record<string, unknown>;
+  const slack = (channels.slack || {}) as Record<string, unknown>;
+  const watch = (slack.watch || {}) as Record<string, unknown>;
+  if (!watch[name]) return `Watch channel "${name}" not found.`;
+  const entry = watch[name] as Record<string, unknown>;
+  entry.enabled = false;
+  updateRawConfig({ channels: { slack: { watch } } });
+  return `Watch channel "${name}" disabled. Restart daemon to apply.`;
 }
 
 export function addMemory(entry: string): string {

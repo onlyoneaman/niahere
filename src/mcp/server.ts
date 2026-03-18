@@ -106,6 +106,26 @@ export function createNiaMcpServer() {
         }),
       ),
       tool(
+        "enable_watch_channel",
+        "Enable a disabled Slack watch channel. Requires daemon restart to take effect.",
+        {
+          name: z.string().describe("Slack channel key to enable"),
+        },
+        async (args) => ({
+          content: [{ type: "text" as const, text: handlers.enableWatchChannel(args.name) }],
+        }),
+      ),
+      tool(
+        "disable_watch_channel",
+        "Disable a Slack watch channel without removing it. Requires daemon restart to take effect.",
+        {
+          name: z.string().describe("Slack channel key to disable"),
+        },
+        async (args) => ({
+          content: [{ type: "text" as const, text: handlers.disableWatchChannel(args.name) }],
+        }),
+      ),
+      tool(
         "add_rule",
         "Add a behavioral rule. Rules are loaded into every session and take effect without restart. Use for 'from now on' / 'always' / 'never' type instructions.",
         {

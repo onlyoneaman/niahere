@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.2.28] - 2026-03-18
+
+- feat: enable/disable flag for watch channels (`enabled: true|false` in config, default true)
+- feat: `nia watch` CLI — list, add, remove, enable, disable watch channels
+- feat: `enable_watch_channel` / `disable_watch_channel` MCP tools
+- feat: prefer relative timestamps over UTC in Slack messages
+- fix: move relaxed permissions to Slack-only, keep Telegram strict (owner-only)
+- fix: Slack reply routing — always reply in same thread, don't DM unless in DMs
+- test: add tests for config runner/watch parsing, addMemory guards, watch channel tools
+
 ## [0.2.25] - 2026-03-18
 
 - fix: relax channel permissions — anyone can ask read operations, only owner for destructive actions

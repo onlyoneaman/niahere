@@ -13,6 +13,7 @@ import { jobCommand } from "./job";
 import { statusCommand } from "./status";
 import { sendCommand, telegramCommand, slackCommand } from "./channels";
 import { rulesCommand, memoryCommand } from "./self";
+import { watchCommand } from "./watch";
 
 // Set LOG_LEVEL from config before anything else logs
 try {
@@ -213,6 +214,11 @@ switch (command) {
 
   case "memory": {
     memoryCommand();
+    break;
+  }
+
+  case "watch": {
+    watchCommand();
     break;
   }
 
@@ -440,6 +446,7 @@ switch (command) {
     console.log("  memory [show|reset] — view or reset memory.md");
     console.log("  db <sub>            — database setup/status/migrate");
     console.log("  skills              — list available skills");
+    console.log("  watch <sub>         — manage Slack watch channels");
     console.log("  validate            — validate config.yaml");
     console.log("  config <sub>        — get/set/list config values");
     console.log("  send [-c ch] <msg>  — send a message via channel");

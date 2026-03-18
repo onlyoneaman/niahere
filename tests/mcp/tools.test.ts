@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync, readFileSync } from "fs";
-import { guessMime, addRule, addMemory } from "../../src/mcp/tools";
+import { guessMime, addRule, addMemory, addWatchChannel, removeWatchChannel, enableWatchChannel, disableWatchChannel } from "../../src/mcp/tools";
+import { resetConfig } from "../../src/utils/config";
 
 const TEST_DIR = "/tmp/test-nia-mcp-tools";
 
@@ -12,6 +13,7 @@ beforeEach(() => {
 afterEach(() => {
   rmSync(TEST_DIR, { recursive: true, force: true });
   delete process.env.NIA_HOME;
+  resetConfig();
 });
 
 describe("guessMime", () => {
@@ -130,5 +132,104 @@ describe("addMemory", () => {
 
     const result = addMemory("test");
     expect(result).toContain("Memory saved");
+  });
+
+  test("rejects empty entry", () => {
+    writeFileSync(`${TEST_DIR}/self/memory.md`, "# Memory\n");
+    expect(addMemory("")).toContain("Rejected");
+    expect(addMemory("   ")).toContain("Rejected");
+  });
+
+  test("rejects entries over 300 chars", () => {
+    writeFileSync(`${TEST_DIR}/self/memory.md`, "# Memory\n");
+    const long = "a".repeat(301);
+    expect(addMemory(long)).toContain("Rejected");
+  });
+
+  test("rejects raw transcripts", () => {
+    writeFileSync(`${TEST_DIR}/self/memory.md`, "# Memory\n");
+    expect(addMemory("[Thread context] some log dump")).toContain("Rejected");
+    expect(addMemory("blah [Current message] blah")).toContain("Rejected");
+  });
+
+  test("rejects entries with too many lines", () => {
+    writeFileSync(`${TEST_DIR}/self/memory.md`, "# Memory\n");
+    const multiline = "line1\nline2\nline3\nline4\nline5\nline6";
+    expect(addMemory(multiline)).toContain("Rejected");
+  });
+});
+
+describe("watch channel tools", () => {
+  test("addWatchChannel creates watch entry in config", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, "channels:\n  slack:\n    bot_token: test\n");
+    resetConfig();
+
+    const result = addWatchChannel("C123#test", "Monitor things");
+    expect(result).toContain("added");
+
+    const yaml = readFileSync(`${TEST_DIR}/config.yaml`, "utf8");
+    expect(yaml).toContain("C123#test");
+    expect(yaml).toContain("Monitor things");
+  });
+
+  test("removeWatchChannel removes entry", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, [
+      "channels:",
+      "  slack:",
+      "    watch:",
+      "      C123#test:",
+      "        behavior: Monitor",
+      "        enabled: true",
+    ].join("\n"));
+    resetConfig();
+
+    const result = removeWatchChannel("C123#test");
+    expect(result).toContain("removed");
+
+    const yaml = readFileSync(`${TEST_DIR}/config.yaml`, "utf8");
+    expect(yaml).not.toContain("C123#test");
+  });
+
+  test("removeWatchChannel returns not found for missing channel", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, "channels:\n  slack:\n    bot_token: test\n");
+    resetConfig();
+
+    expect(removeWatchChannel("nonexistent")).toContain("not found");
+  });
+
+  test("enableWatchChannel sets enabled to true", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, [
+      "channels:",
+      "  slack:",
+      "    watch:",
+      "      C123#test:",
+      "        behavior: Monitor",
+      "        enabled: false",
+    ].join("\n"));
+    resetConfig();
+
+    const result = enableWatchChannel("C123#test");
+    expect(result).toContain("enabled");
+
+    const yaml = readFileSync(`${TEST_DIR}/config.yaml`, "utf8");
+    expect(yaml).toContain("enabled: true");
+  });
+
+  test("disableWatchChannel sets enabled to false", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, [
+      "channels:",
+      "  slack:",
+      "    watch:",
+      "      C123#test:",
+      "        behavior: Monitor",
+      "        enabled: true",
+    ].join("\n"));
+    resetConfig();
+
+    const result = disableWatchChannel("C123#test");
+    expect(result).toContain("disabled");
+
+    const yaml = readFileSync(`${TEST_DIR}/config.yaml`, "utf8");
+    expect(yaml).toContain("enabled: false");
   });
 });

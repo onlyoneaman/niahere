@@ -512,15 +512,17 @@ class SlackChannel implements Channel {
     const rawWatchConfig = config.channels.slack.watch;
     if (rawWatchConfig) {
       for (const [key, cfg] of Object.entries(rawWatchConfig)) {
+        if (!cfg.enabled) {
+          log.info({ channel: key }, "slack: watch channel disabled, skipping");
+          continue;
+        }
         const hashIdx = key.indexOf("#");
         if (hashIdx !== -1) {
-          // channel_id#channel_name format — use ID directly, no API call needed
           const id = key.slice(0, hashIdx);
           const name = key.slice(hashIdx + 1);
           watchChannels.set(id, { name, behavior: cfg.behavior });
           log.info({ channel: name, id }, "slack: watching channel");
         } else {
-          // Legacy: plain channel name — resolve via API
           try {
             const channelList: { id: string; name: string }[] = [];
             let cursor: string | undefined;
