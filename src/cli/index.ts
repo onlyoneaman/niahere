@@ -12,6 +12,7 @@ import { fail } from "../utils/cli";
 import { jobCommand } from "./job";
 import { statusCommand } from "./status";
 import { sendCommand, telegramCommand, slackCommand } from "./channels";
+import { rulesCommand, memoryCommand } from "./self";
 
 // Set LOG_LEVEL from config before anything else logs
 try {
@@ -204,6 +205,16 @@ switch (command) {
 
   case "job": {
     await jobCommand();
+    break;
+  }
+
+  case "rules": {
+    rulesCommand();
+    break;
+  }
+
+  case "memory": {
+    memoryCommand();
     break;
   }
 
@@ -419,6 +430,8 @@ switch (command) {
     console.log("  history [room]      — recent messages");
     console.log("  logs [-f] [--channel ch]  — daemon logs (filter by channel)");
     console.log("  job <sub>           — manage jobs");
+    console.log("  rules [show|reset]  — view or reset rules.md");
+    console.log("  memory [show|reset] — view or reset memory.md");
     console.log("  db <sub>            — database setup/status/migrate");
     console.log("  skills              — list available skills");
     console.log("  config <sub>        — get/set/list config values");
