@@ -172,6 +172,9 @@ class SlackChannel implements Channel {
       await respond("New conversation started.");
     });
 
+    // Cache downloaded files by URL so we don't re-download on every thread message
+    const fileCache = new Map<string, Attachment>();
+
     async function downloadSlackFile(url: string): Promise<Buffer> {
       const resp = await fetch(url, {
         headers: { Authorization: `Bearer ${botToken}` },
@@ -187,6 +190,14 @@ class SlackChannel implements Channel {
         const attType = classifyMime(mime);
         if (!attType) continue;
         if (!file.url_private_download) continue;
+
+        // Return cached version if already downloaded
+        const cached = fileCache.get(file.url_private_download);
+        if (cached) {
+          attachments.push(cached);
+          continue;
+        }
+
         try {
           const data = await downloadSlackFile(file.url_private_download);
           const error = validateAttachment(data, mime);
@@ -201,7 +212,9 @@ class SlackChannel implements Channel {
             finalData = prepared.data;
             finalMime = prepared.mimeType;
           }
-          attachments.push({ type: attType, data: finalData, mimeType: finalMime, filename: file.name });
+          const attachment: Attachment = { type: attType, data: finalData, mimeType: finalMime, filename: file.name };
+          fileCache.set(file.url_private_download, attachment);
+          attachments.push(attachment);
         } catch (err) {
           log.warn({ err, file: file.name }, "failed to download slack file");
         }
