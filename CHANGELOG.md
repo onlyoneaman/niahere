@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- feat: alive monitor — DB heartbeat with auto-reconnect, LLM recovery agent, and user notification
+- feat: hot-reload watch channels via config.yaml mtime (no daemon restart needed)
+- feat: watch keys must use `channel_id#name` format (removed legacy name resolution)
+- feat: show nia version in `nia health` output
+- fix: Slack — relaxed permissions (read ops open to all), reply in-thread by default, prefer relative timestamps
+
 ## [0.2.28] - 2026-03-18
 
 - feat: enable/disable flag for watch channels (`enabled: true|false` in config, default true)
