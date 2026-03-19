@@ -2,15 +2,13 @@
 
 ## [Unreleased]
 
+## [0.2.35] - 2026-03-19
+
 - feat: `yc-office-hours` skill — YC-style product diagnostic with startup and builder modes
 - feat: `remotion` skill — best practices for programmatic video creation in React
-- update: `frontend-design` skill — merged Anthropic's design thinking, bolder aesthetic direction, motion/backgrounds sections
-- feat: `marketing-ideas` skill — 139 proven marketing ideas by category, stage, budget
-- feat: `pricing-strategy` skill — value-based pricing, tier structure, research methods
-- feat: `content-strategy` skill — searchable vs shareable content, topic clusters, ideation
-- feat: `marketing-psychology` skill — thinking models, buyer psychology, persuasion, pricing psychology
-- feat: `pptx` skill — create, read, edit PowerPoint presentations
-- feat: `docx` skill — create, read, edit Word documents with docx-js
+- feat: `marketing-ideas`, `pricing-strategy`, `content-strategy`, `marketing-psychology` skills
+- feat: `pptx` and `docx` skills — create, read, edit PowerPoint and Word documents
+- update: `frontend-design` skill — merged Anthropic's design thinking, bolder aesthetic direction
 
 ## [0.2.34] - 2026-03-19
 
