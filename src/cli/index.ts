@@ -424,6 +424,38 @@ switch (command) {
     process.exit(result.ok ? 0 : 1);
   }
 
+  case "update": {
+    const { version: currentVersion } = await import("../../package.json");
+    console.log(`Current: v${currentVersion}`);
+    console.log("Updating...");
+    const install = Bun.spawn(["npm", "i", "-g", "niahere@latest"], { stdio: ["ignore", "inherit", "inherit"] });
+    const installExit = await install.exited;
+    if (installExit !== 0) {
+      fail("Update failed.");
+    }
+    // Get new version
+    const check = Bun.spawn(["npm", "view", "niahere", "version"], { stdout: "pipe", stderr: "pipe" });
+    const newVersion = (await new Response(check.stdout).text()).trim();
+    await check.exited;
+    if (newVersion === currentVersion) {
+      console.log("Already on latest.");
+    } else {
+      console.log(`Updated: v${currentVersion} → v${newVersion}`);
+      if (isRunning()) {
+        console.log("Restarting daemon...");
+        const { isServiceInstalled, restartService } = await import("../commands/service");
+        if (isServiceInstalled()) {
+          await restartService();
+        } else {
+          stopDaemon();
+          startDaemon();
+        }
+        console.log("Restarted.");
+      }
+    }
+    break;
+  }
+
   case "init": {
     const { runInit } = await import("../commands/init");
     await runInit();
@@ -432,6 +464,7 @@ switch (command) {
 
   default:
     console.log("Usage: nia <command>\n");
+    console.log("  update              — update to latest version and restart");
     console.log("  init                — setup nia");
     console.log("  start / stop        — daemon + service control");
     console.log("  restart             — restart daemon");
