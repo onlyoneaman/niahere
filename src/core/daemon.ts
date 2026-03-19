@@ -162,6 +162,20 @@ export async function runDaemon(): Promise<void> {
     }
   }
 
+  // Crash handlers — ensure PID cleanup and logging on unhandled errors.
+  // Without these, an unhandled rejection kills the process silently,
+  // leaving a stale PID file that blocks restarts and hides the cause.
+  process.on("uncaughtException", (err) => {
+    log.fatal({ err }, "uncaught exception — cleaning up");
+    removePid();
+    process.exit(1);
+  });
+  process.on("unhandledRejection", (reason) => {
+    log.fatal({ reason }, "unhandled rejection — cleaning up");
+    removePid();
+    process.exit(1);
+  });
+
   writePid(process.pid);
   log.info({ pid: process.pid }, "daemon started");
 

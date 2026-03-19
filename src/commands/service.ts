@@ -8,7 +8,15 @@ const PLIST_NAME = "com.niahere.agent";
 const SYSTEMD_UNIT = "niahere.service";
 
 function getExecCommand(): [string, string] {
-  return [process.execPath, process.argv[1]];
+  const execPath = process.execPath;
+  // process.argv[1] may be undefined when called outside the normal CLI flow
+  // (e.g. from bun -e or programmatic import). Fall back to the known entry point.
+  let cliPath = process.argv[1];
+  if (!cliPath || cliPath === "undefined") {
+    const { resolve } = require("path");
+    cliPath = resolve(import.meta.dir, "../cli/index.ts");
+  }
+  return [execPath, cliPath];
 }
 
 // --- macOS launchd ---

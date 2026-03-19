@@ -7,6 +7,7 @@ import { resetConfig } from "../utils/config";
 import { runMigrations } from "../db/migrate";
 import { closeDb } from "../db/connection";
 import { startDaemon, isRunning } from "../core/daemon";
+import { registerService, isServiceInstalled } from "./service";
 import { errMsg } from "../utils/errors";
 import { enrichSlackConfig } from "../cli/channels";
 import yaml from "js-yaml";
@@ -434,12 +435,25 @@ export async function runInit(): Promise<void> {
 
     resetConfig();
 
+    // Install system service (launchd/systemd) for auto-restart on crash
+    if (!isServiceInstalled()) {
+      try {
+        await registerService();
+        console.log(`\n  \u2713 installed system service (auto-restart on crash)`);
+      } catch (err) {
+        console.log(`\n  \u26a0 could not install system service: ${errMsg(err)}`);
+        console.log(`    run 'nia service install' manually for auto-restart`);
+      }
+    } else {
+      console.log(`\n  - system service already installed`);
+    }
+
     // Auto-start daemon
     if (!isRunning()) {
       const pid = startDaemon();
-      console.log(`\n  \u2713 nia started (pid: ${pid})`);
+      console.log(`  \u2713 nia started (pid: ${pid})`);
     } else {
-      console.log(`\n  - nia already running`);
+      console.log(`  - nia already running`);
     }
 
     console.log("\nDone.");
