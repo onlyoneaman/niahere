@@ -2,7 +2,10 @@
 
 ## [Unreleased]
 
+## [0.2.30] - 2026-03-19
+
 - simplify: alive monitor triggers recovery immediately, no threshold delay
+- docs: add release flow checklist to AGENTS.md
 
 ## [0.2.29] - 2026-03-19
 
