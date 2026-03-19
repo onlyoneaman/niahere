@@ -4,6 +4,7 @@ import { readState, readAudit } from "../utils/logger";
 import { getConfig } from "../utils/config";
 import { runJob } from "../core/runner";
 import { localTime } from "../utils/time";
+import { formatDuration } from "../utils/format";
 import { Job } from "../db/models";
 import { withDb } from "../db/connection";
 import type { ScheduleType } from "../types";
@@ -184,7 +185,7 @@ export async function jobCommand(): Promise<void> {
           if (info) {
             console.log(`\n  last run: ${localTime(new Date(info.lastRun))}`);
             console.log(`  status:   ${info.status}`);
-            console.log(`  duration: ${info.duration_ms}ms`);
+            console.log(`  duration: ${formatDuration(info.duration_ms)}`);
             if (info.error) console.log(`  error:    ${info.error}`);
           } else {
             console.log("\n  never run");
@@ -195,7 +196,7 @@ export async function jobCommand(): Promise<void> {
             console.log("\n  recent runs:");
             for (const e of entries) {
               const time = localTime(new Date(e.timestamp));
-              const dur = `${e.duration_ms}ms`;
+              const dur = `${formatDuration(e.duration_ms)}`;
               const icon = e.status === "ok" ? ICON_PASS : ICON_FAIL;
               const summary = e.error || e.result.slice(0, 60).replace(/\n/g, " ") || "-";
               console.log(`    ${icon} ${time}  ${dur.padStart(8)}  ${summary}`);
@@ -219,7 +220,7 @@ export async function jobCommand(): Promise<void> {
           const state = readState();
           const info = state[job.name];
           const status = info
-            ? `${info.status} (${localTime(new Date(info.lastRun))}, ${info.duration_ms}ms)`
+            ? `${info.status} (${localTime(new Date(info.lastRun))}, ${formatDuration(info.duration_ms)})`
             : "never run";
           const tag = job.always ? " always" : "";
           console.log(`  ${job.enabled ? "●" : "○"} ${job.name}  [${job.schedule}]${tag}  ${status}`);
@@ -243,10 +244,40 @@ export async function jobCommand(): Promise<void> {
       if (!found) fail(`Job not found: ${name}`);
       const job = found as { name: string; schedule: string; prompt: string };
 
-      console.log(`Running job: ${job.name} (model: ${getConfig().model})`);
-      const result = await runJob(job);
-      console.log(`\nStatus: ${result.status}`);
-      console.log(`Duration: ${result.duration_ms}ms`);
+      console.log(`Running job: ${job.name} (model: ${getConfig().model})\n`);
+
+      const MAX_LOG_LINES = 15;
+      const logLines: string[] = [];
+      let linesRendered = 0;
+
+      function renderActivity(line: string) {
+        logLines.push(line);
+        if (logLines.length > MAX_LOG_LINES) logLines.shift();
+
+        // Clear previously rendered lines
+        if (linesRendered > 0) {
+          process.stdout.write(`\x1b[${linesRendered}A\x1b[J`);
+        }
+
+        // Render current log lines
+        const output = logLines.map((l, i) => {
+          const dim = i < logLines.length - 1;
+          return dim ? `  \x1b[2m${l}\x1b[0m` : `  \x1b[36m▸\x1b[0m ${l}`;
+        }).join("\n");
+
+        process.stdout.write(output + "\n");
+        linesRendered = logLines.length;
+      }
+
+      const result = await runJob(job, renderActivity);
+
+      // Clear the activity log and show final result
+      if (linesRendered > 0) {
+        process.stdout.write(`\x1b[${linesRendered}A\x1b[J`);
+      }
+
+      console.log(`Status: ${result.status}`);
+      console.log(`Duration: ${formatDuration(result.duration_ms)}`);
       if (result.result) console.log(`\nResult:\n${result.result}`);
       if (result.error) console.log(`\nError: ${result.error}`);
       break;
@@ -261,7 +292,7 @@ export async function jobCommand(): Promise<void> {
       }
       for (const e of entries) {
         const time = localTime(new Date(e.timestamp));
-        const dur = `${e.duration_ms}ms`;
+        const dur = `${formatDuration(e.duration_ms)}`;
         const status = e.status === "ok" ? ICON_PASS : ICON_FAIL;
         const summary = e.error || e.result.slice(0, 80).replace(/\n/g, " ") || "-";
         console.log(`  ${status} ${time}  ${dur.padStart(8)}  ${e.job}  ${summary}`);

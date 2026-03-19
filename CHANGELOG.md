@@ -5,6 +5,7 @@
 - feat: `nia job update` CLI command and `update_job` MCP tool
 - fix: better error when adding a job that already exists (actionable message instead of raw SQL error)
 - fix: "not found" errors now suggest available commands
+- fix: durations show human-readable format (4m 15s instead of 254795ms)
 
 ## [0.2.33] - 2026-03-19
 
