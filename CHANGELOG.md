@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - feat: `nia update` command — installs latest version and restarts daemon
+- fix: alive monitor — log recovery report to daemon.log, send agent's postmortem directly (no wrapper text)
 
 ## [0.2.30] - 2026-03-19
 
