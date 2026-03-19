@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.2.32] - 2026-03-19
+
+- refactor: extract skills scanning into `src/core/skills.ts` — single source of truth
+- feat: `nia skills` shows source tags, supports filtering (`nia skills project`, `nia skills nia`, etc.)
+
 ## [0.2.31] - 2026-03-19
 
 - feat: `nia update` command — installs latest version and restarts daemon
