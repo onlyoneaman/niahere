@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- fix: prompt Nia to proactively save memories (personal facts, travel plans, corrections) without being asked
+
 ## [0.2.32] - 2026-03-19
 
 - refactor: extract skills scanning into `src/core/skills.ts` — single source of truth
