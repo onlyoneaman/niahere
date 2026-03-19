@@ -189,15 +189,14 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 
 ## Releasing
 
-After pushing changes, **always bump the version and publish** so that `npm i -g niahere` picks up the latest on other machines:
-
-```bash
-npm run release          # npm version patch && npm publish && git push
-```
-
-This bumps the patch version, publishes to npm, and pushes the version commit + tag. Users update with `npm i -g niahere`.
-
 **Release cadence:** Don't release with every small change. Batch changes and ask for confirmation before releasing. Only release when explicitly asked or when there are meaningful changes worth a version bump.
+
+**Release flow:**
+1. Ensure all changes are committed and tests pass (`bun run test`)
+2. Move `[Unreleased]` items in `CHANGELOG.md` under a new version header (e.g. `## [0.2.30] - YYYY-MM-DD`)
+3. Commit the changelog update
+4. Run `npm run release` — this does `npm version patch && npm publish && git push`
+5. Verify: `npm view niahere version` should show the new version
 
 ## Keeping Docs Updated
 
