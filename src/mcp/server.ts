@@ -136,8 +136,16 @@ export function createNiaMcpServer() {
         }),
       ),
       tool(
+        "read_memory",
+        "Read all saved memories. Use this to check what you already know before saving duplicates, or to recall context about the owner, past incidents, preferences, etc.",
+        {},
+        async () => ({
+          content: [{ type: "text" as const, text: handlers.readMemory() }],
+        }),
+      ),
+      tool(
         "add_memory",
-        "Save a concise factual memory for future reference. Memories are read on demand, not loaded automatically. Use for preferences, corrections, or patterns worth keeping. RULES: Max 300 chars. One insight per entry. NO raw logs, NO conversation transcripts, NO status dumps, NO duplicate observations. Bad: pasting nia status output. Good: 'curator job can get stuck in running state — needs timeout recovery'.",
+        "Save a concise factual memory for future reference. Proactively save personal facts (travel, schedule), work context (decisions, deadlines), and corrections — don't wait to be asked. RULES: Max 300 chars. One insight per entry. NO raw logs, NO transcripts, NO status dumps.",
         {
           entry: z.string().max(300).describe("A single concise insight (max 300 chars, no raw logs or transcripts)"),
         },

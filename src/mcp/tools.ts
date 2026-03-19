@@ -273,6 +273,17 @@ export function disableWatchChannel(name: string): string {
   return `Watch channel "${name}" disabled. Takes effect on next message.`;
 }
 
+export function readMemory(): string {
+  const { selfDir } = getPaths();
+  const memoryPath = join(selfDir, "memory.md");
+  if (!existsSync(memoryPath)) return "No memories saved yet.";
+  const content = readFileSync(memoryPath, "utf8").trim();
+  // Extract just the entries, skip the header/instructions
+  const lines = content.split("\n").filter((l) => l.startsWith("- ") || l.startsWith("## "));
+  if (lines.length === 0) return "No memories saved yet.";
+  return lines.join("\n");
+}
+
 export function addMemory(entry: string): string {
   // Guard: reject raw logs, transcripts, and overly long entries
   const trimmed = entry.trim();
