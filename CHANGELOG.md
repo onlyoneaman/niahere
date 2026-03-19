@@ -2,10 +2,13 @@
 
 ## [Unreleased]
 
+## [0.2.34] - 2026-03-19
+
 - feat: `nia job update` CLI command and `update_job` MCP tool
-- fix: better error when adding a job that already exists (actionable message instead of raw SQL error)
-- fix: "not found" errors now suggest available commands
-- fix: durations show human-readable format (4m 15s instead of 254795ms)
+- feat: `read_memory` MCP tool — agent can recall saved memories on demand
+- fix: proactive memory saving — Nia now auto-saves personal facts, travel plans, corrections
+- fix: better error when adding a duplicate job (actionable message instead of raw SQL error)
+- fix: human-readable durations across CLI (4m 15s instead of 254795ms)
 
 ## [0.2.33] - 2026-03-19
 
