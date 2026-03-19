@@ -150,16 +150,12 @@ async function heartbeat(): Promise<void> {
 
     if (recovered) {
       log.info({ report }, "alive: recovery agent succeeded");
-      await notifyUser(`Database was down. Recovery agent fixed it.\n\n${report}`);
+      await notifyUser(report);
       consecutiveFailures = 0;
       recoveryAttempted = false;
     } else {
       log.error({ report }, "alive: recovery failed, notifying user");
-      await notifyUser(
-        `Database is down and auto-recovery failed.\n\n` +
-        `Recovery report:\n${report}\n\n` +
-        `Run \`nia health\` to check status.`
-      );
+      await notifyUser(report);
     }
   }
   // After recovery attempted: just log failures, don't spam user or agent.
