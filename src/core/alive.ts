@@ -43,10 +43,10 @@ async function notifyUser(message: string): Promise<void> {
       const { Bot } = await import("grammy");
       const bot = new Bot(tgToken);
       await bot.api.sendMessage(tgChatId, message);
-      log.info("watchdog: notified user via telegram");
+      log.info("alive: notified user via telegram");
       return;
     } catch (err) {
-      log.warn({ err }, "watchdog: telegram notification failed");
+      log.warn({ err }, "alive: telegram notification failed");
     }
   }
 
@@ -61,15 +61,15 @@ async function notifyUser(message: string): Promise<void> {
         body: JSON.stringify({ channel: slRecipient, text: message }),
       });
       if (resp.ok) {
-        log.info("watchdog: notified user via slack");
+        log.info("alive: notified user via slack");
         return;
       }
     } catch (err) {
-      log.warn({ err }, "watchdog: slack notification failed");
+      log.warn({ err }, "alive: slack notification failed");
     }
   }
 
-  log.error("watchdog: could not notify user — no channel available");
+  log.error("alive: could not notify user — no channel available");
 }
 
 /** Layer 1: Run an LLM recovery agent to diagnose and fix the issue. */
@@ -118,7 +118,7 @@ async function heartbeat(): Promise<void> {
 
   if (ok) {
     if (consecutiveFailures > 0) {
-      log.info({ previousFailures: consecutiveFailures }, "watchdog: database recovered");
+      log.info({ previousFailures: consecutiveFailures }, "alive: database recovered");
       if (consecutiveFailures >= RECOVERY_THRESHOLD) {
         await notifyUser(`Database recovered after ${consecutiveFailures} minutes of downtime.`);
       }
@@ -129,12 +129,12 @@ async function heartbeat(): Promise<void> {
   }
 
   consecutiveFailures++;
-  log.warn({ consecutiveFailures }, "watchdog: database unreachable");
+  log.warn({ consecutiveFailures }, "alive: database unreachable");
 
   // Try reconnect on every failure
   const reconnected = await attemptReconnect();
   if (reconnected) {
-    log.info("watchdog: reconnected to database");
+    log.info("alive: reconnected to database");
     consecutiveFailures = 0;
     recoveryAttempted = false;
     return;
@@ -143,20 +143,20 @@ async function heartbeat(): Promise<void> {
   // After threshold, trigger recovery (once)
   if (consecutiveFailures >= RECOVERY_THRESHOLD && !recoveryAttempted) {
     recoveryAttempted = true;
-    log.info("watchdog: triggering recovery after " + consecutiveFailures + " failures");
+    log.info("alive: triggering recovery after " + consecutiveFailures + " failures");
 
     // Layer 1: LLM recovery agent
     const lastError = "PostgreSQL unreachable after " + consecutiveFailures + " consecutive heartbeat failures";
     const { recovered, report } = await runRecoveryAgent(lastError);
 
     if (recovered) {
-      log.info("watchdog: recovery agent succeeded");
+      log.info("alive: recovery agent succeeded");
       await notifyUser(`Database was down for ~${consecutiveFailures} min. Recovery agent fixed it.\n\n${report}`);
       consecutiveFailures = 0;
       recoveryAttempted = false;
     } else {
       // Layer 2: Direct notification
-      log.error("watchdog: recovery agent failed, notifying user");
+      log.error("alive: recovery agent failed, notifying user");
       await notifyUser(
         `Database has been down for ~${consecutiveFailures} min and auto-recovery failed.\n\n` +
         `Recovery report:\n${report}\n\n` +
@@ -166,14 +166,14 @@ async function heartbeat(): Promise<void> {
   }
 }
 
-export function startWatchdog(): void {
-  log.info("watchdog started (60s heartbeat)");
+export function startAlive(): void {
+  log.info("alive started (60s heartbeat)");
   // Initial check after a short delay (let startup finish)
   setTimeout(heartbeat, 10_000);
   timer = setInterval(heartbeat, HEARTBEAT_INTERVAL);
 }
 
-export function stopWatchdog(): void {
+export function stopAlive(): void {
   if (timer) {
     clearInterval(timer);
     timer = null;
