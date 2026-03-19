@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- fix: silence launchd log spam — exit 0 + debug-level log when another daemon is already running, use `SuccessfulExit` KeepAlive policy to prevent respawn loop
+
 ## [0.2.36] - 2026-03-19
 
 - docs: rewrite README — add philosophy, "skills over features" contributing model, "What It Supports" section

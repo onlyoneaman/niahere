@@ -44,7 +44,10 @@ function buildPlist(): string {
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
-  <true/>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
   <key>StandardOutPath</key>
   <string>${paths.daemonLog}</string>
   <key>StandardErrorPath</key>

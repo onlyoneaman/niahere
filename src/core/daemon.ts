@@ -155,8 +155,8 @@ export async function runDaemon(): Promise<void> {
   if (existingPid !== null && existingPid !== process.pid) {
     try {
       process.kill(existingPid, 0); // Check if alive
-      log.warn({ existingPid, myPid: process.pid }, "another daemon is already running, exiting");
-      process.exit(1);
+      log.debug({ existingPid, myPid: process.pid }, "another daemon is already running, exiting");
+      process.exit(0);
     } catch {
       // Dead PID in pidfile — safe to take over
     }
