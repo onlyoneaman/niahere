@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- fix: better error when adding a job that already exists (actionable message instead of raw SQL error)
+
 ## [0.2.33] - 2026-03-19
 
 - feat: `read_memory` MCP tool — agent can recall saved memories on demand

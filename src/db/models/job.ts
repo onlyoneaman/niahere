@@ -42,6 +42,10 @@ export async function create(
   scheduleType: ScheduleType = "cron",
   nextRunAt?: Date,
 ): Promise<void> {
+  const existing = await get(name);
+  if (existing) {
+    throw new Error(`Job "${name}" already exists. Use \`nia job remove ${name}\` first, or choose a different name.`);
+  }
   const sql = getSql();
   await sql`
     INSERT INTO jobs (name, schedule, prompt, always, schedule_type, next_run_at)
