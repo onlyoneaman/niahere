@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.36] - 2026-03-19
+
 - docs: rewrite README — add philosophy, "skills over features" contributing model, "What It Supports" section
 - feat: `taskmaster` skill — completion guard that prevents premature task abandonment (adapted from blader/taskmaster)
 - fix: prevent silent daemon crashes — add uncaughtException/unhandledRejection handlers with PID cleanup
