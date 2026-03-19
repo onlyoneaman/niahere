@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.37] - 2026-03-20
+
 - fix: silence launchd log spam — exit 0 + debug-level log when another daemon is already running, use `SuccessfulExit` KeepAlive policy to prevent respawn loop
 
 ## [0.2.36] - 2026-03-19
