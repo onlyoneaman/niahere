@@ -1,10 +1,24 @@
 # nia
 
-A personal AI assistant that runs as a background daemon. Handles scheduled jobs, terminal chat, Telegram, and Slack — powered by Claude.
+A personal AI agent you fork and make your own. Small enough to understand, built for one user. Powered by Claude Agent SDK.
 
 - npm package: [`niahere`](https://www.npmjs.com/package/niahere)
 - CLI command: `nia`
 - Website: [niahere.com](https://niahere.com)
+
+## Philosophy
+
+**Small enough to understand.** One process, a few source files. No microservices, no message queues, no abstraction layers. Have Claude Code walk you through it.
+
+**Built for one user.** This isn't a framework. It's working software that fits your exact needs. You fork it and have Claude Code make it match your exact needs.
+
+**Customization = code changes.** No configuration sprawl. Want different behavior? Modify the code. The codebase is small enough that this is safe.
+
+**AI-native.** No installation wizard; Claude Code guides setup. No monitoring dashboard; ask Claude what's happening. No debugging tools; describe the problem, Claude fixes it.
+
+**Skills over features.** Contributors shouldn't add features to the codebase. Instead, they contribute claude code skills like `/add-discord` that transform your fork. You end up with clean code that does exactly what you need.
+
+**Best harness, best model.** This runs on Claude Agent SDK, which means you're running Claude Code directly. The harness matters. A bad harness makes even smart models seem dumb, a good harness gives them superpowers.
 
 ## Quick Start
 
@@ -13,6 +27,18 @@ npm i -g niahere        # installs globally (prompts to install Bun if missing)
 nia init                # guided setup (database, channels, persona, visual identity)
 nia start               # starts daemon + registers OS service
 ```
+
+## What It Supports
+
+- **Telegram** — message your agent from your phone, typing indicator while processing
+- **Slack** — Socket Mode bot with thread awareness, thinking emoji, watch channels for proactive monitoring
+- **Terminal chat** — REPL with session resume support
+- **Scheduled jobs** — recurring jobs and crons that run Claude and can message you back
+- **Persona system** — customizable identity, soul, owner profile, and on-demand memory
+- **Skills** — loads skills from multiple directories, invokable as slash commands
+- **Cross-platform service** — launchd (macOS), systemd (Linux), service-aware restart
+- **MCP tools** — 18 tools for job management, messaging, memory, and channel control
+- **Optional integrations** — add Gmail, Discord, and more via skills
 
 ## Commands
 
@@ -50,30 +76,6 @@ nia channels                   — show channel status (on/off)
 nia channels on / off          — enable/disable channels
 ```
 
-## Features
-
-- **Jobs & crons** — jobs run during active hours, crons run 24/7. Stored in PostgreSQL, auto-reload via LISTEN/NOTIFY. One-shot jobs auto-disable after execution. Full JSONL traces with Codex session IDs.
-- **Terminal chat** — REPL with session resume support
-- **Telegram** — bot with access control, typing indicator while processing
-- **Slack** — Socket Mode bot with thinking emoji reactions, thread awareness (auto-listens to follow-ups without @mention), thread context fetching, owner vs non-owner access control, prompt injection defense
-- **Persona system** — customizable identity, soul, owner profile, and on-demand memory
-- **Visual identity** — AI-generated profile pictures via Gemini, customizable during `nia init`
-- **Cross-platform service** — launchd (macOS), systemd (Linux), service-aware restart
-- **Skills** — loads skills from `~/.shared/skills/`, `~/.claude/skills/`, `~/.codex/skills/`, and bundled skills
-- **Dev mode** — `nia channels off` disables Telegram/Slack for local development without conflicts
-
-## Updating
-
-```bash
-npm i -g niahere         # pulls the latest version from npm
-```
-
-To publish a new version after making changes:
-
-```bash
-npm run release          # bumps patch version, publishes to npm, pushes git tag
-```
-
 ## Architecture
 
 All config and data lives in `~/.niahere/`:
@@ -93,6 +95,14 @@ All config and data lives in `~/.niahere/`:
     nia.pid, daemon.log, cron-state.json, cron-audit.jsonl
 ```
 
+## Contributing
+
+**Don't add features. Add skills.**
+
+If you want to add Discord support, don't create a PR that adds Discord alongside Telegram. Instead, contribute a skill folder (`skills/add-discord/SKILL.md`) that teaches Claude Code how to transform a nia installation to use Discord.
+
+Users then run `/add-discord` on their fork and get clean code that does exactly what they need, not a bloated system trying to support every use case.
+
 ## Requirements
 
 - [Bun](https://bun.sh) runtime (auto-installed if missing)
@@ -100,6 +110,12 @@ All config and data lives in `~/.niahere/`:
 - Claude API access (via `@anthropic-ai/claude-agent-sdk`)
 - Gemini API key (optional, for image generation — `nia config set gemini_api_key ...`)
 - OpenAI API key (optional, for image generation — `nia config set openai_api_key ...`)
+
+## Updating
+
+```bash
+npm i -g niahere         # pulls the latest version from npm
+```
 
 ## Author
 

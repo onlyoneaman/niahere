@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- docs: rewrite README — add philosophy, "skills over features" contributing model, "What It Supports" section
+
 ## [0.2.35] - 2026-03-19
 
 - feat: `yc-office-hours` skill — YC-style product diagnostic with startup and builder modes
