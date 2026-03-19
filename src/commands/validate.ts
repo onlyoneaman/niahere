@@ -127,11 +127,12 @@ export function validateConfig(): Result {
             ok = false;
             continue;
           }
-          const hasId = key.includes("#");
-          if (hasId) {
-            messages.push(`${PASS} slack.watch: ${key}`);
+          if (key.includes("#")) {
+            const enabled = (val as Record<string, unknown>).enabled !== false;
+            messages.push(`${enabled ? PASS : WARN} slack.watch: ${key}${enabled ? "" : " (disabled)"}`);
           } else {
-            messages.push(`${WARN} slack.watch.${key}: using channel name — prefer "channel_id#${key}" format for reliability`);
+            messages.push(`${FAIL} slack.watch.${key}: must use "channel_id#${key}" format`);
+            ok = false;
           }
         }
       }

@@ -1,15 +1,16 @@
 import { App } from "@slack/bolt";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from "fs";
 import { join } from "path";
 import { createHash } from "crypto";
 import { createChatEngine } from "../chat/engine";
 import type { Channel, ChatState, Attachment, AttachmentType } from "../types";
-import { getConfig, updateRawConfig } from "../utils/config";
+import { getConfig, updateRawConfig, resetConfig } from "../utils/config";
+import { relativeTime } from "../utils/format";
 import { runMigrations } from "../db/migrate";
 import { Session } from "../db/models";
 import { log } from "../utils/log";
 import { getMcpServers } from "../mcp";
-import { getNiaHome } from "../utils/paths";
+import { getNiaHome, getPaths } from "../utils/paths";
 import { classifyMime, validateAttachment, prepareImage } from "../utils/attachment";
 
 /** Strip markdown backticks so sentinel tokens like [NO_REPLY] match even when the LLM wraps them. */
@@ -132,9 +133,41 @@ class SlackChannel implements Channel {
 
     let botUserId: string | undefined;
 
-    // Watch channels: resolved after app.start() via conversations.list
-    // Maps channel ID → { name, behavior }
-    const watchChannels = new Map<string, { name: string; behavior: string }>();
+    // Watch channels: mtime-based hot-reload from config.yaml
+    // Keys are always channel_id#channel_name format
+    let watchCache: Map<string, { name: string; behavior: string }> = new Map();
+    let watchConfigMtime = 0;
+
+    function reloadWatchChannels(): Map<string, { name: string; behavior: string }> {
+      const configPath = getPaths().config;
+      let mtime = 0;
+      try { mtime = statSync(configPath).mtimeMs; } catch { return watchCache; }
+      if (mtime === watchConfigMtime) return watchCache;
+
+      watchConfigMtime = mtime;
+      resetConfig(); // clear cached config so getConfig() re-reads from disk
+      const cfg = getConfig();
+      const watch = cfg.channels.slack.watch;
+      const fresh = new Map<string, { name: string; behavior: string }>();
+      if (watch) {
+        for (const [key, entry] of Object.entries(watch)) {
+          if (!entry.enabled) continue;
+          const hashIdx = key.indexOf("#");
+          if (hashIdx === -1) {
+            log.warn({ channel: key }, "slack: watch key must use channel_id#name format, skipping");
+            continue;
+          }
+          const id = key.slice(0, hashIdx);
+          const name = key.slice(hashIdx + 1);
+          fresh.set(id, { name, behavior: entry.behavior });
+        }
+      }
+      if (fresh.size !== watchCache.size) {
+        log.info({ count: fresh.size }, "slack: watch channels reloaded");
+      }
+      watchCache = fresh;
+      return watchCache;
+    }
 
     // Slash command: /nia
     app.command("/nia", async ({ command, ack, respond }) => {
@@ -329,8 +362,9 @@ class SlackChannel implements Channel {
         }
       }
 
-      // Check if this is a watched channel
-      const watchConfig = watchChannels.get(msg.channel);
+      // Check if this is a watched channel (hot-reloads from config.yaml via mtime)
+      const currentWatch = reloadWatchChannels();
+      const watchConfig = currentWatch.get(msg.channel);
       const isWatched = !!watchConfig;
 
       if (!isDm && !isMention && !isActiveThread && !isWatched) {
@@ -403,10 +437,12 @@ class SlackChannel implements Channel {
           const priorMessages = (replies.messages || [])
             .filter((m: any) => m.ts !== msg.ts); // exclude the triggering message
 
+          const now = new Date();
           const threadMessages = priorMessages.map((m: any) => {
             const sender = m.bot_id ? "bot" : (m.user || "unknown");
             const fileHint = m.files?.length ? ` [${m.files.length} file(s) attached]` : "";
-            return `[${sender}]: ${m.text || "(no text)"}${fileHint}`;
+            const age = m.ts ? ` (${relativeTime(new Date(parseFloat(m.ts) * 1000), now)})` : "";
+            return `[${sender}]${age}: ${m.text || "(no text)"}${fileHint}`;
           });
           if (threadMessages.length > 0) {
             text = `[Thread context]\n${threadMessages.join("\n")}\n\n[Current message]\n${text}`;
@@ -508,49 +544,8 @@ class SlackChannel implements Channel {
       log.warn({ err }, "could not get slack bot user ID");
     }
 
-    // Parse watch channels — keys are "channel_id#channel_name" or just "channel_name"
-    const rawWatchConfig = config.channels.slack.watch;
-    if (rawWatchConfig) {
-      for (const [key, cfg] of Object.entries(rawWatchConfig)) {
-        if (!cfg.enabled) {
-          log.info({ channel: key }, "slack: watch channel disabled, skipping");
-          continue;
-        }
-        const hashIdx = key.indexOf("#");
-        if (hashIdx !== -1) {
-          const id = key.slice(0, hashIdx);
-          const name = key.slice(hashIdx + 1);
-          watchChannels.set(id, { name, behavior: cfg.behavior });
-          log.info({ channel: name, id }, "slack: watching channel");
-        } else {
-          try {
-            const channelList: { id: string; name: string }[] = [];
-            let cursor: string | undefined;
-            do {
-              const resp = await app.client.conversations.list({
-                types: "public_channel,private_channel",
-                exclude_archived: true,
-                limit: 200,
-                cursor,
-              });
-              for (const ch of resp.channels || []) {
-                if (ch.id && ch.name) channelList.push({ id: ch.id, name: ch.name });
-              }
-              cursor = resp.response_metadata?.next_cursor || undefined;
-            } while (cursor);
-            const match = channelList.find((c) => c.name === key);
-            if (match) {
-              watchChannels.set(match.id, { name: key, behavior: cfg.behavior });
-              log.info({ channel: key, id: match.id }, "slack: watching channel (resolved by name)");
-            } else {
-              log.warn({ channel: key }, "slack: watch channel not found");
-            }
-          } catch (err) {
-            log.warn({ err, channel: key }, "slack: failed to resolve watch channel");
-          }
-        }
-      }
-    }
+    // Initial watch channel load
+    reloadWatchChannels();
 
     log.info("slack bot started (Socket Mode)");
     this.app = app;

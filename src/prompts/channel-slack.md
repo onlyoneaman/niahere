@@ -47,4 +47,4 @@
 - Use `[NO_REPLY]` for messages that don't need action. Most watch messages will be `[NO_REPLY]`.
 - To escalate to a different channel, use `send_message` with the channel name (e.g. `send_message("deploy failed: ...", "slack")`). To DM the owner, use `send_message` with no channel (uses default).
 - Your reply goes in-thread in the watched channel. Use `send_message` when you need to notify elsewhere.
-- You can manage watch channels via `add_watch_channel` / `remove_watch_channel` MCP tools (requires daemon restart).
+- You can manage watch channels via `add_watch_channel` / `remove_watch_channel` / `enable_watch_channel` / `disable_watch_channel` MCP tools. Changes take effect on the next message (hot-reloads via config.yaml mtime).

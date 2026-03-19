@@ -86,7 +86,7 @@ export function createNiaMcpServer() {
       ),
       tool(
         "add_watch_channel",
-        "Add or update a Slack watch channel. Watch channels receive ALL messages (not just @mentions) and act based on the behavior prompt. Requires daemon restart to take effect.",
+        "Add or update a Slack watch channel. Watch channels receive ALL messages (not just @mentions) and act based on the behavior prompt. Takes effect on next message (hot-reloads).",
         {
           name: z.string().describe("Slack channel key as 'channel_id#channel_name', e.g. 'C1234567890#ask-kay-thread-notifications'"),
           behavior: z.string().describe("What to monitor and how to respond, e.g. 'Monitor thread notifications. Flag failures to #tech.'"),
@@ -97,7 +97,7 @@ export function createNiaMcpServer() {
       ),
       tool(
         "remove_watch_channel",
-        "Remove a Slack watch channel. Requires daemon restart to take effect.",
+        "Remove a Slack watch channel. Takes effect on next message (hot-reloads).",
         {
           name: z.string().describe("Slack channel key to stop watching (e.g. 'C1234567890#ask-kay-thread-notifications')"),
         },
@@ -107,7 +107,7 @@ export function createNiaMcpServer() {
       ),
       tool(
         "enable_watch_channel",
-        "Enable a disabled Slack watch channel. Requires daemon restart to take effect.",
+        "Enable a disabled Slack watch channel. Takes effect on next message (hot-reloads).",
         {
           name: z.string().describe("Slack channel key to enable"),
         },
@@ -117,7 +117,7 @@ export function createNiaMcpServer() {
       ),
       tool(
         "disable_watch_channel",
-        "Disable a Slack watch channel without removing it. Requires daemon restart to take effect.",
+        "Disable a Slack watch channel without removing it. Takes effect on next message (hot-reloads).",
         {
           name: z.string().describe("Slack channel key to disable"),
         },

@@ -235,7 +235,7 @@ export function addWatchChannel(name: string, behavior: string): string {
   const slack = (channels.slack || {}) as Record<string, unknown>;
   const watch = { ...((slack.watch || {}) as Record<string, unknown>), [name]: { behavior, enabled: true } };
   updateRawConfig({ channels: { slack: { watch } } });
-  return `Watch channel "${name}" added (enabled). Restart daemon to apply.`;
+  return `Watch channel "${name}" added (enabled). Takes effect on next message.`;
 }
 
 export function removeWatchChannel(name: string): string {
@@ -246,7 +246,7 @@ export function removeWatchChannel(name: string): string {
   if (!watch[name]) return `Watch channel "${name}" not found.`;
   delete watch[name];
   writeRawConfig(raw);
-  return `Watch channel "${name}" removed. Restart daemon to apply.`;
+  return `Watch channel "${name}" removed. Takes effect on next message.`;
 }
 
 export function enableWatchChannel(name: string): string {
@@ -258,7 +258,7 @@ export function enableWatchChannel(name: string): string {
   const entry = watch[name] as Record<string, unknown>;
   entry.enabled = true;
   updateRawConfig({ channels: { slack: { watch } } });
-  return `Watch channel "${name}" enabled. Restart daemon to apply.`;
+  return `Watch channel "${name}" enabled. Takes effect on next message.`;
 }
 
 export function disableWatchChannel(name: string): string {
@@ -270,7 +270,7 @@ export function disableWatchChannel(name: string): string {
   const entry = watch[name] as Record<string, unknown>;
   entry.enabled = false;
   updateRawConfig({ channels: { slack: { watch } } });
-  return `Watch channel "${name}" disabled. Restart daemon to apply.`;
+  return `Watch channel "${name}" disabled. Takes effect on next message.`;
 }
 
 export function addMemory(entry: string): string {
