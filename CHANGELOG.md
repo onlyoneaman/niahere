@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- simplify: alive monitor triggers recovery immediately, no threshold delay
+
+## [0.2.29] - 2026-03-19
+
 - feat: alive monitor — DB heartbeat with auto-reconnect, LLM recovery agent, and user notification
 - feat: hot-reload watch channels via config.yaml mtime (no daemon restart needed)
 - feat: watch keys must use `channel_id#name` format (removed legacy name resolution)
