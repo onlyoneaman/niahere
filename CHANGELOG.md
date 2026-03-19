@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 - docs: rewrite README — add philosophy, "skills over features" contributing model, "What It Supports" section
+- feat: `taskmaster` skill — completion guard that prevents premature task abandonment (adapted from blader/taskmaster)
+- fix: prevent silent daemon crashes — add uncaughtException/unhandledRejection handlers with PID cleanup
+- feat: `nia init` now auto-installs system service (launchd/systemd) for crash auto-restart
+- fix: harden `getExecCommand()` fallback when `process.argv[1]` is undefined
 
 ## [0.2.35] - 2026-03-19
 
