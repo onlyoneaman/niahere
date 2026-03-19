@@ -9,6 +9,7 @@ import { closeDb, getSql } from "../db/connection";
 import { registerAllChannels, startChannels, stopChannels } from "../channels";
 import type { Channel } from "../types";
 import { startScheduler, stopScheduler, recomputeAllNextRuns } from "./scheduler";
+import { startWatchdog, stopWatchdog } from "./watchdog";
 import { createNiaMcpServer } from "../mcp/server";
 import { setMcpServers } from "../mcp";
 
@@ -229,6 +230,9 @@ export async function runDaemon(): Promise<void> {
   // Start unified scheduler (replaces node-cron)
   startScheduler();
 
+  // Start DB watchdog (heartbeat + recovery)
+  startWatchdog();
+
   // Listen for job changes via Postgres LISTEN/NOTIFY
   try {
     const sql = getSql();
@@ -257,6 +261,7 @@ export async function runDaemon(): Promise<void> {
 
     log.info("shutting down...");
 
+    stopWatchdog();
     stopScheduler();
     await stopChannels(channels);
 

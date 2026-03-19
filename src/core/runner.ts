@@ -65,7 +65,7 @@ async function runJobWithCodex(fullPrompt: string, cwd: string, model: string): 
 // Claude Agent SDK runner
 // ---------------------------------------------------------------------------
 
-async function runJobWithClaude(systemPrompt: string, jobPrompt: string, cwd: string): Promise<RunnerOutput> {
+export async function runJobWithClaude(systemPrompt: string, jobPrompt: string, cwd: string): Promise<RunnerOutput> {
   const sessionId = randomUUID();
 
   // One-shot async iterable: emit a single user message then close
