@@ -3,7 +3,6 @@ import { getConfig } from "../utils/config";
 import { getSql, closeDb } from "../db/connection";
 
 const HEARTBEAT_INTERVAL = 60_000; // 60s
-const RECOVERY_THRESHOLD = 30; // 30 consecutive failures = ~30 min
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let consecutiveFailures = 0;
@@ -22,7 +21,6 @@ async function checkDb(): Promise<boolean> {
 async function attemptReconnect(): Promise<boolean> {
   try {
     await closeDb();
-    // getSql() will create a fresh connection on next call
     const sql = getSql();
     await sql`SELECT 1`;
     return true;
@@ -72,7 +70,7 @@ async function notifyUser(message: string): Promise<void> {
   log.error("alive: could not notify user — no channel available");
 }
 
-/** Layer 1: Run an LLM recovery agent to diagnose and fix the issue. */
+/** Run an LLM recovery agent to diagnose and fix the issue. */
 async function runRecoveryAgent(error: string): Promise<{ recovered: boolean; report: string }> {
   try {
     const { runJobWithClaude } = await import("./runner");
@@ -80,7 +78,7 @@ async function runRecoveryAgent(error: string): Promise<{ recovered: boolean; re
 
     const systemPrompt = [
       "You are a system recovery agent for the Nia daemon.",
-      "The database connection has been failing for 30+ minutes.",
+      "The database connection just failed and reconnect didn't work.",
       "Your job: diagnose the issue, attempt to fix it, and report the outcome.",
       "",
       "Steps:",
@@ -96,7 +94,7 @@ async function runRecoveryAgent(error: string): Promise<{ recovered: boolean; re
       "- Any recommendations",
     ].join("\n");
 
-    const jobPrompt = `Database has been unreachable for 30+ minutes.\nLast error: ${error}\n\nDiagnose and fix if possible.`;
+    const jobPrompt = `Database is unreachable. Reconnect failed.\nError: ${error}\n\nDiagnose and fix.`;
 
     const result = await runJobWithClaude(systemPrompt, jobPrompt, homedir());
     const recovered = await checkDb();
@@ -119,9 +117,7 @@ async function heartbeat(): Promise<void> {
   if (ok) {
     if (consecutiveFailures > 0) {
       log.info({ previousFailures: consecutiveFailures }, "alive: database recovered");
-      if (consecutiveFailures >= RECOVERY_THRESHOLD) {
-        await notifyUser(`Database recovered after ${consecutiveFailures} minutes of downtime.`);
-      }
+      await notifyUser(`Database recovered after ~${consecutiveFailures} min of downtime.`);
     }
     consecutiveFailures = 0;
     recoveryAttempted = false;
@@ -131,44 +127,47 @@ async function heartbeat(): Promise<void> {
   consecutiveFailures++;
   log.warn({ consecutiveFailures }, "alive: database unreachable");
 
-  // Try reconnect on every failure
+  // Try reconnect
   const reconnected = await attemptReconnect();
   if (reconnected) {
     log.info("alive: reconnected to database");
+    if (consecutiveFailures > 1) {
+      await notifyUser(`Database reconnected after ~${consecutiveFailures} min.`);
+    }
     consecutiveFailures = 0;
     recoveryAttempted = false;
     return;
   }
 
-  // After threshold, trigger recovery (once)
-  if (consecutiveFailures >= RECOVERY_THRESHOLD && !recoveryAttempted) {
+  // Reconnect failed — run recovery agent immediately (once per outage)
+  if (!recoveryAttempted) {
     recoveryAttempted = true;
-    log.info("alive: triggering recovery after " + consecutiveFailures + " failures");
+    log.info("alive: reconnect failed, running recovery agent");
 
-    // Layer 1: LLM recovery agent
-    const lastError = "PostgreSQL unreachable after " + consecutiveFailures + " consecutive heartbeat failures";
-    const { recovered, report } = await runRecoveryAgent(lastError);
+    const { recovered, report } = await runRecoveryAgent(
+      "PostgreSQL unreachable, reconnect failed after " + consecutiveFailures + " heartbeat(s)"
+    );
 
     if (recovered) {
       log.info("alive: recovery agent succeeded");
-      await notifyUser(`Database was down for ~${consecutiveFailures} min. Recovery agent fixed it.\n\n${report}`);
+      await notifyUser(`Database was down. Recovery agent fixed it.\n\n${report}`);
       consecutiveFailures = 0;
       recoveryAttempted = false;
     } else {
-      // Layer 2: Direct notification
-      log.error("alive: recovery agent failed, notifying user");
+      log.error("alive: recovery failed, notifying user");
       await notifyUser(
-        `Database has been down for ~${consecutiveFailures} min and auto-recovery failed.\n\n` +
+        `Database is down and auto-recovery failed.\n\n` +
         `Recovery report:\n${report}\n\n` +
-        `Run \`nia health\` to check status. You may need to restart PostgreSQL manually.`
+        `Run \`nia health\` to check status.`
       );
     }
   }
+  // After recovery attempted: just log failures, don't spam user or agent.
+  // When DB comes back, the ok branch above will notify.
 }
 
 export function startAlive(): void {
   log.info("alive started (60s heartbeat)");
-  // Initial check after a short delay (let startup finish)
   setTimeout(heartbeat, 10_000);
   timer = setInterval(heartbeat, HEARTBEAT_INTERVAL);
 }
