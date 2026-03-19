@@ -2,11 +2,13 @@
 
 ## [Unreleased]
 
+## [0.2.31] - 2026-03-19
+
 - feat: `nia update` command — installs latest version and restarts daemon
-- fix: alive monitor — log recovery report to daemon.log, send agent's postmortem directly (no wrapper text)
-- refactor: extract health checks into shared `src/core/health.ts`, used by both `nia health` CLI and alive monitor
-- feat: `nia health` now checks actual channel connectivity (API calls), not just token presence
+- feat: `nia health` checks actual channel connectivity (API calls), not just token presence
 - feat: alive monitor runs full health checks (DB, channels, config), not just DB heartbeat
+- refactor: shared health checks in `src/core/health.ts` — single source of truth for CLI and alive monitor
+- fix: alive monitor logs recovery report to daemon.log, sends agent's postmortem directly
 
 ## [0.2.30] - 2026-03-19
 
