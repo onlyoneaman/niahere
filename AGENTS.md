@@ -198,6 +198,8 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 4. Run `npm run release` — this does `npm version patch && npm publish && git push`
 5. Verify: `npm view niahere version` should show the new version
 
+Users update on other machines with `nia update` (installs latest + auto-restarts daemon if running).
+
 ## Keeping Docs Updated
 
 When making changes, keep these files in sync:

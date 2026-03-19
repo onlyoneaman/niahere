@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- feat: `nia update` command — installs latest version and restarts daemon
+
 ## [0.2.30] - 2026-03-19
 
 - simplify: alive monitor triggers recovery immediately, no threshold delay
