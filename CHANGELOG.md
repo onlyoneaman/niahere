@@ -2,9 +2,10 @@
 
 ## [Unreleased]
 
+## [0.2.33] - 2026-03-19
+
 - feat: `read_memory` MCP tool — agent can recall saved memories on demand
 - fix: prompt Nia to proactively save memories (personal facts, travel plans, corrections) without being asked
-- fix: updated `add_memory` tool description to encourage proactive saving
 
 ## [0.2.32] - 2026-03-19
 
