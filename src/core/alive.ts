@@ -149,12 +149,12 @@ async function heartbeat(): Promise<void> {
     );
 
     if (recovered) {
-      log.info("alive: recovery agent succeeded");
+      log.info({ report }, "alive: recovery agent succeeded");
       await notifyUser(`Database was down. Recovery agent fixed it.\n\n${report}`);
       consecutiveFailures = 0;
       recoveryAttempted = false;
     } else {
-      log.error("alive: recovery failed, notifying user");
+      log.error({ report }, "alive: recovery failed, notifying user");
       await notifyUser(
         `Database is down and auto-recovery failed.\n\n` +
         `Recovery report:\n${report}\n\n` +
