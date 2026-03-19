@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- feat: `yc-office-hours` skill — YC-style product diagnostic with startup and builder modes
+
 ## [0.2.34] - 2026-03-19
 
 - feat: `nia job update` CLI command and `update_job` MCP tool
