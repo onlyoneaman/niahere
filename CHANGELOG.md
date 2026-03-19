@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 - feat: `yc-office-hours` skill — YC-style product diagnostic with startup and builder modes
+- feat: `remotion` skill — best practices for programmatic video creation in React
+- update: `frontend-design` skill — merged Anthropic's design thinking, bolder aesthetic direction, motion/backgrounds sections
 
 ## [0.2.34] - 2026-03-19
 

@@ -7,107 +7,112 @@ description: Guide for building frontend UIs and web pages that look intentional
 
 Build interfaces that feel crafted, not generated. This skill prevents "AI slop" — the generic, soulless, template-looking output that AI tools default to.
 
-## The Problem: AI Slop
+## Design Thinking (Before Code)
 
-AI-generated UIs are instantly recognizable: overly perfect gradients, predictable purple-on-white palettes, card grids with rounded corners, safe Inter/Roboto fonts, and layouts that all look interchangeable. This happens because AI pattern-matches from training data rather than making intentional design choices.
+Before writing any CSS, commit to a BOLD aesthetic direction:
 
-**Your job is to make intentional choices, not safe defaults.**
+- **Purpose**: What problem does this interface solve? Who uses it?
+- **Tone**: Pick a direction: brutally minimal, maximalist, retro-futuristic, organic/natural, luxury/refined, playful/toy-like, editorial/magazine, brutalist/raw, art deco, soft/pastel, industrial/utilitarian
+- **Differentiation**: What makes this UNFORGETTABLE? What's the one thing someone will remember?
+- **Constraints**: Framework, performance, accessibility requirements
+
+**CRITICAL**: Choose a clear conceptual direction and execute it with precision. Bold maximalism and refined minimalism both work — the key is intentionality, not intensity.
 
 ## Anti-Slop Principles
 
-Every design decision should be deliberate. Before writing CSS, answer:
+Every design decision should be deliberate. If you can't answer these, you're about to produce slop:
 
-1. **What's the visual personality?** (minimal? bold? editorial? playful? brutalist?)
-2. **What emotion should users feel?** (trust? excitement? calm? urgency?)
+1. **What's the visual personality?**
+2. **What emotion should users feel?**
 3. **What makes this different from a template?**
 
-If you can't answer these, you're about to produce slop.
+NEVER use generic AI-generated aesthetics:
+- Overused fonts (Inter, Roboto, Arial, system fonts)
+- Cliched color schemes (purple gradients on white)
+- Predictable card grids with rounded corners
+- Cookie-cutter layouts that lack context-specific character
+
+**No design should be the same.** Vary between light and dark themes, different fonts, different aesthetics. NEVER converge on common choices across generations.
 
 ## Typography
 
 Typography is the single biggest differentiator between generic and intentional design.
 
 **Do:**
-- Choose a specific typeface that matches the personality. Google Fonts has hundreds — use them.
-- Use type scale with purpose: large headings (2.5rem+), comfortable body (1rem-1.125rem), small labels
-- Vary font weights deliberately: light for elegance, bold for impact, medium for body
-- Set proper `line-height`: 1.5-1.7 for body text, 1.1-1.2 for large headings
+- Choose distinctive, characterful fonts — Google Fonts has hundreds beyond the obvious ones
+- Pair a distinctive display/heading font with a refined body font
+- Use type scale with purpose: large headings (2.5rem+), comfortable body (1rem-1.125rem)
+- Vary font weights deliberately: light for elegance, bold for impact
+- Set proper `line-height`: 1.5-1.7 for body, 1.1-1.2 for headings
 - Use `letter-spacing` on headings and uppercase text
-- Mix a display/heading font with a body font for contrast
 
 **Don't:**
-- Default to Inter, Roboto, Arial, or system fonts without reason
+- Default to Inter, Roboto, Arial without reason
 - Use the same font weight everywhere
-- Skip setting line-height and letter-spacing
 - Use more than 2-3 typefaces
 
-## Color
+## Color & Theme
 
 **Do:**
-- Pick a clear direction: warm, cool, monochrome, earthy, vibrant
-- Define CSS variables for your palette: `--color-primary`, `--color-surface`, `--color-text`, `--color-accent`
-- Use neutrals that aren't pure white or pure black — off-whites (`#f8f7f4`), warm grays (`#2d2a27`), soft darks
-- Make accent colors functional — they guide attention to CTAs, links, interactive elements
-- Test contrast ratios for accessibility (WCAG AA minimum: 4.5:1 for text)
+- Commit to a cohesive aesthetic. Use CSS variables for consistency
+- Dominant colors with sharp accents outperform timid, evenly-distributed palettes
+- Use neutrals that aren't pure white/black — off-whites (`#f8f7f4`), warm grays (`#2d2a27`)
+- Make accent colors functional — guide attention to CTAs, links, interactive elements
+- Test contrast ratios (WCAG AA: 4.5:1 for text)
 
 **Don't:**
 - Default to purple-on-white (the most common AI slop palette)
-- Use pure `#000` on pure `#fff` — it's harsh
+- Use pure `#000` on pure `#fff`
 - Pick colors without defining the full palette upfront
-- Bias toward dark mode unless the project calls for it
 
-## Layout & Spacing
+## Layout & Spatial Composition
 
 **Do:**
-- Use CSS Grid for page structure, Flexbox for component-level layout
-- Define a spacing scale with CSS variables: `--space-xs` through `--space-3xl`
-- Use `rem` units for spacing and font sizes (better cross-device scaling)
-- Give content room to breathe — generous whitespace is not wasted space
-- Make layouts responsive with mobile-first CSS and container queries where supported
-- Use `max-width` on content areas (65-75ch for readable text, ~1200px for page containers)
+- Unexpected layouts. Asymmetry. Overlap. Diagonal flow. Grid-breaking elements
+- Generous negative space OR controlled density — both work with intention
+- CSS Grid for page structure, Flexbox for component-level
+- Spacing scale with CSS variables: `--space-xs` through `--space-3xl`
+- `max-width` on content (65-75ch for text, ~1200px for pages)
+- Mobile-first responsive with container queries where supported
 
 **Don't:**
-- Use hardcoded pixel values scattered through the code
-- Make everything a card grid — vary your layout patterns
-- Forget mobile: test at 375px width minimum
+- Make everything a card grid — vary layout patterns
 - Center everything — left-aligned text is more readable for long content
+- Hardcode pixel values
+- Forget mobile: test at 375px minimum
 
-## Visual Interest
-
-This is what separates crafted from generic.
+## Motion & Animation
 
 **Do:**
-- Use gradients, subtle patterns, or textured backgrounds instead of flat single colors
-- Add meaningful animations: page-load fades, staggered reveals, hover transitions
-- Create visual hierarchy with size contrast — make the important things big
-- Use borders, shadows, or background color to create depth and grouping
-- Consider asymmetric layouts for landing pages — not everything needs to be centered
+- Focus on high-impact moments: one well-orchestrated page load with staggered reveals creates more delight than scattered micro-interactions
+- Use scroll-triggering and hover states that surprise
+- Prioritize CSS-only solutions for HTML, Motion library for React
+- `animation-delay` for staggered reveals
 
 **Don't:**
-- Add micro-animations to everything — a few purposeful ones beat many generic ones
+- Add micro-animations to everything
 - Use the same border-radius everywhere
-- Make every section look the same — vary the visual rhythm
 - Add decoration without purpose
+
+## Backgrounds & Visual Details
+
+Create atmosphere and depth rather than defaulting to solid colors:
+- Gradient meshes, noise textures, geometric patterns
+- Layered transparencies, dramatic shadows
+- Decorative borders, custom cursors, grain overlays
+- Subtle patterns or textured backgrounds
 
 ## Component Quality
 
-**Do:**
-- Build with semantic HTML: `<nav>`, `<main>`, `<section>`, `<article>`, `<button>`
-- Handle all states: default, hover, focus, active, disabled, loading, error, empty
-- Use `focus-visible` for keyboard focus styles
-- Add `prefers-reduced-motion` media query for animation-sensitive users
-- Use `prefers-color-scheme` when implementing dark/light modes
-
-**Don't:**
-- Use `<div>` for everything
-- Skip empty states and error states — these are where AI-generated UIs always fail
-- Forget keyboard navigation and screen reader support
-- Use `outline: none` without a replacement focus style
+- Semantic HTML: `<nav>`, `<main>`, `<section>`, `<article>`, `<button>`
+- Handle ALL states: default, hover, focus, active, disabled, loading, error, empty
+- `focus-visible` for keyboard focus
+- `prefers-reduced-motion` for animation-sensitive users
+- `prefers-color-scheme` for dark/light modes
 
 ## CSS Architecture
 
 ```css
-/* Define your design tokens upfront */
 :root {
   /* Colors */
   --color-bg: #f8f7f4;
@@ -121,7 +126,7 @@ This is what separates crafted from generic.
   --font-heading: 'Instrument Serif', serif;
   --font-body: 'DM Sans', sans-serif;
 
-  /* Spacing scale */
+  /* Spacing */
   --space-xs: 0.25rem;
   --space-sm: 0.5rem;
   --space-md: 1rem;
@@ -141,33 +146,28 @@ This is what separates crafted from generic.
 
 ## Working Within Existing Projects
 
-**Exception:** When working inside an existing website, app, or design system, preserve the established patterns. Don't introduce new fonts, color palettes, or spacing systems that conflict with what's already there. Extend the existing system instead.
-
-Read the project's CSS/design tokens before writing new styles. Match what exists.
+**Exception:** When working inside an existing design system, preserve established patterns. Don't introduce conflicting fonts, colors, or spacing. Extend the existing system instead. Read project CSS/design tokens before writing new styles.
 
 ## Responsive Checklist
 
-Before finishing any UI work:
 - [ ] Works at 375px (mobile)
 - [ ] Works at 768px (tablet)
 - [ ] Works at 1440px+ (desktop)
-- [ ] Text is readable at all sizes
-- [ ] Touch targets are at least 44x44px on mobile
+- [ ] Text readable at all sizes
+- [ ] Touch targets 44x44px+ on mobile
 - [ ] No horizontal scrolling
 - [ ] Images/media scale properly
 
 ## Accessibility Minimum
 
-- Semantic HTML elements used correctly
+- Semantic HTML used correctly
 - All images have `alt` text
-- Color contrast meets WCAG AA (4.5:1 for text)
-- Interactive elements are keyboard-accessible
-- Form inputs have associated `<label>` elements
-- `prefers-reduced-motion` respected for animations
+- Color contrast WCAG AA (4.5:1)
+- Interactive elements keyboard-accessible
+- Form inputs have `<label>` elements
+- `prefers-reduced-motion` respected
 
 ## References
 
 - [NN/g — Generative UI and Outcome-Oriented Design](https://www.nngroup.com/articles/generative-ui/)
 - [Breaking the AI-Generated UI Curse](https://dev.to/a_shokn/how-to-break-the-ai-generated-ui-curse-your-guide-to-authentic-professional-design-2en)
-- [CSS in 2026 — New Features](https://blog.logrocket.com/css-in-2026/)
-- [Web Design Trends 2026 — Figma](https://www.figma.com/resource-library/web-development-trends/)
