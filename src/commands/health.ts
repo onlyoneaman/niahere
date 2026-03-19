@@ -16,6 +16,10 @@ export async function healthCommand(): Promise<void> {
   const checks: Check[] = [];
   const paths = getPaths();
 
+  // 0. Version
+  const { version } = await import("../../package.json");
+  push(checks, "nia", "ok", "v" + version);
+
   // 1. Daemon
   const pid = readPid();
   if (isRunning()) {
