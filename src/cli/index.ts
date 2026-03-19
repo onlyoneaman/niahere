@@ -287,12 +287,19 @@ switch (command) {
   }
 
   case "skills": {
-    const { loadSkillNames } = await import("../chat/identity");
-    const names = loadSkillNames();
-    if (names.length === 0) {
-      console.log("No skills found.");
+    const { scanSkills: loadSkills } = await import("../core/skills");
+    const filter = process.argv[3]; // e.g. "project", "nia", "shared", "claude"
+    let skills = loadSkills();
+    if (filter) {
+      skills = skills.filter((s) => s.source === filter);
+    }
+    if (skills.length === 0) {
+      console.log(filter ? `No skills found in "${filter}".` : "No skills found.");
     } else {
-      for (const name of names) console.log(`  ${name}`);
+      for (const s of skills) {
+        const tag = filter ? "" : `  [${s.source}]`;
+        console.log(`  ${s.name}${tag}`);
+      }
     }
     break;
   }
