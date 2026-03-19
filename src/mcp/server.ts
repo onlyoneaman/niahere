@@ -30,6 +30,19 @@ export function createNiaMcpServer() {
         }),
       ),
       tool(
+        "update_job",
+        "Update an existing job's schedule, prompt, or always flag. Only pass fields you want to change.",
+        {
+          name: z.string().describe("Job name to update"),
+          schedule: z.string().optional().describe("New schedule (cron expression, interval duration, or ISO timestamp)"),
+          prompt: z.string().optional().describe("New prompt"),
+          always: z.boolean().optional().describe("If true, runs 24/7 ignoring active hours"),
+        },
+        async (args) => ({
+          content: [{ type: "text" as const, text: await handlers.updateJob(args) }],
+        }),
+      ),
+      tool(
         "remove_job",
         "Delete a scheduled job",
         { name: z.string().describe("Job name to remove") },

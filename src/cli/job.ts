@@ -133,6 +133,38 @@ export async function jobCommand(): Promise<void> {
       break;
     }
 
+    case "update": {
+      const always = process.argv.includes("--always");
+      let cliArgs = process.argv.slice(4).filter((a) => a !== "--always");
+
+      const name = cliArgs[0];
+      if (!name) {
+        console.log('Usage: nia job update <name> [--schedule <schedule>] [--prompt <prompt>] [--always]');
+        fail('Example: nia job update curator --schedule "4h" --prompt "New prompt"');
+      }
+
+      const scheduleIdx = cliArgs.indexOf("--schedule");
+      const schedule = scheduleIdx !== -1 ? cliArgs[scheduleIdx + 1] : undefined;
+      const promptIdx = cliArgs.indexOf("--prompt");
+      const prompt = promptIdx !== -1 ? cliArgs.slice(promptIdx + 1).filter((a) => a !== "--always" && a !== "--schedule" && a !== schedule).join(" ") : undefined;
+
+      try {
+        await withDb(async () => {
+          const fields: Partial<{ schedule: string; prompt: string; always: boolean }> = {};
+          if (schedule) fields.schedule = schedule;
+          if (prompt) fields.prompt = prompt;
+          if (always) fields.always = always;
+
+          const updated = await Job.update(name, fields);
+          if (!updated) fail(`Job not found: "${name}". Use \`nia job list\` to see available jobs.`);
+          console.log(`Job "${name}" updated.`);
+        });
+      } catch (err) {
+        fail(`Failed to update job: ${errMsg(err)}`);
+      }
+      break;
+    }
+
     case "show": {
       const name = process.argv[4] || await pickJob("Show job");
 
@@ -238,12 +270,13 @@ export async function jobCommand(): Promise<void> {
     }
 
     default:
-      console.log("Usage: nia job <list|show|status|add|remove|enable|disable|run|log|import>\n");
+      console.log("Usage: nia job <list|show|status|add|update|remove|enable|disable|run|log|import>\n");
       console.log("  list                          — list all jobs");
       console.log("  show [name]                   — full job details + recent runs");
       console.log("  status [name]                 — quick status check");
       console.log("  add <name> <schedule> <prompt> — add a job (active hours only)")
       console.log("      --always                  — run 24/7 regardless of active hours");
+      console.log("  update <name> [--schedule s] [--prompt p] [--always] — update a job");
       console.log("  remove <name>                 — delete a job");
       console.log("  enable <name>                 — enable a job");
       console.log("  disable <name>                — disable a job");

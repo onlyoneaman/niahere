@@ -25,6 +25,7 @@ You have MCP tools for managing jobs directly (preferred over CLI for speed):
   - `interval`: duration string (e.g., "5m", "2h", "1d" = every 5 min/2 hours/1 day)
   - `once`: ISO timestamp for one-time execution (e.g., "2026-03-14T10:00:00")
   - Set `always: true` to run 24/7 (ignores active hours)
+- **update_job** — update an existing job's schedule, prompt, or always flag
 - **remove_job** — delete a job by name
 - **enable_job** / **disable_job** — toggle a job on or off
 - **run_job** — trigger a job to run immediately

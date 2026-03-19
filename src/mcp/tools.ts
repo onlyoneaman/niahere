@@ -31,6 +31,24 @@ export async function addJob(args: {
   return `Job "${args.name}" created (${scheduleType}: ${args.schedule}). Next run: ${nextRunAt.toISOString()}`;
 }
 
+export async function updateJob(args: {
+  name: string;
+  schedule?: string;
+  prompt?: string;
+  always?: boolean;
+}): Promise<string> {
+  const fields: Partial<{ schedule: string; prompt: string; always: boolean }> = {};
+  if (args.schedule) fields.schedule = args.schedule;
+  if (args.prompt) fields.prompt = args.prompt;
+  if (args.always !== undefined) fields.always = args.always;
+
+  if (Object.keys(fields).length === 0) return "Nothing to update. Pass at least one field (schedule, prompt, or always).";
+
+  const updated = await Job.update(args.name, fields);
+  if (!updated) return `Job "${args.name}" not found.`;
+  return `Job "${args.name}" updated.`;
+}
+
 export async function removeJob(name: string): Promise<string> {
   const removed = await Job.remove(name);
   return removed ? `Job "${name}" removed.` : `Job "${name}" not found.`;
