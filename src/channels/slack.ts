@@ -120,7 +120,7 @@ class SlackChannel implements Channel {
       }
       const queued = state.lock !== Promise.resolve();
       if (queued) log.debug({ key }, "slack: message queued behind active lock");
-      state.lock = state.lock.then(fn, fn);
+      state.lock = state.lock.then(fn, fn).catch((err) => log.error({ err, key }, "unhandled error in locked handler"));
     }
 
     const self = this;
@@ -479,7 +479,13 @@ class SlackChannel implements Channel {
 
       log.info({ channel: msg.channel, key, text: text.slice(0, 100), isDm, watched: isWatched, attachments: attachments?.length || 0 }, "slack message received");
 
-      const state = await getState(key);
+      let state: ChatState;
+      try {
+        state = await getState(key);
+      } catch (err) {
+        log.error({ err, key }, "slack: failed to create chat engine");
+        return;
+      }
 
       withLock(key, async () => {
         // Add thinking reaction inside the lock so cleanup is guaranteed

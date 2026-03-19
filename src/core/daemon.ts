@@ -174,7 +174,8 @@ export async function runDaemon(): Promise<void> {
     process.exit(1);
   });
   process.on("unhandledRejection", (reason) => {
-    log.fatal({ reason }, "unhandled rejection — cleaning up");
+    const err = reason instanceof Error ? reason : new Error(String(reason));
+    log.fatal({ err }, "unhandled rejection — cleaning up");
     removePid();
     process.exit(1);
   });
