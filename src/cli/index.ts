@@ -14,6 +14,7 @@ import { statusCommand } from "./status";
 import { sendCommand, telegramCommand, slackCommand } from "./channels";
 import { rulesCommand, memoryCommand } from "./self";
 import { watchCommand } from "./watch";
+import { agentCommand } from "./agent";
 
 // Set LOG_LEVEL from config before anything else logs
 try {
@@ -286,6 +287,11 @@ switch (command) {
     break;
   }
 
+  case "agent": {
+    await agentCommand();
+    break;
+  }
+
   case "skills": {
     const { scanSkills: loadSkills } = await import("../core/skills");
     const filter = process.argv[3]; // e.g. "project", "nia", "shared", "claude"
@@ -485,6 +491,7 @@ switch (command) {
     console.log("  rules [show|reset]  — view or reset rules.md");
     console.log("  memory [show|reset] — view or reset memory.md");
     console.log("  db <sub>            — database setup/status/migrate");
+    console.log("  agent <sub>         — list/show agents");
     console.log("  skills              — list available skills");
     console.log("  watch <sub>         — manage Slack watch channels");
     console.log("  validate            — validate config.yaml");
