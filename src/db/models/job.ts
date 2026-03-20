@@ -8,6 +8,7 @@ export interface Job {
   enabled: boolean;
   always: boolean;
   scheduleType: ScheduleType;
+  agent: string | null;
   nextRunAt: string | null;
   lastRunAt: string | null;
   createdAt: string;
@@ -22,6 +23,7 @@ function toJob(r: Record<string, any>): Job {
     enabled: r.enabled,
     always: r.always ?? false,
     scheduleType: r.schedule_type || "cron",
+    agent: r.agent || null,
     nextRunAt: r.next_run_at ? String(r.next_run_at) : null,
     lastRunAt: r.last_run_at ? String(r.last_run_at) : null,
     createdAt: String(r.created_at),
@@ -41,6 +43,7 @@ export async function create(
   always = false,
   scheduleType: ScheduleType = "cron",
   nextRunAt?: Date,
+  agent?: string,
 ): Promise<void> {
   const existing = await get(name);
   if (existing) {
@@ -48,27 +51,27 @@ export async function create(
   }
   const sql = getSql();
   await sql`
-    INSERT INTO jobs (name, schedule, prompt, always, schedule_type, next_run_at)
-    VALUES (${name}, ${schedule}, ${prompt}, ${always}, ${scheduleType}, ${nextRunAt ?? null})
+    INSERT INTO jobs (name, schedule, prompt, always, schedule_type, next_run_at, agent)
+    VALUES (${name}, ${schedule}, ${prompt}, ${always}, ${scheduleType}, ${nextRunAt ?? null}, ${agent ?? null})
   `;
   await notifyChange();
 }
 
 export async function list(): Promise<Job[]> {
   const sql = getSql();
-  const rows = await sql`SELECT name, schedule, prompt, enabled, always, schedule_type, next_run_at, last_run_at, created_at, updated_at FROM jobs ORDER BY name`;
+  const rows = await sql`SELECT name, schedule, prompt, enabled, always, schedule_type, agent, next_run_at, last_run_at, created_at, updated_at FROM jobs ORDER BY name`;
   return rows.map(toJob);
 }
 
 export async function get(name: string): Promise<Job | null> {
   const sql = getSql();
-  const rows = await sql`SELECT name, schedule, prompt, enabled, always, schedule_type, next_run_at, last_run_at, created_at, updated_at FROM jobs WHERE name = ${name}`;
+  const rows = await sql`SELECT name, schedule, prompt, enabled, always, schedule_type, agent, next_run_at, last_run_at, created_at, updated_at FROM jobs WHERE name = ${name}`;
   return rows.length > 0 ? toJob(rows[0]) : null;
 }
 
 export async function update(
   name: string,
-  fields: Partial<{ schedule: string; prompt: string; enabled: boolean; always: boolean }>,
+  fields: Partial<{ schedule: string; prompt: string; enabled: boolean; always: boolean; agent: string | null }>,
 ): Promise<boolean> {
   const sql = getSql();
   const existing = await get(name);
@@ -78,10 +81,11 @@ export async function update(
   const prompt = fields.prompt ?? existing.prompt;
   const enabled = fields.enabled ?? existing.enabled;
   const always = fields.always ?? existing.always;
+  const agent = fields.agent !== undefined ? fields.agent : existing.agent;
 
   await sql`
     UPDATE jobs
-    SET schedule = ${schedule}, prompt = ${prompt}, enabled = ${enabled}, always = ${always}, updated_at = NOW()
+    SET schedule = ${schedule}, prompt = ${prompt}, enabled = ${enabled}, always = ${always}, agent = ${agent}, updated_at = NOW()
     WHERE name = ${name}
   `;
   await notifyChange();
@@ -97,14 +101,14 @@ export async function remove(name: string): Promise<boolean> {
 
 export async function listEnabled(): Promise<Job[]> {
   const sql = getSql();
-  const rows = await sql`SELECT name, schedule, prompt, enabled, always, schedule_type, next_run_at, last_run_at, created_at, updated_at FROM jobs WHERE enabled = TRUE ORDER BY name`;
+  const rows = await sql`SELECT name, schedule, prompt, enabled, always, schedule_type, agent, next_run_at, last_run_at, created_at, updated_at FROM jobs WHERE enabled = TRUE ORDER BY name`;
   return rows.map(toJob);
 }
 
 export async function listDue(): Promise<Job[]> {
   const sql = getSql();
   const rows = await sql`
-    SELECT name, schedule, prompt, enabled, always, schedule_type, next_run_at, last_run_at, created_at, updated_at
+    SELECT name, schedule, prompt, enabled, always, schedule_type, agent, next_run_at, last_run_at, created_at, updated_at
     FROM jobs
     WHERE enabled = TRUE AND next_run_at <= NOW()
     ORDER BY next_run_at

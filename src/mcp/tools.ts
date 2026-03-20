@@ -22,14 +22,16 @@ export async function addJob(args: {
   prompt: string;
   schedule_type?: ScheduleType;
   always?: boolean;
+  agent?: string;
 }): Promise<string> {
   const scheduleType = args.schedule_type || "cron";
   const always = args.always || false;
   const config = getConfig();
 
   const nextRunAt = computeInitialNextRun(scheduleType, args.schedule, config.timezone);
-  await Job.create(args.name, args.schedule, args.prompt, always, scheduleType, nextRunAt);
-  return `Job "${args.name}" created (${scheduleType}: ${args.schedule}). Next run: ${nextRunAt.toISOString()}`;
+  await Job.create(args.name, args.schedule, args.prompt, always, scheduleType, nextRunAt, args.agent);
+  const agentNote = args.agent ? ` [agent: ${args.agent}]` : "";
+  return `Job "${args.name}" created (${scheduleType}: ${args.schedule})${agentNote}. Next run: ${nextRunAt.toISOString()}`;
 }
 
 export async function updateJob(args: {
@@ -37,13 +39,15 @@ export async function updateJob(args: {
   schedule?: string;
   prompt?: string;
   always?: boolean;
+  agent?: string | null;
 }): Promise<string> {
-  const fields: Partial<{ schedule: string; prompt: string; always: boolean }> = {};
+  const fields: Partial<{ schedule: string; prompt: string; always: boolean; agent: string | null }> = {};
   if (args.schedule) fields.schedule = args.schedule;
   if (args.prompt) fields.prompt = args.prompt;
   if (args.always !== undefined) fields.always = args.always;
+  if (args.agent !== undefined) fields.agent = args.agent;
 
-  if (Object.keys(fields).length === 0) return "Nothing to update. Pass at least one field (schedule, prompt, or always).";
+  if (Object.keys(fields).length === 0) return "Nothing to update. Pass at least one field (schedule, prompt, always, or agent).";
 
   const updated = await Job.update(args.name, fields);
   if (!updated) return `Job "${args.name}" not found.`;

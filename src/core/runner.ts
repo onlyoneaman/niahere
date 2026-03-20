@@ -7,6 +7,7 @@ import { appendAudit, readState, writeState } from "../utils/logger";
 import type { AuditEntry, JobState } from "../types";
 import { getConfig } from "../utils/config";
 import { buildSystemPrompt } from "../chat/identity";
+import { scanAgents } from "./agents";
 import { truncate, formatToolUse } from "../utils/format-activity";
 
 export type ActivityCallback = (line: string) => void;
@@ -195,12 +196,30 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
     const cwd = homedir();
     let output: RunnerOutput;
 
-    if (config.runner === "codex") {
-      const fullPrompt = `${buildSystemPrompt("job")}\n\n---\n\nJob: ${job.name} (schedule: ${job.schedule})\n\n${job.prompt}`;
-      output = await runJobWithCodex(fullPrompt, cwd, config.model);
+    // Resolve system prompt: use agent body if job references an agent, else default
+    let systemPrompt: string;
+    let agentModel: string | undefined;
+    if (job.agent) {
+      const agents = scanAgents();
+      const agentDef = agents.find((a) => a.name === job.agent);
+      if (agentDef) {
+        systemPrompt = agentDef.body;
+        agentModel = agentDef.model;
+      } else {
+        systemPrompt = buildSystemPrompt("job");
+      }
     } else {
-      const systemPrompt = buildSystemPrompt("job");
-      const jobPrompt = `Job: ${job.name} (schedule: ${job.schedule})\n\n${job.prompt}`;
+      systemPrompt = buildSystemPrompt("job");
+    }
+
+    const jobPrompt = job.prompt
+      ? `Job: ${job.name} (schedule: ${job.schedule})\n\n${job.prompt}`
+      : `Job: ${job.name} (schedule: ${job.schedule})\n\nExecute your scheduled tasks.`;
+
+    if (config.runner === "codex") {
+      const fullPrompt = `${systemPrompt}\n\n---\n\n${jobPrompt}`;
+      output = await runJobWithCodex(fullPrompt, cwd, agentModel || config.model);
+    } else {
       output = await runJobWithClaude(systemPrompt, jobPrompt, cwd, onActivity);
     }
 

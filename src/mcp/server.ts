@@ -24,6 +24,7 @@ export function createNiaMcpServer() {
           prompt: z.string().describe("What the job should do"),
           schedule_type: z.enum(["cron", "interval", "once"]).default("cron").describe("Schedule type"),
           always: z.boolean().default(false).describe("If true, runs 24/7 ignoring active hours"),
+          agent: z.string().optional().describe("Agent name to use for this job (loads agent's AGENT.md as system prompt)"),
         },
         async (args) => ({
           content: [{ type: "text" as const, text: await handlers.addJob(args) }],
@@ -31,12 +32,13 @@ export function createNiaMcpServer() {
       ),
       tool(
         "update_job",
-        "Update an existing job's schedule, prompt, or always flag. Only pass fields you want to change.",
+        "Update an existing job's schedule, prompt, always flag, or agent. Only pass fields you want to change.",
         {
           name: z.string().describe("Job name to update"),
           schedule: z.string().optional().describe("New schedule (cron expression, interval duration, or ISO timestamp)"),
           prompt: z.string().optional().describe("New prompt"),
           always: z.boolean().optional().describe("If true, runs 24/7 ignoring active hours"),
+          agent: z.string().nullable().optional().describe("Agent name (set null to remove agent)"),
         },
         async (args) => ({
           content: [{ type: "text" as const, text: await handlers.updateJob(args) }],

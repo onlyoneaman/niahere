@@ -4,6 +4,7 @@ export interface JobInput {
   name: string;
   schedule: string;
   prompt: string;
+  agent?: string | null;
 }
 
 export interface JobResult {
