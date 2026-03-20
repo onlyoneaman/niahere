@@ -166,6 +166,14 @@ export function createNiaMcpServer() {
           content: [{ type: "text" as const, text: handlers.addMemory(args.entry) }],
         }),
       ),
+      tool(
+        "list_agents",
+        "List all available agents. Agents are role/domain specialists that can be delegated to via the Agent tool or referenced by jobs.",
+        {},
+        async () => ({
+          content: [{ type: "text" as const, text: handlers.listAgents() }],
+        }),
+      ),
     ],
   });
 }

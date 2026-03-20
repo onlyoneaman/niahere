@@ -8,6 +8,7 @@ import { getPaths } from "../utils/paths";
 import { getChannel } from "../channels/registry";
 import { log } from "../utils/log";
 import { classifyMime } from "../utils/attachment";
+import { scanAgents } from "../core/agents";
 
 export async function listJobs(): Promise<string> {
   const jobs = await Job.list();
@@ -326,4 +327,14 @@ export function addMemory(entry: string): string {
     appendFileSync(memoryPath, `${header}\n- ${trimmed}\n`, "utf8");
   }
   return `Memory saved.`;
+}
+
+export function listAgents(): string {
+  const agents = scanAgents();
+  if (agents.length === 0) return "No agents found.";
+  return JSON.stringify(
+    agents.map((a) => ({ name: a.name, description: a.description, model: a.model, source: a.source })),
+    null,
+    2,
+  );
 }
