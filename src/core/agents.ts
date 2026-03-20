@@ -10,12 +10,21 @@ import type { AgentInfo } from "../types/agent";
 const PROJECT_ROOT = resolve(import.meta.dir, "../..");
 
 function getAgentDirs(): { dir: string; source: string }[] {
-  return [
+  const niaHome = getNiaHome();
+  const dirs: { dir: string; source: string }[] = [
     { dir: join(process.cwd(), "agents"), source: "cwd" },
     { dir: join(PROJECT_ROOT, "agents"), source: "project" },
-    { dir: join(getNiaHome(), "agents"), source: "nia" },
+    { dir: join(niaHome, "agents"), source: "nia" },
     { dir: join(homedir(), ".shared", "agents"), source: "shared" },
   ];
+  // Deduplicate paths (cwd, project, and nia may overlap)
+  const seen = new Set<string>();
+  return dirs.filter(({ dir }) => {
+    const resolved = resolve(dir);
+    if (seen.has(resolved)) return false;
+    seen.add(resolved);
+    return true;
+  });
 }
 
 export function scanAgents(): AgentInfo[] {
