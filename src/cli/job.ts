@@ -50,7 +50,8 @@ export async function jobCommand(): Promise<void> {
             for (const job of jobs) {
               const tag = job.always ? "  always" : "";
               const type = job.scheduleType !== "cron" ? ` (${job.scheduleType})` : "";
-              console.log(`  ${job.enabled ? "●" : "○"} ${job.name}  ${job.schedule}${type}${tag}`);
+              const agentTag = job.agent ? `  [${job.agent}]` : "";
+              console.log(`  ${job.enabled ? "●" : "○"} ${job.name}  ${job.schedule}${type}${tag}${agentTag}`);
             }
           }
         });
@@ -75,12 +76,20 @@ export async function jobCommand(): Promise<void> {
         }
       }
 
+      // Parse --agent flag
+      let agent: string | undefined;
+      const agentIdx = cliArgs.indexOf("--agent");
+      if (agentIdx !== -1 && cliArgs[agentIdx + 1]) {
+        agent = cliArgs[agentIdx + 1];
+        cliArgs.splice(agentIdx, 2);
+      }
+
       const name = cliArgs[0];
       const schedule = cliArgs[1];
       const prompt = cliArgs.slice(2).join(" ");
 
       if (!name || !schedule || !prompt) {
-        console.log('Usage: nia job add <name> <schedule> <prompt> [--always] [--type cron|interval|once]');
+        console.log('Usage: nia job add <name> <schedule> <prompt> [--always] [--type cron|interval|once] [--agent <name>]');
         fail('Example: nia job add heartbeat "*/10 * * * *" Check system health --always');
       }
 
@@ -93,7 +102,7 @@ export async function jobCommand(): Promise<void> {
         const config = getConfig();
         const nextRunAt = computeInitialNextRun(scheduleType, schedule, config.timezone);
         await withDb(async () => {
-          await Job.create(name, schedule, prompt, always, scheduleType, nextRunAt);
+          await Job.create(name, schedule, prompt, always, scheduleType, nextRunAt, agent);
           console.log(`Job "${name}" added (${scheduleType}: ${schedule}).${always ? " (runs 24/7)" : ""}`);
         });
       } catch (err) {
@@ -178,6 +187,7 @@ export async function jobCommand(): Promise<void> {
           console.log(`  schedule: ${job.schedule}`);
           console.log(`  enabled:  ${job.enabled}`);
           console.log(`  type:     ${job.always ? "cron (runs 24/7)" : "job (active hours only)"}`);
+          if (job.agent) console.log(`  agent:    ${job.agent}`);
           console.log(`  prompt:   ${job.prompt}`);
 
           const state = readState();
@@ -307,6 +317,7 @@ export async function jobCommand(): Promise<void> {
       console.log("  status [name]                 — quick status check");
       console.log("  add <name> <schedule> <prompt> — add a job (active hours only)")
       console.log("      --always                  — run 24/7 regardless of active hours");
+      console.log("      --agent <name>            — assign an agent to the job");
       console.log("  update <name> [--schedule s] [--prompt p] [--always] — update a job");
       console.log("  remove <name>                 — delete a job");
       console.log("  enable <name>                 — enable a job");
