@@ -1,5 +1,9 @@
 # Agent Principles
 
+## Philosophy
+
+**Build the simplest thing that can build itself.** The system should be small enough for an agent to fully understand, simple enough to modify without fear, and designed so that agents — not humans — extend it.
+
 ## Core
 
 1. **UI parity.** Whatever the user can do through the UI, the agent should be able to achieve through tools.
