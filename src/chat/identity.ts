@@ -3,6 +3,7 @@ import { join } from "path";
 import { getPaths } from "../utils/paths";
 import { getEnvironmentPrompt, getModePrompt, getChannelPrompt } from "../prompts";
 import { getSkillsSummary } from "../core/skills";
+import { getAgentsSummary } from "../core/agents";
 import type { Mode } from "../types";
 
 // Re-export for backwards compat
@@ -36,6 +37,9 @@ export function buildSystemPrompt(mode: Mode = "chat", channel: string = "termin
 
   const skills = getSkillsSummary();
   if (skills) parts.push(skills);
+
+  const agents = getAgentsSummary();
+  if (agents) parts.push(agents);
 
   return parts.join("\n\n");
 }

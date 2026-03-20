@@ -6,6 +6,7 @@ import { join } from "path";
 import { homedir } from "os";
 import { randomUUID } from "crypto";
 import { buildSystemPrompt } from "./identity";
+import { getAgentDefinitions } from "../core/agents";
 import { Session, Message, ActiveEngine } from "../db/models";
 import type { Attachment, SendResult, StreamCallback, ActivityCallback, SendCallbacks, ChatEngine, EngineOptions } from "../types";
 import { truncate, formatToolUse } from "../utils/format-activity";
@@ -175,6 +176,11 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
 
     if (mcpServers) {
       options.mcpServers = mcpServers;
+    }
+
+    const agentDefs = getAgentDefinitions();
+    if (Object.keys(agentDefs).length > 0) {
+      options.agents = agentDefs;
     }
 
     queryHandle = query({
