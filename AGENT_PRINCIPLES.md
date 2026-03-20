@@ -40,3 +40,4 @@ References:
 - [ai-2027.com](https://ai-2027.com/)
 - [web4.ai](https://web4.ai/)
 - [Agent-Native Applications](https://every.to/guides/agent-native)
+- [Multi-Agent Philosophy](MULTI_AGENT_PHILOSOPHY.md) — why we choose single-agent with skills over multi-agent orchestration
