@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.38] - 2026-03-20
+
 ### Added
 - Agent support — role/domain-specialized AGENT.md files in `agents/` directories
 - Agents passed to Claude Agent SDK as subagents for automatic delegation
