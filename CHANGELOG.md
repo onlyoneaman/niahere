@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.2.39] - 2026-03-21
+
+### Fixed
+- fix: `nia stop` failed to kill daemon processes started with relative paths — `findDaemonPids()` pgrep pattern now matches both absolute and relative `src/cli.ts run` invocations
+
 ## [0.2.38] - 2026-03-20
 
 ### Added

@@ -121,7 +121,7 @@ function waitForExit(timeoutMs: number): void {
 /** Return PIDs of running daemon processes (excluding ourselves). */
 export function findDaemonPids(): number[] {
   try {
-    const result = Bun.spawnSync(["pgrep", "-f", "niahere/src/cli.* run$"]);
+    const result = Bun.spawnSync(["pgrep", "-f", "src/cli\\.ts run$"]);
     const stdout = new TextDecoder().decode(result.stdout).trim();
     if (!stdout) return [];
     return stdout.split("\n")
