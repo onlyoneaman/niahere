@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+- Agent support — role/domain-specialized AGENT.md files in `agents/` directories
+- Agents passed to Claude Agent SDK as subagents for automatic delegation
+- Jobs can reference agents via `--agent` flag (agent body becomes system prompt)
+- `nia agent list` and `nia agent show` CLI commands
+- `list_agents` MCP tool
+- Example agents: marketer, senior-dev
+
 ## [0.2.37] - 2026-03-20
 
 - fix: silence launchd log spam — exit 0 + debug-level log when another daemon is already running, use `SuccessfulExit` KeepAlive policy to prevent respawn loop

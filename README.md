@@ -35,6 +35,7 @@ nia start               # starts daemon + registers OS service
 - **Terminal chat** — REPL with session resume support
 - **Scheduled jobs** — recurring jobs and crons that run Claude and can message you back
 - **Persona system** — customizable identity, soul, owner profile, and on-demand memory
+- **Agents** — domain specialists (marketer, senior-dev) via Claude Agent SDK subagents
 - **Skills** — loads skills from multiple directories, invokable as slash commands
 - **Cross-platform service** — launchd (macOS), systemd (Linux), service-aware restart
 - **MCP tools** — 18 tools for job management, messaging, memory, and channel control
@@ -58,11 +59,15 @@ nia version                    — show version
 nia job list                   — list all jobs
 nia job show [name]            — full details + recent runs
 nia job add <n> <s> <p>        — add a job (active hours only)
+nia job add <n> <s> <p> --agent <name> — add a job using an agent
 nia job add <n> <s> <p> --always — add a cron (runs 24/7)
 nia job remove <name>          — delete a job
 nia job enable / disable <n>   — toggle a job
 nia job run <name>             — run a job once
 nia job log [name]             — show recent run history
+
+nia agent list                 — list available agents
+nia agent show <name>          — show agent details and prompt
 
 nia db setup                   — install PostgreSQL + create database + migrate
 nia db migrate                 — run database migrations

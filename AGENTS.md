@@ -19,11 +19,13 @@ src/
   cli/
     index.ts             # Entry point, command routing
     job.ts               # Job subcommands (list, show, status, add, run, log)
+    agent.ts             # Agent subcommands (list, show)
     channels.ts          # Channel CLI commands (send, telegram, slack)
     status.ts            # Status command output
   core/
     daemon.ts            # Daemon lifecycle, service-aware restart, startup guard
     runner.ts            # Job execution via Codex CLI (--json, session ID capture)
+    agents.ts            # Agent scanner — scanAgents(), getAgentsSummary(), getAgentDefinitions()
     scheduler.ts         # Job scheduling, due-time queries, cron/interval/once
   chat/
     engine.ts            # Chat engine — Claude SDK query(), sessions, streaming
@@ -87,6 +89,9 @@ defaults/
   self/                  # Template files for nia init (identity, soul, owner, memory)
   channels/
     slack-manifest.json  # Slack app manifest with all required scopes
+agents/
+  marketer/AGENT.md      # Marketing specialist agent
+  senior-dev/AGENT.md    # Senior developer agent
 skills/
   nia-image/             # Visual identity generation skill (Gemini)
   image-generation/      # General-purpose image generation (OpenAI + Gemini)
@@ -173,12 +178,18 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 - **Persona:** 4 files loaded: `identity.md`, `owner.md`, `soul.md`, `rules.md`. Memory read/written on demand. `rules.md` is for behavioral overrides and custom instructions — edit it to change how Nia behaves without restarting.
 - **Visual identity:** Images at `~/.niahere/images/`. Generated during `nia init` via Gemini.
 - **Service:** `nia start` registers OS service (launchd/systemd). `nia restart` is service-aware.
+- **Agents:** Role/domain specialists defined as `AGENT.md` files in `agents/` directories. Scanned from project `agents/`, `~/.niahere/agents/`, `~/.shared/agents/`. Passed to Claude Agent SDK as subagents via `query()` options — SDK handles routing and context isolation. Jobs can reference an agent via `agent` column — agent body becomes the systemPrompt. See [MULTI_AGENT_PHILOSOPHY.md](MULTI_AGENT_PHILOSOPHY.md).
 - **Skills:** Scanned from project `skills/`, `~/.niahere/skills/`, `~/.shared/skills/`, `~/.claude/skills/`, `~/.codex/skills/`
 - **Paths:** All from `getPaths()` → `getNiaHome()` (`NIA_HOME` env or `~/.niahere/`)
 - **One-shot jobs:** `once` schedule type auto-disables after execution, hidden from `nia status`
 - **Dev mode:** `nia channels off` disables Telegram/Slack for local development
 - **DB setup:** `nia db setup` installs PostgreSQL (brew on macOS), creates database, runs migrations. Also offered during `nia init` if DB connection fails.
 - **npm install:** `bin/nia` shell wrapper checks for Bun, offers to install it, resolves package path via realpath for nvm/global installs
+
+## Architecture Docs
+
+- **[AGENT_PRINCIPLES.md](AGENT_PRINCIPLES.md)** — core philosophy: atomic tools, prompts as features, emergent capability
+- **[MULTI_AGENT_PHILOSOPHY.md](MULTI_AGENT_PHILOSOPHY.md)** — why single-agent with skills/jobs beats multi-agent orchestration, backed by research
 
 ## Code Style
 

@@ -23,6 +23,7 @@ type JobStatusLine = {
   enabled: boolean;
   always: boolean;
   scheduleType: ScheduleType;
+  agent: string | null;
   status: JobStateStatus | "never";
   lastRun: string | null;
   nextRunAt: string | null;
@@ -121,6 +122,7 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
         enabled: job.enabled,
         always: job.always,
         scheduleType: job.scheduleType,
+        agent: job.agent,
         status: stateInfo?.status ?? (job.lastRunAt ? "ok" : "never"),
         lastRun: safeDate(lastRun)?.toISOString() ?? null,
         nextRunAt: safeDate(job.nextRunAt)?.toISOString() ?? null,
@@ -142,6 +144,7 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
               enabled: false,
               always: false,
               scheduleType: "cron",
+              agent: null,
               status: info.status,
               lastRun,
               nextRunAt: null,
@@ -253,7 +256,8 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
         const lastText = lastRun ? formatTimeLine(lastRun, now) : "never";
         const staleText = stale ? "  ⚠ stale" : "";
 
-        console.log(`  ${job.enabled ? "\u25cf" : "\u25cb"} ${job.name.padEnd(20)} ${job.enabled ? "enabled" : "disabled"}`);
+        const agentTag = job.agent ? `  [${job.agent}]` : "";
+        console.log(`  ${job.enabled ? "\u25cf" : "\u25cb"} ${job.name.padEnd(20)} ${job.enabled ? "enabled" : "disabled"}${agentTag}`);
         console.log(`      ${statusIcon} ${status}   last: ${lastText}   next: ${nextText}   duration: ${durationText}${staleText}`);
       }
     } else {
