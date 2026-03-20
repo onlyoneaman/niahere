@@ -184,6 +184,19 @@ describe("Job model", () => {
     expect(job!.enabled).toBe(true);
   });
 
+  test("create with agent and get", async () => {
+    const name = TEST_JOB + "-agent";
+    await Job.create(name, "*/5 * * * *", "do something", false, "cron", undefined, "marketer");
+    const job = await Job.get(name);
+    expect(job).not.toBeNull();
+    expect(job!.agent).toBe("marketer");
+  });
+
+  test("create without agent defaults to null", async () => {
+    const job = await Job.get(TEST_JOB);
+    expect(job!.agent).toBeNull();
+  });
+
   test("list includes created job", async () => {
     const jobs = await Job.list();
     const found = jobs.find((j) => j.name === TEST_JOB);
