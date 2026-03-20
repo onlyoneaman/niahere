@@ -150,16 +150,19 @@ export async function runDaemon(): Promise<void> {
   delete process.env.CLAUDE_CODE_ENTRYPOINT;
   delete process.env.CLAUDE_AGENT_SDK_VERSION;
 
-  // Startup guard: if another daemon is alive, exit immediately
+  // Startup guard: if another nia daemon is alive, exit immediately.
+  // Use pgrep (via findDaemonPids) instead of kill(pid,0) to verify the
+  // PID is actually a nia process — not a recycled OS PID from something else.
   const existingPid = readPid();
   if (existingPid !== null && existingPid !== process.pid) {
-    try {
-      process.kill(existingPid, 0); // Check if alive
+    const aliveDaemons = findDaemonPids();
+    if (aliveDaemons.includes(existingPid)) {
       log.debug({ existingPid, myPid: process.pid }, "another daemon is already running, exiting");
       process.exit(0);
-    } catch {
-      // Dead PID in pidfile — safe to take over
     }
+    // PID in file is stale (dead or recycled by OS) — safe to take over
+    log.warn({ stalePid: existingPid }, "taking over from stale pid");
+    removePid();
   }
 
   // Crash handlers — ensure PID cleanup and logging on unhandled errors.

@@ -48,6 +48,8 @@ function buildPlist(): string {
     <key>SuccessfulExit</key>
     <false/>
   </dict>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
   <key>StandardOutPath</key>
   <string>${paths.daemonLog}</string>
   <key>StandardErrorPath</key>
@@ -86,10 +88,10 @@ async function uninstallLaunchd(): Promise<void> {
   const path = plistPath();
   if (!existsSync(path)) return;
 
+  // Unload to stop the process and disable KeepAlive respawn.
+  // Keep the plist file so RunAtLoad starts the daemon on next login.
   const unload = Bun.spawn(["launchctl", "unload", path], { stdout: "pipe", stderr: "pipe" });
   await unload.exited;
-
-  try { unlinkSync(path); } catch { /* already gone */ }
 }
 
 function isLaunchdInstalled(): boolean {
