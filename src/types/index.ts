@@ -8,3 +8,4 @@ export type { ChatState } from "./chat-state";
 export type { Config, ChannelsConfig, TelegramConfig, SlackConfig } from "./config";
 export type { Paths } from "./paths";
 export type { SaveMessageParams, RoomStats, RecentMessage } from "./message";
+export type { AgentInfo } from "./agent";
