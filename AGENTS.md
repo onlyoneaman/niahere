@@ -188,7 +188,7 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 
 ## Architecture Docs
 
-- **[AGENT_PRINCIPLES.md](AGENT_PRINCIPLES.md)** — core philosophy: atomic tools, prompts as features, emergent capability
+- **[DOCTRINES.md](DOCTRINES.md)** — core philosophy: atomic tools, prompts as features, emergent capability
 - **[MULTI_AGENT_PHILOSOPHY.md](MULTI_AGENT_PHILOSOPHY.md)** — why single-agent with skills/jobs beats multi-agent orchestration, backed by research
 
 ## Code Style
