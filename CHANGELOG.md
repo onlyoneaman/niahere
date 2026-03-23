@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.40] - 2026-03-23
+
 ### Added
 - Deterministic Postgres recovery in alive monitor — removes stale `postmaster.pid` and restarts service before falling back to LLM recovery agent
 
