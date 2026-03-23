@@ -100,6 +100,39 @@ export function createNiaMcpServer() {
         }),
       ),
       tool(
+        "list_sessions",
+        "Browse past conversation sessions with previews. Returns session IDs you can pass to read_session.",
+        {
+          room: z.string().optional().describe("Filter by room name"),
+          limit: z.number().default(10).describe("Number of sessions to return"),
+        },
+        async (args) => ({
+          content: [{ type: "text" as const, text: await handlers.listSessions(args.limit, args.room) }],
+        }),
+      ),
+      tool(
+        "search_messages",
+        "Search across all past messages by keyword. Returns matching messages with session IDs for deeper reading.",
+        {
+          query: z.string().describe("Text to search for in message content"),
+          room: z.string().optional().describe("Filter by room name"),
+          limit: z.number().default(20).describe("Max results to return"),
+        },
+        async (args) => ({
+          content: [{ type: "text" as const, text: await handlers.searchMessages(args.query, args.limit, args.room) }],
+        }),
+      ),
+      tool(
+        "read_session",
+        "Load the full transcript of a specific conversation session. Use list_sessions or search_messages to find session IDs.",
+        {
+          session_id: z.string().describe("Session ID to read"),
+        },
+        async (args) => ({
+          content: [{ type: "text" as const, text: await handlers.readSession(args.session_id) }],
+        }),
+      ),
+      tool(
         "add_watch_channel",
         "Add or update a Slack watch channel. Watch channels receive ALL messages (not just @mentions) and act based on the behavior prompt. Takes effect on next message (hot-reloads).",
         {

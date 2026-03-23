@@ -19,3 +19,19 @@ export interface RecentMessage {
   content: string;
   createdAt: string;
 }
+
+export interface SearchResult {
+  sessionId: string;
+  room: string;
+  sender: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface SessionMessage {
+  room: string;
+  sender: string;
+  content: string;
+  isFromAgent: boolean;
+  createdAt: string;
+}

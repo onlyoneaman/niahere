@@ -138,6 +138,70 @@ describe("Message model", () => {
   });
 });
 
+describe("Session.listRecent", () => {
+  test("returns sessions across all rooms", async () => {
+    const sessions = await Session.listRecent(5);
+    expect(Array.isArray(sessions)).toBe(true);
+    for (const s of sessions) {
+      expect(s).toHaveProperty("id");
+      expect(s).toHaveProperty("room");
+      expect(s).toHaveProperty("preview");
+      expect(s).toHaveProperty("messageCount");
+    }
+  });
+
+  test("filters by room when provided", async () => {
+    const sessions = await Session.listRecent(5, TEST_ROOM);
+    for (const s of sessions) {
+      expect(s.room).toBe(TEST_ROOM);
+    }
+  });
+});
+
+describe("Message.search", () => {
+  test("finds messages by keyword", async () => {
+    const results = await Message.search("hello nia");
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results[0]).toHaveProperty("sessionId");
+    expect(results[0]).toHaveProperty("room");
+    expect(results[0]).toHaveProperty("content");
+    expect(results[0].content.toLowerCase()).toContain("hello nia");
+  });
+
+  test("returns empty for non-matching query", async () => {
+    const results = await Message.search(`xyznonexistent${Date.now()}`);
+    expect(results).toHaveLength(0);
+  });
+
+  test("filters by room", async () => {
+    const results = await Message.search("hello", 20, TEST_ROOM);
+    for (const r of results) {
+      expect(r.room).toBe(TEST_ROOM);
+    }
+  });
+});
+
+describe("Message.getBySession", () => {
+  test("returns messages for a session in chronological order", async () => {
+    const sessionId = `test-bysession-${Date.now()}`;
+    await Session.create(sessionId, TEST_ROOM);
+    await Message.save({ sessionId, room: TEST_ROOM, sender: "user", content: "msg1", isFromAgent: false });
+    await Message.save({ sessionId, room: TEST_ROOM, sender: "nia", content: "msg2", isFromAgent: true });
+
+    const messages = await Message.getBySession(sessionId);
+    expect(messages).toHaveLength(2);
+    expect(messages[0].content).toBe("msg1");
+    expect(messages[0].isFromAgent).toBe(false);
+    expect(messages[1].content).toBe("msg2");
+    expect(messages[1].isFromAgent).toBe(true);
+  });
+
+  test("returns empty for nonexistent session", async () => {
+    const messages = await Message.getBySession("nonexistent-session-id");
+    expect(messages).toHaveLength(0);
+  });
+});
+
 describe("ActiveEngine model", () => {
   const TEST_ENGINE_ROOM = `test-engine-${Date.now()}`;
 

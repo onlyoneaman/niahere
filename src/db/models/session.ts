@@ -49,6 +49,35 @@ export async function getRecent(room: string, limit = 10): Promise<SessionSummar
   }));
 }
 
+export async function listRecent(limit = 10, room?: string): Promise<SessionSummary[]> {
+  if (room) return getRecent(room, limit);
+  const sql = getSql();
+  const rows = await sql`
+    SELECT
+      s.id,
+      s.room,
+      s.created_at,
+      s.updated_at,
+      (
+        SELECT content FROM messages m
+        WHERE m.session_id = s.id AND m.sender = 'user'
+        ORDER BY m.created_at ASC LIMIT 1
+      ) AS preview,
+      (SELECT COUNT(*)::int FROM messages m WHERE m.session_id = s.id) AS message_count
+    FROM sessions s
+    ORDER BY s.updated_at DESC
+    LIMIT ${limit}
+  `;
+  return rows.map((r) => ({
+    id: r.id,
+    room: r.room,
+    createdAt: String(r.created_at),
+    updatedAt: String(r.updated_at),
+    preview: r.preview ? String(r.preview) : null,
+    messageCount: r.message_count,
+  }));
+}
+
 export async function create(id: string, room: string): Promise<void> {
   const sql = getSql();
   await sql`INSERT INTO sessions (id, room) VALUES (${id}, ${room})`;
