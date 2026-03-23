@@ -247,13 +247,15 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
     };
     appendAudit(auditEntry);
 
-    state[job.name] = {
+    // Re-read state to avoid clobbering concurrent job updates
+    const freshState = { ...readState() };
+    freshState[job.name] = {
       lastRun: timestamp,
       status: result.status,
       duration_ms: result.duration_ms,
       error: result.error,
     };
-    writeState(state);
+    writeState(freshState);
 
     return result;
   } catch (err) {
@@ -278,13 +280,15 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
       error: errorMsg,
     });
 
-    state[job.name] = {
+    // Re-read state to avoid clobbering concurrent job updates
+    const freshState = { ...readState() };
+    freshState[job.name] = {
       lastRun: timestamp,
       status: "error",
       duration_ms,
       error: errorMsg,
     };
-    writeState(state);
+    writeState(freshState);
 
     return result;
   }
