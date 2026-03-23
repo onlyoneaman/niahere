@@ -4,10 +4,71 @@ import { getSql, closeDb } from "../db/connection";
 import { getFailures, type Check } from "./health";
 
 const HEARTBEAT_INTERVAL = 60_000; // 60s
+const PG_DATA_DIRS = [
+  "/opt/homebrew/var/postgresql@18",
+  "/opt/homebrew/var/postgresql@17",
+  "/opt/homebrew/var/postgres",
+];
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let lastFailures: string[] = [];
 let recoveryAttempted = false;
+
+/** Deterministic Postgres recovery: remove stale PID file + restart service. */
+async function recoverPostgres(): Promise<boolean> {
+  const ready = Bun.spawnSync(["pg_isready"]);
+  if (ready.exitCode === 0) return true; // already up
+
+  log.info("alive: postgres not ready, attempting deterministic recovery");
+
+  // Find and remove stale postmaster.pid
+  const { existsSync, unlinkSync, readFileSync } = await import("fs");
+  for (const dir of PG_DATA_DIRS) {
+    const pidFile = `${dir}/postmaster.pid`;
+    if (!existsSync(pidFile)) continue;
+
+    // Read the PID from line 1 and check if it's actually a postgres process
+    try {
+      const pid = parseInt(readFileSync(pidFile, "utf8").split("\n")[0], 10);
+      if (!isNaN(pid)) {
+        const check = Bun.spawnSync(["ps", "-p", String(pid), "-o", "comm="]);
+        const comm = new TextDecoder().decode(check.stdout).trim();
+        if (check.exitCode !== 0 || !comm.includes("postgres")) {
+          log.info({ pidFile, stalePid: pid, actualProcess: comm || "dead" }, "alive: removing stale postmaster.pid");
+          unlinkSync(pidFile);
+        }
+      }
+    } catch (err) {
+      log.warn({ err, pidFile }, "alive: could not inspect postmaster.pid");
+    }
+  }
+
+  // Restart the service
+  if (process.platform === "darwin") {
+    // Try common brew postgresql service names
+    for (const svc of ["postgresql@18", "postgresql@17", "postgresql"]) {
+      const result = Bun.spawnSync(["brew", "services", "start", svc]);
+      if (result.exitCode === 0) {
+        log.info({ service: svc }, "alive: brew service start issued");
+        break;
+      }
+    }
+  } else {
+    Bun.spawnSync(["systemctl", "start", "postgresql"]);
+  }
+
+  // Wait briefly for postgres to come up
+  await new Promise((r) => setTimeout(r, 3000));
+
+  const check = Bun.spawnSync(["pg_isready"]);
+  if (check.exitCode === 0) {
+    log.info("alive: postgres recovered via deterministic fix");
+    return true;
+  }
+
+  log.warn("alive: deterministic postgres recovery failed");
+  return false;
+}
 
 async function attemptDbReconnect(): Promise<boolean> {
   try {
@@ -138,10 +199,28 @@ async function heartbeat(): Promise<void> {
     }
   }
 
-  // Run recovery agent once per outage
+  // Deterministic postgres recovery before LLM agent
+  if (failureNames.includes("database") && !recoveryAttempted) {
+    const pgFixed = await recoverPostgres();
+    if (pgFixed) {
+      const reconnected = await attemptDbReconnect();
+      if (reconnected) {
+        const remaining = await getFailures();
+        if (remaining.length === 0) {
+          log.info("alive: postgres recovered (deterministic fix, no LLM needed)");
+          await notifyUser("Postgres was down (stale PID). Fixed automatically — no LLM agent needed.");
+          lastFailures = [];
+          recoveryAttempted = false;
+          return;
+        }
+      }
+    }
+  }
+
+  // Run LLM recovery agent once per outage (fallback for non-trivial issues)
   if (!recoveryAttempted) {
     recoveryAttempted = true;
-    log.info({ failures: failureNames }, "alive: running recovery agent");
+    log.info({ failures: failureNames }, "alive: running LLM recovery agent");
 
     const { recovered, report } = await runRecoveryAgent(failures);
 
