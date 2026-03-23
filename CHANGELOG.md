@@ -5,6 +5,9 @@
 ### Added
 - Deterministic Postgres recovery in alive monitor — removes stale `postmaster.pid` and restarts service before falling back to LLM recovery agent
 
+### Fixed
+- Job status race condition — concurrent jobs clobbered each other's state file, causing false "error" status after daemon restart
+
 ## [0.2.39] - 2026-03-21
 
 ### Fixed
