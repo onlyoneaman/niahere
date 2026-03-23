@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.2.41] - 2026-03-23
+
+### Added
+- Conversation history MCP tools: `list_sessions`, `search_messages`, `read_session` — agent can now browse, search, and read prior conversations
+- Agent prompt updated to document conversation history access
+
 ## [0.2.40] - 2026-03-23
 
 ### Added
