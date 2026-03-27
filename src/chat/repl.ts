@@ -2,7 +2,7 @@ import * as readline from "readline";
 import { createChatEngine } from "./engine";
 import { runMigrations } from "../db/migrate";
 import { closeDb } from "../db/connection";
-import { getMcpServers, setMcpServers } from "../mcp";
+import { getMcpServers, setMcpFactory } from "../mcp";
 import { createNiaMcpServer } from "../mcp/server";
 import { Session } from "../db/models";
 import { relativeTime } from "../utils/format";
@@ -113,12 +113,9 @@ export async function startRepl(mode: ChatMode = "continue", simulateChannel?: s
     process.exit(1);
   }
 
-  // Initialize MCP server if not already set (standalone chat mode)
+  // Initialize MCP server factory if not already set (standalone chat mode)
   if (!getMcpServers()) {
-    try {
-      const mcpConfig = createNiaMcpServer();
-      setMcpServers({ nia: mcpConfig });
-    } catch {}
+    setMcpFactory(() => ({ nia: createNiaMcpServer() }));
   }
 
   // Determine session to use

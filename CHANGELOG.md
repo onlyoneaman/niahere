@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- Concurrent Slack messages crash daemon — MCP Protocol instance was shared across queries, causing "Already connected to a transport" fatal error. Each query now gets its own MCP server instance.
+
 ### Changed
 - `nia channels on/off` applies immediately via SIGHUP — no restart required
 

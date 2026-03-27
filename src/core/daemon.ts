@@ -11,7 +11,7 @@ import type { Channel } from "../types";
 import { startScheduler, stopScheduler, recomputeAllNextRuns } from "./scheduler";
 import { startAlive, stopAlive } from "./alive";
 import { createNiaMcpServer } from "../mcp/server";
-import { setMcpServers } from "../mcp";
+import { setMcpFactory } from "../mcp";
 
 export function writePid(pid: number): void {
   const { pid: pidPath } = getPaths();
@@ -218,14 +218,9 @@ export async function runDaemon(): Promise<void> {
     log.info({ recovered }, "recovered stale running jobs");
   }
 
-  // Initialize MCP server (in-process, no HTTP needed)
-  try {
-    const mcpConfig = createNiaMcpServer();
-    setMcpServers({ nia: mcpConfig });
-    log.info("MCP server initialized");
-  } catch (err) {
-    log.error({ err }, "failed to initialize MCP server");
-  }
+  // Initialize MCP server factory (each query gets its own Protocol instance)
+  setMcpFactory(() => ({ nia: createNiaMcpServer() }));
+  log.info("MCP server factory initialized");
 
   // Register and start channels
   registerAllChannels();
