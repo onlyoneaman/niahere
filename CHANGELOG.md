@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.42] - 2026-03-28
+
 ### Fixed
 - Concurrent Slack messages crash daemon — MCP Protocol instance was shared across queries, causing "Already connected to a transport" fatal error. Each query now gets its own MCP server instance.
 
