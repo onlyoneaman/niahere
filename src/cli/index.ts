@@ -381,12 +381,16 @@ switch (command) {
   case "channels": {
     const sub = process.argv[3];
     const { updateRawConfig } = await import("../utils/config");
-    if (sub === "on") {
-      updateRawConfig({ channels: { enabled: true } });
-      console.log("channels enabled — restart to apply");
-    } else if (sub === "off") {
-      updateRawConfig({ channels: { enabled: false } });
-      console.log("channels disabled — restart to apply");
+    if (sub === "on" || sub === "off") {
+      const enabled = sub === "on";
+      updateRawConfig({ channels: { enabled } });
+      const pid = readPid();
+      if (pid && isRunning()) {
+        process.kill(pid, "SIGHUP");
+        console.log(`channels ${enabled ? "enabled" : "disabled"}`);
+      } else {
+        console.log(`channels ${enabled ? "enabled" : "disabled"} — start nia to apply`);
+      }
     } else {
       console.log(`channels: ${getConfig().channels.enabled ? "on" : "off"}`);
     }

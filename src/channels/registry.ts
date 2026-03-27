@@ -19,6 +19,10 @@ export function getChannel(name: string): Channel | undefined {
   return started.get(name);
 }
 
+export function getStarted(): Channel[] {
+  return [...started.values()];
+}
+
 export function clearStarted(): void {
   started.clear();
 }

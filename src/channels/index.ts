@@ -4,7 +4,7 @@ import { log } from "../utils/log";
 import { createTelegramChannel } from "./telegram";
 import { createSlackChannel } from "./slack";
 
-export { getChannel } from "./registry";
+export { getChannel, getStarted } from "./registry";
 
 /** Register all built-in channel factories. Call once at startup. */
 export function registerAllChannels(): void {

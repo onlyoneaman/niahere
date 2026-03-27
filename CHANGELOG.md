@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- `nia channels on/off` applies immediately via SIGHUP — no restart required
+
 ## [0.2.41] - 2026-03-23
 
 ### Added

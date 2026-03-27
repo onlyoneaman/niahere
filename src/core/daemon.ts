@@ -1,12 +1,12 @@
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { dirname } from "path";
 import { getPaths } from "../utils/paths";
-import { getConfig } from "../utils/config";
+import { getConfig, resetConfig } from "../utils/config";
 import { log } from "../utils/log";
 import { ActiveEngine } from "../db/models";
 import { runMigrations } from "../db/migrate";
 import { closeDb, getSql } from "../db/connection";
-import { registerAllChannels, startChannels, stopChannels } from "../channels";
+import { registerAllChannels, startChannels, stopChannels, getStarted } from "../channels";
 import type { Channel } from "../types";
 import { startScheduler, stopScheduler, recomputeAllNextRuns } from "./scheduler";
 import { startAlive, stopAlive } from "./alive";
@@ -265,9 +265,26 @@ export async function runDaemon(): Promise<void> {
     log.warn({ err }, "could not subscribe to nia_jobs, falling back to SIGHUP only");
   }
 
-  // SIGHUP as manual fallback
+  // SIGHUP: reload config, reconcile channels, recompute jobs
   process.on("SIGHUP", async () => {
-    log.info("received SIGHUP, recomputing job schedules");
+    log.info("received SIGHUP, reloading config");
+    resetConfig();
+    const fresh = getConfig();
+
+    const running = getStarted();
+    const wantChannels = fresh.channels.enabled;
+    const haveChannels = running.length > 0;
+
+    if (wantChannels && !haveChannels) {
+      log.info("SIGHUP: starting channels");
+      const result = await startChannels();
+      channels = result.started;
+    } else if (!wantChannels && haveChannels) {
+      log.info("SIGHUP: stopping channels");
+      await stopChannels(running);
+      channels = [];
+    }
+
     await recomputeAllNextRuns().catch(() => {});
   });
 
