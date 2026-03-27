@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.43] - 2026-03-28
+
 ### Changed
 - Memory (`memory.md`) now preloaded into every session alongside rules — was read-on-demand, which meant it rarely got used in quick exchanges
 - Rewrote rules vs memory guidance with clearer decision criteria, concrete examples, and self-generated learning (Nia saves from its own reasoning, not just explicit user instructions)
