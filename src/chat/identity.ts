@@ -17,7 +17,7 @@ function loadFile(dir: string, name: string): string {
 
 export function loadIdentity(): string {
   const { selfDir } = getPaths();
-  const files = ["identity.md", "owner.md", "soul.md", "rules.md"];
+  const files = ["identity.md", "owner.md", "soul.md", "rules.md", "memory.md"];
   return files.map((f) => loadFile(selfDir, f)).filter(Boolean).join("\n\n");
 }
 
