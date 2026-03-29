@@ -3,12 +3,13 @@ import type { SaveMessageParams, RoomStats, RecentMessage, SearchResult, Session
 
 export type DeliveryStatus = "pending" | "sent" | "failed";
 
-export async function save(params: SaveMessageParams & { deliveryStatus?: DeliveryStatus }): Promise<number> {
+export async function save(params: SaveMessageParams & { deliveryStatus?: DeliveryStatus; metadata?: Record<string, unknown> }): Promise<number> {
   const sql = getSql();
   const status = params.deliveryStatus || "sent";
+  const meta = params.metadata ? JSON.stringify(params.metadata) : null;
   const rows = await sql`
-    INSERT INTO messages (session_id, room, sender, content, is_from_agent, delivery_status)
-    VALUES (${params.sessionId}, ${params.room}, ${params.sender}, ${params.content}, ${params.isFromAgent}, ${status})
+    INSERT INTO messages (session_id, room, sender, content, is_from_agent, delivery_status, metadata)
+    VALUES (${params.sessionId}, ${params.room}, ${params.sender}, ${params.content}, ${params.isFromAgent}, ${status}, ${meta})
     RETURNING id
   `;
   return rows[0].id;

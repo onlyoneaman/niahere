@@ -332,10 +332,23 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
           }
 
           if (message.type === "result" && pending) {
+            const msg = message as any;
             if (!message.is_error) {
-              const resultText = (message as any).result as string;
-              const costUsd = (message as any).total_cost_usd as number;
-              const turns = (message as any).num_turns as number;
+              const resultText = msg.result as string;
+              const costUsd = msg.total_cost_usd as number;
+              const turns = msg.num_turns as number;
+
+              const metadata: Record<string, unknown> = {
+                cost_usd: costUsd,
+                turns,
+                duration_ms: msg.duration_ms,
+                duration_api_ms: msg.duration_api_ms,
+                stop_reason: msg.stop_reason,
+                session_id: msg.session_id,
+                subtype: msg.subtype,
+                usage: msg.usage,
+                model_usage: msg.modelUsage,
+              };
 
               let messageId: number | undefined;
               if (sessionId && resultText) {
@@ -346,6 +359,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
                   content: resultText,
                   isFromAgent: true,
                   deliveryStatus: "pending",
+                  metadata,
                 });
                 await Session.touch(sessionId);
               }
@@ -356,7 +370,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
               pending = null;
               resetIdleTimer();
             } else {
-              const errors = (message as any).errors;
+              const errors = msg.errors;
               const errorText = `[error] ${errors?.join(", ") || "unknown error"}`;
               await ActiveEngine.unregister(room);
               clearLongRunningTimer();
