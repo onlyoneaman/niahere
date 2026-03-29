@@ -5,12 +5,13 @@ import { existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { randomUUID } from "crypto";
-import { buildSystemPrompt } from "./identity";
+import { buildSystemPrompt, getSessionContext } from "./identity";
 import { getAgentDefinitions } from "../core/agents";
 import { Session, Message, ActiveEngine } from "../db/models";
 import type { Attachment, SendResult, StreamCallback, ActivityCallback, SendCallbacks, ChatEngine, EngineOptions } from "../types";
 import { truncate, formatToolUse } from "../utils/format-activity";
 import { consolidateSession } from "../core/consolidator";
+import { summarizeSession } from "../core/summarizer";
 import { log } from "../utils/log";
 
 const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
@@ -112,7 +113,14 @@ function sessionFileExists(sessionId: string, cwd: string): boolean {
 
 export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine> {
   const { room, channel, resume, mcpServers } = opts;
-  const systemPrompt = buildSystemPrompt("chat", channel);
+  let systemPrompt = buildSystemPrompt("chat", channel);
+
+  // Inject recent session summaries for continuity
+  const sessionContext = await getSessionContext(room);
+  if (sessionContext) {
+    systemPrompt += "\n\n" + sessionContext;
+  }
+
   const cwd = homedir();
 
   let sessionId: string | null = null;
@@ -151,10 +159,13 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
         log.warn({ room }, "idle timer fired while request pending, skipping teardown");
         return;
       }
-      // Memory consolidation — "hippocampal replay" before sleep
+      // Memory consolidation + session summary before "sleep"
       if (sessionId && messageCount > 0) {
         consolidateSession(sessionId, room).catch((err) => {
           log.error({ err, room }, "consolidation failed during idle teardown");
+        });
+        summarizeSession(sessionId, room).catch((err) => {
+          log.error({ err, room }, "session summary failed during idle teardown");
         });
       }
       teardown();
@@ -415,10 +426,13 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
     },
 
     close() {
-      // Memory consolidation on explicit close (skip if mid-turn — transcript is incomplete)
+      // Memory consolidation + session summary on explicit close
       if (sessionId && messageCount > 0 && !pending) {
         consolidateSession(sessionId, room).catch((err) => {
           log.error({ err, room }, "consolidation failed during close");
+        });
+        summarizeSession(sessionId, room).catch((err) => {
+          log.error({ err, room }, "session summary failed during close");
         });
       }
       teardown();

@@ -4,6 +4,7 @@ import { getPaths } from "../utils/paths";
 import { getEnvironmentPrompt, getModePrompt, getChannelPrompt } from "../prompts";
 import { getSkillsSummary } from "../core/skills";
 import { getAgentsSummary } from "../core/agents";
+import { Session } from "../db/models";
 import type { Mode } from "../types";
 
 // Re-export for backwards compat
@@ -42,4 +43,24 @@ export function buildSystemPrompt(mode: Mode = "chat", channel: string = "termin
   if (agents) parts.push(agents);
 
   return parts.join("\n\n");
+}
+
+/**
+ * Load recent session summaries for a room and format as a context block.
+ * Returns empty string if no summaries are available.
+ */
+export async function getSessionContext(room: string): Promise<string> {
+  try {
+    const summaries = await Session.getRecentSummaries(room, 3);
+    if (summaries.length === 0) return "";
+
+    const lines = summaries
+      .reverse() // oldest first
+      .map((s) => `- (${s.updatedAt}): ${s.summary}`)
+      .join("\n");
+
+    return `## Recent Session Context\nBrief summaries of your last few sessions in this room — use for continuity:\n${lines}`;
+  } catch {
+    return "";
+  }
 }

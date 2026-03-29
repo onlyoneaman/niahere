@@ -88,6 +88,31 @@ export async function touch(id: string): Promise<void> {
   await sql`UPDATE sessions SET updated_at = NOW() WHERE id = ${id}`;
 }
 
+export async function setSummary(id: string, summary: string): Promise<void> {
+  const sql = getSql();
+  await sql`UPDATE sessions SET summary = ${summary} WHERE id = ${id}`;
+}
+
+export async function getRecentSummaries(room: string, limit = 3): Promise<Array<{ summary: string; updatedAt: string }>> {
+  const sql = getSql();
+  // Match summaries from sessions in the same channel (e.g. slack-dm-U...-*)
+  // by extracting the room prefix (everything before the last -N index)
+  const prefix = room.replace(/-\d+$/, "");
+  const rows = await sql`
+    SELECT summary, updated_at
+    FROM sessions
+    WHERE room LIKE ${prefix + "-%"}
+      AND summary IS NOT NULL
+      AND id != ${""}
+    ORDER BY updated_at DESC
+    LIMIT ${limit}
+  `;
+  return rows.map((r) => ({
+    summary: String(r.summary),
+    updatedAt: String(r.updated_at),
+  }));
+}
+
 export async function getLatestRoomIndex(prefix: string): Promise<number> {
   const sql = getSql();
   const rows = await sql`
