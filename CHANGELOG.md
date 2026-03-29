@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.49] - 2026-03-30
+
 ### Fixed
 - Session metadata accumulation is now atomic SQL — no read-then-write race condition
 - Session metadata accumulation is non-blocking — doesn't delay reply delivery
