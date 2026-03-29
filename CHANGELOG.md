@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.2.46] - 2026-03-29
+
+### Added
+- **Session summaries for cross-session continuity** — when a chat session goes idle, generates a brief handoff note summarizing what was discussed. Last 3 summaries injected into the system prompt so new sessions have context about recent conversations.
+- New `src/core/summarizer.ts` — lightweight summary generation on session idle
+- New migration `009_session_summary` — adds `summary` column to sessions table
+
 ## [0.2.45] - 2026-03-29
 
 ### Added
