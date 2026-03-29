@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.2.48] - 2026-03-30
+
+### Added
+- **Message metadata** — JSONB column on messages storing cost_usd, turns, duration_ms, duration_api_ms, stop_reason, token usage, and per-model breakdown on every agent reply.
+- **Session metadata** — JSONB column on sessions with aggregated totals: total_cost_usd, total_turns, total_duration_ms, total_tokens, models_used, channel. Accumulated on each reply.
+
 ## [0.2.47] - 2026-03-29
 
 ### Added
