@@ -18,10 +18,8 @@
  */
 
 import { Message } from "../db/models";
-import { buildSystemPrompt } from "../chat/identity";
-import { runJobWithClaude } from "./runner";
+import { runTask } from "./runner";
 import { log } from "../utils/log";
-import { homedir } from "os";
 import type { SessionMessage } from "../types";
 
 /** Track sessions already consolidated to prevent double runs. */
@@ -83,15 +81,10 @@ Do NOT message the user about this. Save silently and report a brief summary of 
 
 /** Run the consolidation agent loop. */
 async function runConsolidation(transcript: string, source: string): Promise<void> {
-  const systemPrompt = buildSystemPrompt("job");
-  const jobPrompt = buildConsolidationPrompt(transcript, source);
-  const output = await runJobWithClaude(systemPrompt, jobPrompt, homedir());
-
-  if (output.error) {
-    log.error({ source, error: output.error }, "consolidator: extraction failed");
-  } else {
-    log.info({ source, resultChars: output.agentText.length }, "consolidator: done");
-  }
+  await runTask({
+    name: "consolidator",
+    prompt: buildConsolidationPrompt(transcript, source),
+  });
 }
 
 /**

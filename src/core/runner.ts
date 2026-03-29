@@ -9,6 +9,9 @@ import { getConfig } from "../utils/config";
 import { buildSystemPrompt } from "../chat/identity";
 import { scanAgents } from "./agents";
 import { truncate, formatToolUse } from "../utils/format-activity";
+import { getMcpServers } from "../mcp";
+import { ActiveEngine } from "../db/models";
+import { log } from "../utils/log";
 
 export type ActivityCallback = (line: string) => void;
 
@@ -87,14 +90,21 @@ export async function runJobWithClaude(
     };
   }
 
+  const options: Record<string, unknown> = {
+    systemPrompt,
+    cwd,
+    permissionMode: "bypassPermissions",
+    sessionId,
+  };
+
+  const mcpServers = getMcpServers();
+  if (mcpServers) {
+    options.mcpServers = mcpServers;
+  }
+
   const handle = query({
     prompt: singleMessage() as any,
-    options: {
-      systemPrompt,
-      cwd,
-      permissionMode: "bypassPermissions",
-      sessionId,
-    } as any,
+    options: options as any,
   });
 
   let agentText = "";
@@ -176,6 +186,40 @@ export async function runJobWithClaude(
   }
 
   return { agentText, sessionId: actualSessionId };
+}
+
+// ---------------------------------------------------------------------------
+// Background task runner — tracked one-shot agent with full Nia personality
+// ---------------------------------------------------------------------------
+
+export interface TaskOptions {
+  /** Task name — used for ActiveEngine tracking as _system/{name}. */
+  name: string;
+  /** The prompt/instruction for the task. */
+  prompt: string;
+  /** System prompt override. Defaults to buildSystemPrompt("job"). */
+  systemPrompt?: string;
+}
+
+/**
+ * Run a background agent task with ActiveEngine tracking and MCP tools.
+ * Use for consolidator, summarizer, and any future background work.
+ */
+export async function runTask(opts: TaskOptions): Promise<RunnerOutput> {
+  const room = `_system/${opts.name}`;
+  await ActiveEngine.register(room, "system").catch(() => {});
+  try {
+    const systemPrompt = opts.systemPrompt || buildSystemPrompt("job");
+    const output = await runJobWithClaude(systemPrompt, opts.prompt, homedir());
+    if (output.error) {
+      log.error({ task: opts.name, error: output.error }, "task failed");
+    } else {
+      log.info({ task: opts.name, resultChars: output.agentText.length }, "task completed");
+    }
+    return output;
+  } finally {
+    await ActiveEngine.unregister(room).catch(() => {});
+  }
 }
 
 // ---------------------------------------------------------------------------

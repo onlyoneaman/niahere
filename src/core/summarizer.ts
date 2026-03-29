@@ -11,10 +11,8 @@
  */
 
 import { Message, Session } from "../db/models";
-import { buildSystemPrompt } from "../chat/identity";
-import { runJobWithClaude } from "./runner";
+import { runTask } from "./runner";
 import { log } from "../utils/log";
-import { homedir } from "os";
 import type { SessionMessage } from "../types";
 
 /** Track sessions already summarized to prevent double runs. */
@@ -46,10 +44,9 @@ export async function summarizeSession(sessionId: string, room: string): Promise
 
     log.info({ sessionId, room, messageCount: messages.length }, "summarizer: generating session summary");
 
-    const systemPrompt = buildSystemPrompt("job");
     const transcript = formatTranscript(messages);
 
-    const jobPrompt = `Job: session-summary (triggered by session idle in ${room})
+    const prompt = `Job: session-summary (triggered by session idle in ${room})
 
 Generate a brief session summary. This will be shown to your future self at the start of the next session for continuity.
 
@@ -64,7 +61,7 @@ Write a 2-4 sentence summary covering:
 
 Keep it concise — a handoff note, not a report. Output ONLY the summary text.`;
 
-    const output = await runJobWithClaude(systemPrompt, jobPrompt, homedir());
+    const output = await runTask({ name: "summarizer", prompt });
 
     if (output.error) {
       log.error({ sessionId, room, error: output.error }, "summarizer: failed");
