@@ -113,6 +113,44 @@ export async function getRecentSummaries(room: string, limit = 3): Promise<Array
   }));
 }
 
+export async function accumulateMetadata(id: string, resultMeta: Record<string, unknown>): Promise<void> {
+  const sql = getSql();
+  const rows = await sql`SELECT metadata FROM sessions WHERE id = ${id}`;
+  const existing = (rows[0]?.metadata as Record<string, unknown>) || {};
+
+  const modelUsage = resultMeta.model_usage as Record<string, Record<string, number>> | undefined;
+  const modelsUsed = new Set<string>((existing.models_used as string[]) || []);
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cacheReadTokens = 0;
+  let cacheCreationTokens = 0;
+  if (modelUsage) {
+    for (const [model, usage] of Object.entries(modelUsage)) {
+      modelsUsed.add(model);
+      inputTokens += usage.inputTokens || 0;
+      outputTokens += usage.outputTokens || 0;
+      cacheReadTokens += usage.cacheReadInputTokens || 0;
+      cacheCreationTokens += usage.cacheCreationInputTokens || 0;
+    }
+  }
+
+  const updated: Record<string, unknown> = {
+    total_cost_usd: ((existing.total_cost_usd as number) || 0) + ((resultMeta.cost_usd as number) || 0),
+    total_turns: ((existing.total_turns as number) || 0) + ((resultMeta.turns as number) || 0),
+    total_duration_ms: ((existing.total_duration_ms as number) || 0) + ((resultMeta.duration_ms as number) || 0),
+    total_duration_api_ms: ((existing.total_duration_api_ms as number) || 0) + ((resultMeta.duration_api_ms as number) || 0),
+    total_input_tokens: ((existing.total_input_tokens as number) || 0) + inputTokens,
+    total_output_tokens: ((existing.total_output_tokens as number) || 0) + outputTokens,
+    total_cache_read_tokens: ((existing.total_cache_read_tokens as number) || 0) + cacheReadTokens,
+    total_cache_creation_tokens: ((existing.total_cache_creation_tokens as number) || 0) + cacheCreationTokens,
+    message_count: ((existing.message_count as number) || 0) + 1,
+    models_used: [...modelsUsed],
+    channel: existing.channel || resultMeta.channel,
+  };
+
+  await sql`UPDATE sessions SET metadata = ${JSON.stringify(updated)} WHERE id = ${id}`;
+}
+
 export async function getLatestRoomIndex(prefix: string): Promise<number> {
   const sql = getSql();
   const rows = await sql`

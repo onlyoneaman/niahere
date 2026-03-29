@@ -352,16 +352,29 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
 
               let messageId: number | undefined;
               if (sessionId && resultText) {
-                messageId = await Message.save({
-                  sessionId,
-                  room,
-                  sender: "nia",
-                  content: resultText,
-                  isFromAgent: true,
-                  deliveryStatus: "pending",
-                  metadata,
-                });
+                try {
+                  messageId = await Message.save({
+                    sessionId,
+                    room,
+                    sender: "nia",
+                    content: resultText,
+                    isFromAgent: true,
+                    deliveryStatus: "pending",
+                    metadata,
+                  });
+                } catch {
+                  // Fallback if metadata column doesn't exist yet
+                  messageId = await Message.save({
+                    sessionId,
+                    room,
+                    sender: "nia",
+                    content: resultText,
+                    isFromAgent: true,
+                    deliveryStatus: "pending",
+                  });
+                }
                 await Session.touch(sessionId);
+                await Session.accumulateMetadata(sessionId, { ...metadata, channel }).catch(() => {});
               }
 
               await ActiveEngine.unregister(room);
