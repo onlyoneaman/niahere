@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.2.51] - 2026-03-30
+
+### Fixed
+- **Schedule type mismatch can't happen anymore** — job create and update now validate that the schedule string matches the declared schedule_type (cron/interval/once). A mismatch throws a clear error instead of crashing the scheduler later.
+- **`update_job` now supports `schedule_type`** — was silently ignored before, so Nia couldn't fix a mismatched job without raw SQL.
+
 ## [0.2.50] - 2026-03-30
 
 ### Fixed

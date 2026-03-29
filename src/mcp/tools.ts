@@ -40,14 +40,16 @@ export async function updateJob(args: {
   prompt?: string;
   always?: boolean;
   agent?: string | null;
+  schedule_type?: "cron" | "interval" | "once";
 }): Promise<string> {
-  const fields: Partial<{ schedule: string; prompt: string; always: boolean; agent: string | null }> = {};
+  const fields: Partial<{ schedule: string; prompt: string; always: boolean; agent: string | null; scheduleType: "cron" | "interval" | "once" }> = {};
   if (args.schedule) fields.schedule = args.schedule;
   if (args.prompt) fields.prompt = args.prompt;
   if (args.always !== undefined) fields.always = args.always;
   if (args.agent !== undefined) fields.agent = args.agent;
+  if (args.schedule_type) fields.scheduleType = args.schedule_type;
 
-  if (Object.keys(fields).length === 0) return "Nothing to update. Pass at least one field (schedule, prompt, always, or agent).";
+  if (Object.keys(fields).length === 0) return "Nothing to update. Pass at least one field (schedule, prompt, always, agent, or schedule_type).";
 
   const updated = await Job.update(args.name, fields);
   if (!updated) return `Job "${args.name}" not found.`;
