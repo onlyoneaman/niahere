@@ -79,10 +79,10 @@ async function tick(): Promise<void> {
 
   for (const job of dueJobs) {
     if (!job.always && !isWithinActiveHours()) {
-      const nextRun = computeNextRun(job.scheduleType, job.schedule, config.timezone, new Date());
-      if (nextRun) {
-        await Job.markRun(job.name, nextRun).catch(() => {});
-      }
+      try {
+        const nextRun = computeNextRun(job.scheduleType, job.schedule, config.timezone, new Date());
+        if (nextRun) await Job.markRun(job.name, nextRun).catch(() => {});
+      } catch {}
       log.info({ job: job.name }, "scheduler: skipping — outside active hours");
       continue;
     }
@@ -95,7 +95,14 @@ async function tick(): Promise<void> {
       log.error({ err, job: job.name }, "scheduler: job failed");
     });
 
-    const nextRun = computeNextRun(job.scheduleType, job.schedule, config.timezone, new Date());
+    let nextRun: Date | null = null;
+    try {
+      nextRun = computeNextRun(job.scheduleType, job.schedule, config.timezone, new Date());
+    } catch (err) {
+      log.error({ err, job: job.name, schedule: job.schedule }, "scheduler: invalid schedule, disabling job");
+      await Job.update(job.name, { enabled: false }).catch(() => {});
+      continue;
+    }
     await Job.markRun(job.name, nextRun).catch((err) => {
       log.error({ err, job: job.name }, "scheduler: failed to update next_run_at");
     });

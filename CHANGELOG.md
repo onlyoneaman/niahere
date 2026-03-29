@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.2.50] - 2026-03-30
+
+### Fixed
+- **Invalid cron expression crashes daemon** — a bad schedule (e.g. `0` in month field) on any job would crash `computeNextRun`, propagate as unhandled rejection, and kill the entire daemon. Now caught — job is auto-disabled with an error log instead.
+
 ## [0.2.49] - 2026-03-30
 
 ### Fixed
