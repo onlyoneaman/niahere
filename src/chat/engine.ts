@@ -10,6 +10,7 @@ import { getAgentDefinitions } from "../core/agents";
 import { Session, Message, ActiveEngine } from "../db/models";
 import type { Attachment, SendResult, StreamCallback, ActivityCallback, SendCallbacks, ChatEngine, EngineOptions } from "../types";
 import { truncate, formatToolUse } from "../utils/format-activity";
+import { consolidateSession } from "../core/consolidator";
 import { log } from "../utils/log";
 
 const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
@@ -133,6 +134,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
   let longRunningTimer: ReturnType<typeof setTimeout> | null = null;
   let longRunningWarned = false;
   let alive = false;
+  let messageCount = 0;
 
   function clearIdleTimer() {
     if (idleTimer) {
@@ -143,11 +145,17 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
 
   function resetIdleTimer() {
     clearIdleTimer();
-    idleTimer = setTimeout(() => {
+    idleTimer = setTimeout(async () => {
       if (pending) {
         // Don't tear down while a request is in flight
         log.warn({ room }, "idle timer fired while request pending, skipping teardown");
         return;
+      }
+      // Memory consolidation — "hippocampal replay" before sleep
+      if (sessionId && messageCount > 0) {
+        consolidateSession(sessionId, room).catch((err) => {
+          log.error({ err, room }, "consolidation failed during idle teardown");
+        });
       }
       teardown();
     }, IDLE_TIMEOUT);
@@ -239,6 +247,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
                 content: pending.userMessage,
                 isFromAgent: false,
               });
+              messageCount++;
             }
           }
 
@@ -406,6 +415,12 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
     },
 
     close() {
+      // Memory consolidation on explicit close (skip if mid-turn — transcript is incomplete)
+      if (sessionId && messageCount > 0 && !pending) {
+        consolidateSession(sessionId, room).catch((err) => {
+          log.error({ err, room }, "consolidation failed during close");
+        });
+      }
       teardown();
       ActiveEngine.unregister(room).catch(() => {});
     },

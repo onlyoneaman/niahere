@@ -257,6 +257,13 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
     };
     writeState(freshState);
 
+    // Memory consolidation — review what the job learned (fire-and-forget)
+    if (ok && result.result) {
+      import("./consolidator").then(({ consolidateJobRun }) => {
+        consolidateJobRun(job.name, jobPrompt, result.result).catch(() => {});
+      }).catch(() => {});
+    }
+
     return result;
   } catch (err) {
     const duration_ms = Math.round(performance.now() - startMs);

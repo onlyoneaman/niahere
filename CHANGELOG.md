@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.2.45] - 2026-03-29
+
+### Added
+- **Background memory consolidation** — automatic memory extraction when chat sessions go idle or jobs complete. Decouples memory formation from task execution using the same agent loop as cron jobs. The agent reviews the conversation transcript with full tool access and saves memories/rules via `add_memory`/`add_rule`. Inspired by hippocampal replay during sleep — the brain consolidates memories after the experience, not during.
+- **Post-job consolidation** — job runs now trigger memory extraction on completion, so insights from cron jobs, monitoring tasks, and one-off runs are captured too. Self-referential jobs (`memory-consolidation`) are skipped to prevent infinite loops.
+- New `src/core/consolidator.ts` — the extraction engine with transcript formatting, prompt construction, and session dedup guard.
+
 ## [0.2.44] - 2026-03-29
 
 ### Fixed
