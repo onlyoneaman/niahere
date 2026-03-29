@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.47] - 2026-03-29
+
 ### Added
 - **`runTask` wrapper** — standard way to run background agent tasks with ActiveEngine tracking and MCP tools. Consolidator, summarizer, and future background tasks use this instead of calling `runJobWithClaude` directly.
 - **MCP tools for all jobs** — `runJobWithClaude` now passes MCP servers to the SDK, so cron jobs and background tasks get access to `add_memory`, `send_message`, `list_jobs`, etc.
