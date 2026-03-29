@@ -16,6 +16,12 @@
 
 ## [0.2.43] - 2026-03-28
 
+### Added
+- `nia backup` — create compressed backup of config, persona files, and database (pg_dump)
+- `nia backup list` — show existing backups with size and date
+- Auto-backup before `nia update` for safety
+- Auto-prune keeps last 10 backups
+
 ### Changed
 - Memory (`memory.md`) now preloaded into every session alongside rules — was read-on-demand, which meant it rarely got used in quick exchanges
 - Rewrote rules vs memory guidance with clearer decision criteria, concrete examples, and self-generated learning (Nia saves from its own reasoning, not just explicit user instructions)

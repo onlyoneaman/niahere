@@ -433,6 +433,12 @@ switch (command) {
     process.exit(exitCode);
   }
 
+  case "backup": {
+    const { backupCommand } = await import("../commands/backup");
+    await backupCommand();
+    break;
+  }
+
   case "validate": {
     const { validateConfig } = await import("../commands/validate");
     const result = validateConfig();
@@ -444,6 +450,15 @@ switch (command) {
   case "update": {
     const { version: currentVersion } = await import("../../package.json");
     console.log(`Current: v${currentVersion}`);
+    // Auto-backup before update
+    try {
+      const { createBackup } = await import("../commands/backup");
+      console.log("Backing up...");
+      await createBackup(true);
+      console.log("✓ pre-update backup created");
+    } catch (err) {
+      console.log(`⚠ backup skipped: ${errMsg(err)}`);
+    }
     console.log("Updating...");
     const install = Bun.spawn(["npm", "i", "-g", "niahere@latest"], { stdio: ["ignore", "inherit", "inherit"] });
     const installExit = await install.exited;
