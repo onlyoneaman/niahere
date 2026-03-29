@@ -367,7 +367,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
                   messageId = await Message.save({ ...saveParams, metadata: undefined });
                 }
                 await Session.touch(sessionId);
-                await Session.accumulateMetadata(sessionId, { ...metadata, channel }).catch(() => {});
+                Session.accumulateMetadata(sessionId, { ...metadata, channel }).catch(() => {});
               }
 
               await ActiveEngine.unregister(room);

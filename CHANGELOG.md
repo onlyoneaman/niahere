@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+- Session metadata accumulation is now atomic SQL — no read-then-write race condition
+- Session metadata accumulation is non-blocking — doesn't delay reply delivery
+
+### Changed
+- `nia chat` defaults to new session instead of continuing the last one. Use `--continue`/`-c` to resume.
+
 ## [0.2.48] - 2026-03-30
 
 ### Added

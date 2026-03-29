@@ -276,11 +276,11 @@ switch (command) {
 
   case "chat": {
     const chatArgs = process.argv.slice(3);
-    const mode = (chatArgs.includes("--new") || chatArgs.includes("-n"))
-      ? "new" as const
+    const mode = (chatArgs.includes("--continue") || chatArgs.includes("-c"))
+      ? "continue" as const
       : (chatArgs.includes("--resume") || chatArgs.includes("-r"))
         ? "pick" as const
-        : "continue" as const;
+        : "new" as const;
     const chIdx = chatArgs.indexOf("--channel");
     const simChannel = chIdx !== -1 && chatArgs[chIdx + 1] ? chatArgs[chIdx + 1] : undefined;
     await startRepl(mode, simChannel);
