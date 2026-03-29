@@ -45,7 +45,7 @@ describe("loadIdentity", () => {
     expect(result).toBe("");
   });
 
-  test("loads identity, owner, soul, and rules files in order (memory not loaded)", () => {
+  test("loads identity, owner, soul, rules, and memory files in order", () => {
     writeFileSync(`${TEST_DIR}/self/identity.md`, "I am nia");
     writeFileSync(`${TEST_DIR}/self/owner.md`, "Owner: Aman");
     writeFileSync(`${TEST_DIR}/self/soul.md`, "Be helpful");
@@ -57,11 +57,12 @@ describe("loadIdentity", () => {
     expect(result).toContain("Owner: Aman");
     expect(result).toContain("Be helpful");
     expect(result).toContain("Keep stamp short");
-    expect(result).not.toContain("Learned: X");
-    // Verify order: identity before owner before soul before rules
+    expect(result).toContain("Learned: X");
+    // Verify order: identity → owner → soul → rules → memory
     expect(result.indexOf("I am nia")).toBeLessThan(result.indexOf("Owner: Aman"));
     expect(result.indexOf("Owner: Aman")).toBeLessThan(result.indexOf("Be helpful"));
     expect(result.indexOf("Be helpful")).toBeLessThan(result.indexOf("Keep stamp short"));
+    expect(result.indexOf("Keep stamp short")).toBeLessThan(result.indexOf("Learned: X"));
   });
 
   test("loads rules.md when present", () => {

@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Idle timer kills active requests** — 10-minute idle timer from a previous reply would fire mid-request, killing the Claude subprocess and its subagents. `send()` now clears the idle timer, and `teardown()` refuses to kill if a request is pending.
+- **Orphaned pending promise hangs forever** — if the Claude SDK stream ended without a `result` message (subprocess crash, idle timer kill), the Promise returned by `send()` would never resolve, permanently blocking the Slack/Telegram lock. Now detected and rejected with a clear error.
+- **Slack reply send errors silently swallowed** — if `say()` failed in the error handler, the error was lost. Now `.catch()` added consistently.
+
+### Added
+- **Message delivery tracking** — new `delivery_status` column on messages (`pending` → `sent` / `failed`). Engine saves replies as `pending` before channel send; Slack/Telegram update to `sent` on success or `failed` on error. `Message.getUndelivered()` available for future retry logic.
+- **Long-running request warning** — logs a warning (once) when an engine request has been running for 30+ minutes.
+
+### Changed
+- `loadIdentity` test updated to match current behavior (memory.md is now loaded)
+
 ## [0.2.43] - 2026-03-28
 
 ### Changed

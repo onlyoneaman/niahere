@@ -10,8 +10,10 @@ import { getAgentDefinitions } from "../core/agents";
 import { Session, Message, ActiveEngine } from "../db/models";
 import type { Attachment, SendResult, StreamCallback, ActivityCallback, SendCallbacks, ChatEngine, EngineOptions } from "../types";
 import { truncate, formatToolUse } from "../utils/format-activity";
+import { log } from "../utils/log";
 
 const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
+const LONG_RUNNING_WARN = 30 * 60 * 1000; // 30 minutes
 
 interface SDKUserMessage {
   type: "user";
@@ -128,20 +130,50 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
   let queryHandle: Query | null = null;
   let pending: PendingResult | null = null;
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  let longRunningTimer: ReturnType<typeof setTimeout> | null = null;
+  let longRunningWarned = false;
   let alive = false;
 
-  function resetIdleTimer() {
-    if (idleTimer) clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => {
-      teardown();
-    }, IDLE_TIMEOUT);
-  }
-
-  function teardown() {
+  function clearIdleTimer() {
     if (idleTimer) {
       clearTimeout(idleTimer);
       idleTimer = null;
     }
+  }
+
+  function resetIdleTimer() {
+    clearIdleTimer();
+    idleTimer = setTimeout(() => {
+      if (pending) {
+        // Don't tear down while a request is in flight
+        log.warn({ room }, "idle timer fired while request pending, skipping teardown");
+        return;
+      }
+      teardown();
+    }, IDLE_TIMEOUT);
+  }
+
+  function clearLongRunningTimer() {
+    if (longRunningTimer) {
+      clearTimeout(longRunningTimer);
+      longRunningTimer = null;
+    }
+    longRunningWarned = false;
+  }
+
+  function startLongRunningTimer() {
+    clearLongRunningTimer();
+    longRunningTimer = setTimeout(() => {
+      if (pending) {
+        longRunningWarned = true;
+        log.warn({ room, elapsed: LONG_RUNNING_WARN / 1000 }, "engine request running for 30+ minutes");
+      }
+    }, LONG_RUNNING_WARN);
+  }
+
+  function teardown() {
+    clearIdleTimer();
+    clearLongRunningTimer();
     if (stream) {
       stream.end();
       stream = null;
@@ -285,30 +317,43 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
               const costUsd = (message as any).total_cost_usd as number;
               const turns = (message as any).num_turns as number;
 
+              let messageId: number | undefined;
               if (sessionId && resultText) {
-                await Message.save({
+                messageId = await Message.save({
                   sessionId,
                   room,
                   sender: "nia",
                   content: resultText,
                   isFromAgent: true,
+                  deliveryStatus: "pending",
                 });
                 await Session.touch(sessionId);
               }
 
               await ActiveEngine.unregister(room);
-              pending.resolve({ result: resultText, costUsd, turns });
+              clearLongRunningTimer();
+              pending.resolve({ result: resultText, costUsd, turns, messageId });
               pending = null;
               resetIdleTimer();
             } else {
               const errors = (message as any).errors;
               const errorText = `[error] ${errors?.join(", ") || "unknown error"}`;
               await ActiveEngine.unregister(room);
+              clearLongRunningTimer();
               pending.resolve({ result: errorText, costUsd: 0, turns: 0 });
               pending = null;
               resetIdleTimer();
             }
           }
+        }
+
+        // Stream ended without a result — subprocess exited or was killed
+        if (pending) {
+          const partial = pending.accumulatedText;
+          log.error({ room, partialChars: partial.length }, "query stream ended without result, rejecting pending request");
+          await ActiveEngine.unregister(room).catch(() => {});
+          pending.reject(new Error(`stream ended without result (${partial.length} chars accumulated)`));
+          pending = null;
         }
       } catch (err) {
         if (pending) {
@@ -317,6 +362,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
           pending = null;
         }
       } finally {
+        clearLongRunningTimer();
         alive = false;
         stream = null;
         queryHandle = null;
@@ -334,6 +380,10 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
     },
 
     async send(userMessage: string, callbacks?: SendCallbacks, attachments?: Attachment[]) {
+      // Clear idle timer — engine is not idle while processing a request
+      clearIdleTimer();
+      startLongRunningTimer();
+
       await ActiveEngine.register(room, channel);
 
       if (!alive || !stream) {

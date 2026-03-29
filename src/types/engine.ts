@@ -2,6 +2,8 @@ export interface SendResult {
   result: string;
   costUsd: number;
   turns: number;
+  /** DB message ID for delivery status tracking (only set for agent replies) */
+  messageId?: number;
 }
 
 export type StreamCallback = (textSoFar: string) => void;

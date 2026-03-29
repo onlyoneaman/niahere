@@ -7,7 +7,7 @@ import type { Channel, ChatState, Attachment, AttachmentType } from "../types";
 import { getConfig, updateRawConfig, resetConfig } from "../utils/config";
 import { relativeTime } from "../utils/format";
 import { runMigrations } from "../db/migrate";
-import { Session } from "../db/models";
+import { Session, Message } from "../db/models";
 import { log } from "../utils/log";
 import { getMcpServers } from "../mcp";
 import { getNiaHome, getPaths } from "../utils/paths";
@@ -493,7 +493,7 @@ class SlackChannel implements Channel {
           .catch((err) => log.debug({ err, channel: msg.channel }, "slack: failed to add thinking reaction"));
 
         try {
-          const { result } = await state.engine.send(text, {
+          const { result, messageId } = await state.engine.send(text, {
             onActivity(status) {
               log.debug({ status }, "slack engine activity");
             },
@@ -504,22 +504,27 @@ class SlackChannel implements Channel {
           // [NO_REPLY] or empty = agent chose not to respond (thread judgement)
           if (!reply || cleanSentinel(reply) === "[NO_REPLY]") {
             log.info({ channel: msg.channel, key }, "slack: agent chose not to reply");
+            if (messageId) await Message.updateDeliveryStatus(messageId, "sent").catch(() => {});
             return;
           }
 
-          if (replyThreadTs) {
-            await client.chat.postMessage({
-              channel: msg.channel,
-              text: reply,
-              thread_ts: replyThreadTs,
-            });
-          } else {
-            await say(reply);
+          try {
+            if (replyThreadTs) {
+              await client.chat.postMessage({
+                channel: msg.channel,
+                text: reply,
+                thread_ts: replyThreadTs,
+              });
+            } else {
+              await say(reply);
+            }
+            if (messageId) await Message.updateDeliveryStatus(messageId, "sent").catch(() => {});
+            log.info({ channel: msg.channel, key, chars: reply.length }, "slack reply sent");
+          } catch (sendErr) {
+            if (messageId) await Message.updateDeliveryStatus(messageId, "failed").catch(() => {});
+            throw sendErr;
           }
-
-          log.info({ channel: msg.channel, key, chars: reply.length }, "slack reply sent");
         } catch (err) {
-
           const errText = err instanceof Error ? err.message : String(err);
           log.error({ err, channel: msg.channel }, "slack message processing failed");
 
@@ -530,7 +535,7 @@ class SlackChannel implements Channel {
               thread_ts: replyThreadTs,
             }).catch(() => {});
           } else {
-            await say(`[error] ${errText}`);
+            await say(`[error] ${errText}`).catch(() => {});
           }
         } finally {
           await client.reactions.remove({ channel: msg.channel, timestamp: msg.ts, name: "thinking_face" })

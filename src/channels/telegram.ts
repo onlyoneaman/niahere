@@ -3,7 +3,7 @@ import { createChatEngine } from "../chat/engine";
 import type { Channel, ChatState, Attachment } from "../types";
 import { getConfig, updateRawConfig } from "../utils/config";
 import { runMigrations } from "../db/migrate";
-import { Session } from "../db/models";
+import { Session, Message } from "../db/models";
 import { log } from "../utils/log";
 import { getMcpServers } from "../mcp";
 import { classifyMime, validateAttachment, prepareImage } from "../utils/attachment";
@@ -136,16 +136,21 @@ class TelegramChannel implements Channel {
       bot.api.sendChatAction(chatId, "typing").catch(() => {});
 
       try {
-        const { result } = await state.engine.send(text, {}, attachments);
+        const { result, messageId } = await state.engine.send(text, {}, attachments);
 
         const reply = result.trim() || "(no response)";
         try {
-          await bot.api.sendMessage(chatId, reply, { parse_mode: "MarkdownV2" });
-        } catch {
-          await bot.api.sendMessage(chatId, reply).catch(() => {});
+          try {
+            await bot.api.sendMessage(chatId, reply, { parse_mode: "MarkdownV2" });
+          } catch {
+            await bot.api.sendMessage(chatId, reply);
+          }
+          if (messageId) await Message.updateDeliveryStatus(messageId, "sent").catch(() => {});
+          log.info({ chatId, chars: result.length }, "telegram reply sent");
+        } catch (sendErr) {
+          if (messageId) await Message.updateDeliveryStatus(messageId, "failed").catch(() => {});
+          throw sendErr;
         }
-
-        log.info({ chatId, chars: result.length }, "telegram reply sent");
       } catch (err) {
         const errText = err instanceof Error ? err.message : String(err);
         log.error({ err, chatId }, "telegram message processing failed");
