@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.2.52] - 2026-04-01
+
+### Fixed
+- `nia job update --always` could only enable always-on, never disable it. Added `--no-always` flag.
+
 ## [0.2.51] - 2026-03-30
 
 ### Fixed

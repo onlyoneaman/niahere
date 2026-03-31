@@ -144,26 +144,28 @@ export async function jobCommand(): Promise<void> {
     }
 
     case "update": {
-      const always = process.argv.includes("--always");
-      let cliArgs = process.argv.slice(4).filter((a) => a !== "--always");
+      const hasAlways = process.argv.includes("--always");
+      const hasNoAlways = process.argv.includes("--no-always");
+      let cliArgs = process.argv.slice(4).filter((a) => a !== "--always" && a !== "--no-always");
 
       const name = cliArgs[0];
       if (!name) {
-        console.log('Usage: nia job update <name> [--schedule <schedule>] [--prompt <prompt>] [--always]');
+        console.log('Usage: nia job update <name> [--schedule <schedule>] [--prompt <prompt>] [--always] [--no-always]');
         fail('Example: nia job update curator --schedule "4h" --prompt "New prompt"');
       }
 
       const scheduleIdx = cliArgs.indexOf("--schedule");
       const schedule = scheduleIdx !== -1 ? cliArgs[scheduleIdx + 1] : undefined;
       const promptIdx = cliArgs.indexOf("--prompt");
-      const prompt = promptIdx !== -1 ? cliArgs.slice(promptIdx + 1).filter((a) => a !== "--always" && a !== "--schedule" && a !== schedule).join(" ") : undefined;
+      const prompt = promptIdx !== -1 ? cliArgs.slice(promptIdx + 1).filter((a) => a !== "--schedule" && a !== schedule).join(" ") : undefined;
 
       try {
         await withDb(async () => {
           const fields: Partial<{ schedule: string; prompt: string; always: boolean }> = {};
           if (schedule) fields.schedule = schedule;
           if (prompt) fields.prompt = prompt;
-          if (always) fields.always = always;
+          if (hasAlways) fields.always = true;
+          if (hasNoAlways) fields.always = false;
 
           const updated = await Job.update(name, fields);
           if (!updated) fail(`Job not found: "${name}". Use \`nia job list\` to see available jobs.`);
