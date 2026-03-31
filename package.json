@@ -1,7 +1,7 @@
 {
   "name": "niahere",
   "version": "0.2.51",
-  "description": "A personal AI assistant daemon — scheduled jobs, chat across Telegram and Slack, persona system, and visual identity.",
+  "description": "A personal AI assistant daemon — chat, scheduled jobs, persona system, extensible via skills.",
   "type": "module",
   "scripts": {
     "start": "bun run src/cli/index.ts start",

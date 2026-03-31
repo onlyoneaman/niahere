@@ -8,6 +8,7 @@
 - **TTY detection** — colors and ANSI codes disabled when output is piped
 
 ### Changed
+- **Documentation updated** — README.md and AGENTS.md brought up to date with all current commands, features, architecture, and release process. Fixed stale descriptions (Codex runner, memory on-demand, missing CLI files/commands/skills).
 - `fail()` outputs to stderr instead of stdout
 - Global help text reorganized into sections (Daemon, Chat, Jobs, Persona, Channels, System) with all commands listed
 - `nia job add/update` refactored to use `parseArgs` instead of hand-rolled argv slicing

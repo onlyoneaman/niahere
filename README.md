@@ -34,51 +34,63 @@ nia start               # starts daemon + registers OS service
 - **Slack** — Socket Mode bot with thread awareness, thinking emoji, watch channels for proactive monitoring
 - **Terminal chat** — REPL with session resume support
 - **Scheduled jobs** — recurring jobs and crons that run Claude and can message you back
-- **Persona system** — customizable identity, soul, owner profile, and on-demand memory
+- **Persona system** — customizable identity, soul, owner profile, rules, and memory (preloaded every session)
 - **Agents** — domain specialists (marketer, senior-dev) via Claude Agent SDK subagents
 - **Skills** — loads skills from multiple directories, invokable as slash commands
 - **Cross-platform service** — launchd (macOS), systemd (Linux), service-aware restart
-- **MCP tools** — 18 tools for job management, messaging, memory, and channel control
+- **MCP tools** — 20 tools for job management, messaging, memory, rules, and channel control
+- **Background memory consolidation** — extracts memories from conversations and job runs automatically
+- **Session summaries** — handoff notes between sessions for continuity
+- **Backups** — `nia backup` with auto-backup before updates
 - **Optional integrations** — add Gmail, Discord, and more via skills
 
 ## Commands
 
 ```
-nia init                       — interactive setup (db, channels, persona, images)
+nia init                       — interactive setup (db, channels, persona, agents, active hours)
 nia start / stop               — daemon + OS service (launchd/systemd)
 nia restart                    — restart daemon (service-aware)
 nia status                     — show daemon, jobs, channels, chat rooms
-nia chat [-r|--resume]         — interactive terminal chat
+nia health                     — check daemon, db, channels, config
+nia chat [-c|-r] [--channel ch] — terminal chat (new by default, -c continue, -r pick)
 nia run <prompt>               — one-shot prompt execution
 nia history [room]             — recent messages
-nia logs [-f]                  — daemon logs (follow with -f)
+nia logs [-f] [--channel ch]   — daemon logs (follow with -f, filter by channel)
 nia send [-c channel] <msg>    — send a message via channel
-nia skills                     — list available skills
 nia version                    — show version
+nia update                     — update to latest version (auto-backup + restart)
 
 nia job list                   — list all jobs
 nia job show [name]            — full details + recent runs
-nia job add <n> <s> <p>        — add a job (active hours only)
-nia job add <n> <s> <p> --agent <name> — add a job using an agent
-nia job add <n> <s> <p> --always — add a cron (runs 24/7)
+nia job status [name]          — quick status check
+nia job add <n> <s> <p>        — add a job (--type, --always, --agent)
+nia job update <name>          — update a job (--schedule, --prompt, --type, --always, --agent)
 nia job remove <name>          — delete a job
 nia job enable / disable <n>   — toggle a job
 nia job run <name>             — run a job once
 nia job log [name]             — show recent run history
 
+nia rules [show|reset]         — view or reset rules.md
+nia memory [show|reset]        — view or reset memory.md
 nia agent list                 — list available agents
 nia agent show <name>          — show agent details and prompt
+nia skills [source]            — list available skills
 
-nia db setup                   — install PostgreSQL + create database + migrate
-nia db migrate                 — run database migrations
-nia db status                  — check database connection
+nia channels                   — show channel status (on/off)
+nia channels on / off          — enable/disable channels (applied via SIGHUP, no restart)
+nia watch list                 — list Slack watch channels
+nia watch add/remove/enable/disable — manage watch channels
 
 nia config list                — show all config
 nia config get <key>           — get a config value (dot notation supported)
 nia config set <key> <value>   — set a config value
+nia validate                   — validate config.yaml
+nia backup [list]              — create or list backups
+nia test [-v]                  — run tests
 
-nia channels                   — show channel status (on/off)
-nia channels on / off          — enable/disable channels
+nia db setup                   — install PostgreSQL + create database + migrate
+nia db migrate                 — run database migrations
+nia db status                  — check database connection
 ```
 
 ## Architecture
@@ -92,7 +104,8 @@ All config and data lives in `~/.niahere/`:
     identity.md     — agent personality and voice
     owner.md        — who runs this agent
     soul.md         — how the agent works
-    memory.md       — persistent learnings (read/written on demand)
+    rules.md        — behavioral instructions (loaded every session)
+    memory.md       — persistent facts and context (loaded every session)
   images/
     reference.webp  — visual identity reference image
     profile.webp    — profile picture for Telegram/Slack
@@ -119,7 +132,7 @@ Users then run `/add-discord` on their fork and get clean code that does exactly
 ## Updating
 
 ```bash
-npm i -g niahere         # pulls the latest version from npm
+nia update               # auto-backup, install latest, restart daemon
 ```
 
 ## Author

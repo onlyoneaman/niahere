@@ -7,7 +7,7 @@
 - **Runtime:** Bun.js
 - **Package:** `niahere` on npm
 - **CLI:** `nia`
-- **AI:** `@anthropic-ai/claude-agent-sdk` (chat), Codex CLI (jobs)
+- **AI:** `@anthropic-ai/claude-agent-sdk` (chat and jobs); optional Codex CLI runner
 - **Database:** PostgreSQL (via `postgres` driver)
 - **Image generation:** OpenAI + Gemini API (optional)
 - **Author:** Aman (amankumar.ai)
@@ -18,15 +18,19 @@
 src/
   cli/
     index.ts             # Entry point, command routing
-    job.ts               # Job subcommands (list, show, status, add, run, log)
+    job.ts               # Job subcommands (list, show, status, add, update, run, log)
     agent.ts             # Agent subcommands (list, show)
     channels.ts          # Channel CLI commands (send, telegram, slack)
+    self.ts              # Persona commands (rules, memory)
+    watch.ts             # Slack watch channel management
     status.ts            # Status command output
   core/
     daemon.ts            # Daemon lifecycle, service-aware restart, startup guard
-    runner.ts            # Job execution via Codex CLI (--json, session ID capture)
+    runner.ts            # Job execution via Claude Agent SDK query() + MCP tools; optional Codex CLI
     agents.ts            # Agent scanner — scanAgents(), getAgentsSummary(), getAgentDefinitions()
     scheduler.ts         # Job scheduling, due-time queries, cron/interval/once
+    consolidator.ts      # Background memory extraction from sessions and jobs
+    summarizer.ts        # Session summary generation for cross-session continuity
   chat/
     engine.ts            # Chat engine — Claude SDK query(), sessions, streaming
     identity.ts          # Persona loading, skill scanning, system prompt assembly
@@ -37,9 +41,13 @@ src/
     telegram.ts          # Telegram bot (grammY) — typing indicator
     slack.ts             # Slack bot (Bolt, Socket Mode) — thinking emoji, thread awareness
   commands/
-    init.ts              # Interactive setup wizard (db, channels, persona, gemini, visual identity)
+    init.ts              # Interactive setup wizard (db, channels, persona, agents, active hours)
     service.ts           # OS service registration (launchd/systemd), service-aware restart
     db.ts                # Database setup (install postgres, create db, migrate)
+    backup.ts            # Backup creation (config + persona + pg_dump), auto-prune
+    validate.ts          # Config validation
+    health.ts            # Health checks (daemon, db, channels, config)
+    health-db.ts         # Database-specific health check
   db/
     connection.ts        # Lazy postgres init, withDb() helper
     migrate.ts           # SQL migration runner
@@ -51,7 +59,8 @@ src/
       session.ts         # Session tracking
       active_engine.ts   # Active engine registry
   mcp/
-    server.ts            # MCP tool server (jobs, messaging, history)
+    index.ts             # MCP factory (per-query Protocol instances)
+    server.ts            # MCP tool definitions (20 tools: jobs, messaging, memory, rules, agents, watch)
     tools.ts             # MCP tool handlers
   prompts/
     index.ts             # Prompt loading and interpolation
@@ -78,7 +87,7 @@ src/
   utils/
     config.ts            # Config loading, readRawConfig(), updateRawConfig()
     paths.ts             # Path resolution from NIA_HOME
-    cli.ts               # CLI helpers (fail, pickFromList)
+    cli.ts               # CLI helpers (fail, parseArgs, pickFromList, TTY-aware colors)
     errors.ts            # errMsg() helper
     log.ts               # Pino logger
     logger.ts            # JSONL audit log + cron state file
@@ -92,13 +101,15 @@ defaults/
 agents/
   marketer/AGENT.md      # Marketing specialist agent
   senior-dev/AGENT.md    # Senior developer agent
-skills/
+skills/                  # 20+ skills — run `nia skills` for full list
   nia-image/             # Visual identity generation skill (Gemini)
   image-generation/      # General-purpose image generation (OpenAI + Gemini)
   llms-txt/              # Create/improve llms.txt for LLM-aware content indexing
-  github-link-repo-explorer/  # Clone and explore GitHub repos from links
-  pr-reviewer/           # Language-aware PR review (design, security, performance, idioms)
-  frontend-design/       # Anti-AI-slop UI design (typography, color, layout, accessibility)
+  pr-reviewer/           # Language-aware PR review
+  slack/                 # Slack messaging primitives
+  docx/                  # Word document generation
+  pptx/                  # PowerPoint generation
+  ...
 tests/
   core/                  # Daemon, runner, scheduler tests
   chat/                  # Identity, engine tests
@@ -175,7 +186,9 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 - **Alive monitor:** (`src/core/alive.ts`) 60s heartbeat runs health checks. On DB failure: (1) attempts reconnect, (2) deterministic Postgres recovery — checks `pg_isready`, removes stale `postmaster.pid` if PID is dead/recycled, restarts brew/systemd service, (3) LLM recovery agent as fallback for non-trivial issues. Notifies user with postmortem. Falls back to direct channel notification if agent fails.
 - **Telegram:** Typing indicator while processing. Final response sent as fresh message.
 - **Slack:** Thinking emoji reaction while processing. Thread awareness (auto-listens without @mention). Thread context (50 messages + attachments) fetched via `conversations.replies`. `[NO_REPLY]` sentinel for silent thread judgement. Watch mode: per-channel proactive monitoring via `channels.slack.watch` config — keys use `channel_id#channel_name` format, hot-reloads via config.yaml mtime (no restart needed). File attachments cached to disk at `~/.niahere/tmp/attachments/`.
-- **Persona:** 4 files loaded: `identity.md`, `owner.md`, `soul.md`, `rules.md`. Memory read/written on demand. `rules.md` is for behavioral overrides and custom instructions — edit it to change how Nia behaves without restarting.
+- **Persona:** 5 files loaded every session: `identity.md`, `owner.md`, `soul.md`, `rules.md`, `memory.md`. Rules = behavioral instructions (verbs). Memory = facts and context (nouns). Both preloaded into every session automatically. Use `add_rule` / `add_memory` MCP tools, or edit files directly.
+- **Background consolidation:** When a chat session goes idle or a job completes, a background agent reviews the transcript and extracts memories/rules via `runTask()`. Tracked in ActiveEngine as `_system/consolidator`.
+- **Session summaries:** On idle, generates a 2-4 sentence handoff note stored in the sessions table. Last 3 summaries injected into new sessions for continuity.
 - **Visual identity:** Images at `~/.niahere/images/`. Generated during `nia init` via Gemini.
 - **Service:** `nia start` registers OS service (launchd/systemd). `nia restart` is service-aware.
 - **Agents:** Role/domain specialists defined as `AGENT.md` files in `agents/` directories. Scanned from project `agents/`, `~/.niahere/agents/`, `~/.shared/agents/`. Passed to Claude Agent SDK as subagents via `query()` options — SDK handles routing and context isolation. Jobs can reference an agent via `agent` column — agent body becomes the systemPrompt. See [MULTI_AGENT_PHILOSOPHY.md](MULTI_AGENT_PHILOSOPHY.md).
@@ -204,11 +217,12 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 **Release cadence:** Don't release with every small change. Batch changes and ask for confirmation before releasing. Only release when explicitly asked or when there are meaningful changes worth a version bump.
 
 **Release flow:**
-1. Ensure all changes are committed and tests pass (`bun run test`)
-2. Move `[Unreleased]` items in `CHANGELOG.md` under a new version header (e.g. `## [0.2.30] - YYYY-MM-DD`)
-3. Commit the changelog update
-4. Run `npm run release` — this does `npm version patch && npm publish && git push`
-5. Verify: `npm view niahere version` should show the new version
+1. Ensure all changes are committed and tests pass (`npm run test`)
+2. Move `[Unreleased]` items in `CHANGELOG.md` under a new version header (e.g. `## [0.2.50] - YYYY-MM-DD`)
+3. `npm version patch --no-git-tag-version`
+4. Commit changelog + package.json version bump together
+5. `npm publish && git push`
+6. Verify: `npm view niahere version` should show the new version
 
 Users update on other machines with `nia update` (installs latest + auto-restarts daemon if running).
 
