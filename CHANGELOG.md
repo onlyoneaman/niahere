@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+- **Shared `parseArgs()` utility** — consistent flag parsing across all CLI commands. Supports `--flag value`, `--flag` (bool), `--no-flag`, `-h`/`--help`, `--` separator, and positional args.
+- **`--help`/`-h` support** on all commands and subcommands (`nia --help`, `nia job --help`, etc.)
+- **TTY detection** — colors and ANSI codes disabled when output is piped
+
+### Changed
+- `fail()` outputs to stderr instead of stdout
+- Global help text reorganized into sections (Daemon, Chat, Jobs, Persona, Channels, System) with all commands listed
+- `nia job add/update` refactored to use `parseArgs` instead of hand-rolled argv slicing
+- Unknown commands/subcommands print error to stderr and exit 1
+
 ## [0.2.52] - 2026-04-01
 
 ### Fixed

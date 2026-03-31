@@ -1,7 +1,19 @@
 import { scanAgents } from "../core/agents";
+import { fail } from "../utils/cli";
+
+const HELP = `Usage: nia agent <command>
+
+Commands:
+  list          List all available agents
+  show <name>   Show agent details and prompt`;
 
 export async function agentCommand(): Promise<void> {
   const subcommand = process.argv[3];
+
+  if (subcommand === "--help" || subcommand === "-h" || subcommand === "help") {
+    console.log(HELP);
+    return;
+  }
 
   switch (subcommand) {
     case "list": {
@@ -20,16 +32,10 @@ export async function agentCommand(): Promise<void> {
 
     case "show": {
       const name = process.argv[4];
-      if (!name) {
-        console.error("Usage: nia agent show <name>");
-        process.exit(1);
-      }
+      if (!name) fail("Usage: nia agent show <name>");
       const agents = scanAgents();
       const agent = agents.find((a) => a.name === name);
-      if (!agent) {
-        console.error(`Agent "${name}" not found.`);
-        process.exit(1);
-      }
+      if (!agent) fail(`Agent "${name}" not found.`);
       console.log(`Name:        ${agent.name}`);
       console.log(`Description: ${agent.description}`);
       if (agent.model) console.log(`Model:       ${agent.model}`);
@@ -40,8 +46,8 @@ export async function agentCommand(): Promise<void> {
     }
 
     default:
-      console.log("Usage: nia agent <list|show>");
-      console.log("  list          List all available agents");
-      console.log("  show <name>   Show agent details and prompt");
+      if (subcommand) console.error(`Unknown subcommand: ${subcommand}`);
+      console.log(HELP);
+      process.exit(subcommand ? 1 : 0);
   }
 }

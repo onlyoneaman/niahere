@@ -29,7 +29,7 @@ try {
 const command = process.argv[2];
 
 // Ensure ~/.niahere/ exists for commands that need it
-if (command && !["init", "help", "version", "-v", "--version"].includes(command)) {
+if (command && !["init", "help", "version", "-v", "--version", "-h", "--help"].includes(command)) {
   mkdirSync(getNiaHome(), { recursive: true });
 }
 
@@ -494,30 +494,54 @@ switch (command) {
     break;
   }
 
-  default:
-    console.log("Usage: nia <command>\n");
-    console.log("  update              — update to latest version and restart");
-    console.log("  init                — setup nia");
-    console.log("  start / stop        — daemon + service control");
-    console.log("  restart             — restart daemon");
-    console.log("  status [--json --rooms N --all]  — show daemon, jobs, channels");
-    console.log("  health              — check daemon, db, channels, config");
-    console.log("  chat [--channel ch] — interactive chat (--channel simulates a channel)");
-    console.log("  run <prompt>        — one-shot execution");
-    console.log("  history [room]      — recent messages");
-    console.log("  logs [-f] [--channel ch]  — daemon logs (filter by channel)");
-    console.log("  job <sub>           — manage jobs");
-    console.log("  rules [show|reset]  — view or reset rules.md");
-    console.log("  memory [show|reset] — view or reset memory.md");
-    console.log("  db <sub>            — database setup/status/migrate");
-    console.log("  agent <sub>         — list/show agents");
-    console.log("  skills              — list available skills");
-    console.log("  watch <sub>         — manage Slack watch channels");
-    console.log("  validate            — validate config.yaml");
-    console.log("  config <sub>        — get/set/list config values");
-    console.log("  send [-c ch] <msg>  — send a message via channel");
-    console.log("  telegram <token>    — configure telegram");
-    console.log("  slack <bot> <app>   — configure slack");
-    console.log("  test                — run tests");
-    process.exit(command ? 1 : 0);
+  case "help":
+  case "--help":
+  case "-h":
+  default: {
+    const HELP = `Usage: nia <command>
+
+Daemon:
+  start                           Start daemon + register service
+  stop                            Stop daemon + unregister service
+  restart                         Restart daemon
+  status [--json --rooms N --all] Show daemon, jobs, channels
+  health                          Check daemon, db, channels, config
+  logs [-f] [--channel ch]        Daemon logs (filter by channel)
+
+Chat:
+  chat [-c] [-r] [--channel ch]   Interactive chat (new session by default)
+  run <prompt>                    One-shot execution
+  history [room]                  Recent messages
+  send [-c ch] <msg>              Send a message via channel
+
+Jobs:
+  job <sub>                       Manage jobs (list|add|update|remove|run|...)
+
+Persona:
+  rules [show|reset]              View or reset rules.md
+  memory [show|reset]             View or reset memory.md
+  agent <sub>                     List/show agents
+  skills [source]                 List available skills
+
+Channels:
+  channels [on|off]               Toggle channels
+  watch <sub>                     Manage Slack watch channels
+  telegram <token>                Configure telegram
+  slack <bot> <app>               Configure slack
+
+System:
+  config <set|get|list>           Manage config values
+  backup [list]                   Create or list backups
+  validate                        Validate config.yaml
+  db <sub>                        Database setup/status/migrate
+  update                          Update to latest version
+  init                            Initial setup
+  test [-v]                       Run tests`;
+
+    console.log(HELP);
+    // Unknown command → exit 1, help/no command → exit 0
+    const isHelp = !command || command === "help" || command === "--help" || command === "-h";
+    if (!isHelp) console.error(`\nUnknown command: ${command}`);
+    process.exit(isHelp ? 0 : 1);
+  }
 }

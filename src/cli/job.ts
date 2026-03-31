@@ -1,5 +1,4 @@
 import * as readline from "readline";
-import { CronExpressionParser } from "cron-parser";
 import { readState, readAudit } from "../utils/logger";
 import { getConfig } from "../utils/config";
 import { runJob } from "../core/runner";
@@ -9,8 +8,30 @@ import { Job } from "../db/models";
 import { withDb } from "../db/connection";
 import type { ScheduleType } from "../types";
 import { errMsg } from "../utils/errors";
-import { fail, pickFromList, ICON_PASS, ICON_FAIL } from "../utils/cli";
+import { fail, parseArgs, pickFromList, ICON_PASS, ICON_FAIL } from "../utils/cli";
 import { computeInitialNextRun } from "../core/scheduler";
+
+const HELP = `Usage: nia job <command>
+
+Commands:
+  list                          List all jobs
+  show [name]                   Full job details + recent runs
+  status [name]                 Quick status check
+  add <name> <schedule> <prompt>  Add a job
+      --type cron|interval|once   Schedule type (default: cron)
+      --always                    Run 24/7 regardless of active hours
+      --agent <name>              Assign an agent to the job
+  update <name>                 Update a job
+      --schedule <schedule>       New schedule
+      --prompt <prompt>           New prompt
+      --type cron|interval|once   Change schedule type
+      --always / --no-always      Toggle 24/7 mode
+      --agent <name>              Assign agent (--no-agent to remove)
+  remove <name>                 Delete a job
+  enable <name>                 Enable a job
+  disable <name>                Disable a job
+  run <name>                    Run a job once
+  log [name]                    Show recent run history`;
 
 async function pickJob(prompt = "Pick a job"): Promise<string> {
   let jobs: { name: string; schedule: string; enabled: boolean; prompt: string }[] = [];
@@ -39,6 +60,11 @@ async function pickJob(prompt = "Pick a job"): Promise<string> {
 export async function jobCommand(): Promise<void> {
   const subcommand = process.argv[3];
 
+  if (!subcommand || subcommand === "help" || subcommand === "--help" || subcommand === "-h") {
+    console.log(HELP);
+    process.exit(subcommand ? 0 : 0);
+  }
+
   switch (subcommand) {
     case "list": {
       try {
@@ -62,40 +88,23 @@ export async function jobCommand(): Promise<void> {
     }
 
     case "add": {
-      const always = process.argv.includes("--always");
-      let cliArgs = process.argv.slice(4).filter((a) => a !== "--always");
+      const args = parseArgs(process.argv.slice(4), ["always"]);
+      if (args.help) { console.log(HELP); return; }
 
-      // Parse --type flag
-      let scheduleType: ScheduleType = "cron";
-      const typeIdx = cliArgs.indexOf("--type");
-      if (typeIdx !== -1 && cliArgs[typeIdx + 1]) {
-        const val = cliArgs[typeIdx + 1];
-        if (val === "cron" || val === "interval" || val === "once") {
-          scheduleType = val;
-          cliArgs.splice(typeIdx, 2);
-        }
+      const scheduleType = (args.getString("type") || "cron") as ScheduleType;
+      if (!["cron", "interval", "once"].includes(scheduleType)) {
+        fail(`Invalid --type: "${scheduleType}". Must be cron, interval, or once.`);
       }
 
-      // Parse --agent flag
-      let agent: string | undefined;
-      const agentIdx = cliArgs.indexOf("--agent");
-      if (agentIdx !== -1 && cliArgs[agentIdx + 1]) {
-        agent = cliArgs[agentIdx + 1];
-        cliArgs.splice(agentIdx, 2);
-      }
+      const always = args.getBool("always") ?? false;
+      const agent = args.getString("agent");
 
-      const name = cliArgs[0];
-      const schedule = cliArgs[1];
-      const prompt = cliArgs.slice(2).join(" ");
+      const [name, schedule, ...promptParts] = args.positional;
+      const prompt = promptParts.join(" ");
 
       if (!name || !schedule || !prompt) {
-        console.log('Usage: nia job add <name> <schedule> <prompt> [--always] [--type cron|interval|once] [--agent <name>]');
+        console.error('Usage: nia job add <name> <schedule> <prompt> [--always] [--type cron|interval|once] [--agent <name>]');
         fail('Example: nia job add heartbeat "*/10 * * * *" Check system health --always');
-      }
-
-      // Validate schedule based on type
-      if (scheduleType === "cron") {
-        try { CronExpressionParser.parse(schedule); } catch { fail(`Invalid cron schedule: ${schedule}`); }
       }
 
       try {
@@ -144,29 +153,41 @@ export async function jobCommand(): Promise<void> {
     }
 
     case "update": {
-      const hasAlways = process.argv.includes("--always");
-      const hasNoAlways = process.argv.includes("--no-always");
-      let cliArgs = process.argv.slice(4).filter((a) => a !== "--always" && a !== "--no-always");
+      const args = parseArgs(process.argv.slice(4), ["always"]);
+      if (args.help) { console.log(HELP); return; }
 
-      const name = cliArgs[0];
+      const name = args.positional[0];
       if (!name) {
-        console.log('Usage: nia job update <name> [--schedule <schedule>] [--prompt <prompt>] [--always] [--no-always]');
+        console.error('Usage: nia job update <name> [--schedule <s>] [--prompt <p>] [--type <t>] [--always] [--no-always]');
         fail('Example: nia job update curator --schedule "4h" --prompt "New prompt"');
       }
 
-      const scheduleIdx = cliArgs.indexOf("--schedule");
-      const schedule = scheduleIdx !== -1 ? cliArgs[scheduleIdx + 1] : undefined;
-      const promptIdx = cliArgs.indexOf("--prompt");
-      const prompt = promptIdx !== -1 ? cliArgs.slice(promptIdx + 1).filter((a) => a !== "--schedule" && a !== schedule).join(" ") : undefined;
+      const fields: Partial<{ schedule: string; prompt: string; always: boolean; scheduleType: ScheduleType; agent: string | null }> = {};
+      const schedule = args.getString("schedule");
+      const prompt = args.getString("prompt");
+      const scheduleType = args.getString("type") as ScheduleType | undefined;
+      const always = args.getBool("always");
+      const agent = args.getString("agent");
+      const noAgent = args.getBool("agent");
+
+      if (schedule) fields.schedule = schedule;
+      if (prompt) fields.prompt = prompt;
+      if (scheduleType) {
+        if (!["cron", "interval", "once"].includes(scheduleType)) {
+          fail(`Invalid --type: "${scheduleType}". Must be cron, interval, or once.`);
+        }
+        fields.scheduleType = scheduleType;
+      }
+      if (always !== undefined) fields.always = always;
+      if (agent) fields.agent = agent;
+      if (noAgent === false) fields.agent = null;
+
+      if (Object.keys(fields).length === 0) {
+        fail("Nothing to update. Pass at least one flag (--schedule, --prompt, --type, --always, --agent).");
+      }
 
       try {
         await withDb(async () => {
-          const fields: Partial<{ schedule: string; prompt: string; always: boolean }> = {};
-          if (schedule) fields.schedule = schedule;
-          if (prompt) fields.prompt = prompt;
-          if (hasAlways) fields.always = true;
-          if (hasNoAlways) fields.always = false;
-
           const updated = await Job.update(name, fields);
           if (!updated) fail(`Job not found: "${name}". Use \`nia job list\` to see available jobs.`);
           console.log(`Job "${name}" updated.`);
@@ -186,9 +207,9 @@ export async function jobCommand(): Promise<void> {
           if (!job) fail(`Job not found: ${name}`);
 
           console.log(`  ${job.enabled ? "●" : "○"} ${job.name}`);
-          console.log(`  schedule: ${job.schedule}`);
+          console.log(`  schedule: ${job.schedule} (${job.scheduleType})`);
           console.log(`  enabled:  ${job.enabled}`);
-          console.log(`  type:     ${job.always ? "cron (runs 24/7)" : "job (active hours only)"}`);
+          console.log(`  always:   ${job.always}`);
           if (job.agent) console.log(`  agent:    ${job.agent}`);
           console.log(`  prompt:   ${job.prompt}`);
 
@@ -313,20 +334,8 @@ export async function jobCommand(): Promise<void> {
     }
 
     default:
-      console.log("Usage: nia job <list|show|status|add|update|remove|enable|disable|run|log|import>\n");
-      console.log("  list                          — list all jobs");
-      console.log("  show [name]                   — full job details + recent runs");
-      console.log("  status [name]                 — quick status check");
-      console.log("  add <name> <schedule> <prompt> — add a job (active hours only)")
-      console.log("      --always                  — run 24/7 regardless of active hours");
-      console.log("      --agent <name>            — assign an agent to the job");
-      console.log("  update <name> [--schedule s] [--prompt p] [--always] — update a job");
-      console.log("  remove <name>                 — delete a job");
-      console.log("  enable <name>                 — enable a job");
-      console.log("  disable <name>                — disable a job");
-      console.log("  run <name>                    — run a job once");
-      console.log("  log [name]                    — show recent run history");
-      console.log("  import                        — import YAML jobs to DB");
-      process.exit(subcommand ? 1 : 0);
+      console.error(`Unknown subcommand: ${subcommand}`);
+      console.log(HELP);
+      process.exit(1);
   }
 }

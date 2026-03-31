@@ -2,8 +2,22 @@ import { readRawConfig } from "../utils/config";
 import { addWatchChannel, removeWatchChannel, enableWatchChannel, disableWatchChannel } from "../mcp/tools";
 import { fail, ICON_PASS, ICON_FAIL } from "../utils/cli";
 
+const HELP = `Usage: nia watch <command>
+
+Commands:
+  list                              List watch channels (default)
+  add <channel_id#name> <behavior>  Add a watch channel
+  remove <channel_id#name>          Remove a watch channel
+  enable <channel_id#name>          Enable a watch channel
+  disable <channel_id#name>         Disable a watch channel`;
+
 export function watchCommand(): void {
   const sub = process.argv[3];
+
+  if (sub === "--help" || sub === "-h" || sub === "help") {
+    console.log(HELP);
+    return;
+  }
 
   switch (sub) {
     case "list":
@@ -60,12 +74,8 @@ export function watchCommand(): void {
     }
 
     default:
-      console.log("Usage: nia watch <list|add|remove|enable|disable>\n");
-      console.log("  list                              — list watch channels (default)");
-      console.log("  add <channel_id#name> <behavior>  — add a watch channel");
-      console.log("  remove <channel_id#name>          — remove a watch channel");
-      console.log("  enable <channel_id#name>          — enable a watch channel");
-      console.log("  disable <channel_id#name>         — disable a watch channel");
-      process.exit(sub ? 1 : 0);
+      console.error(`Unknown subcommand: ${sub}`);
+      console.log(HELP);
+      process.exit(1);
   }
 }
