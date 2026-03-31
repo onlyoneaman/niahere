@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Concurrent job execution guard** — jobs that take longer than their interval no longer spawn duplicate instances. Scheduler skips if the previous run is still in progress, runs again as soon as it finishes.
+
 ### Added
 - **Shared `parseArgs()` utility** — consistent flag parsing across all CLI commands. Supports `--flag value`, `--flag` (bool), `--no-flag`, `-h`/`--help`, `--` separator, and positional args.
 - **`--help`/`-h` support** on all commands and subcommands (`nia --help`, `nia job --help`, etc.)

@@ -65,6 +65,7 @@ function isWithinActiveHours(): boolean {
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
+const runningJobs = new Set<string>();
 
 async function tick(): Promise<void> {
   let dueJobs: Awaited<ReturnType<typeof Job.listDue>>;
@@ -87,12 +88,20 @@ async function tick(): Promise<void> {
       continue;
     }
 
+    if (runningJobs.has(job.name)) {
+      log.info({ job: job.name }, "scheduler: skipping — still running from previous invocation");
+      continue;
+    }
+
     log.info({ job: job.name, type: job.scheduleType }, "scheduler: running job");
+    runningJobs.add(job.name);
 
     runJob(job).then((result) => {
       log.info({ job: job.name, status: result.status, duration: result.duration_ms }, "scheduler: job completed");
     }).catch((err) => {
       log.error({ err, job: job.name }, "scheduler: job failed");
+    }).finally(() => {
+      runningJobs.delete(job.name);
     });
 
     let nextRun: Date | null = null;
