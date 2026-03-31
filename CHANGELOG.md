@@ -9,6 +9,7 @@
 - **Shared `parseArgs()` utility** — consistent flag parsing across all CLI commands. Supports `--flag value`, `--flag` (bool), `--no-flag`, `-h`/`--help`, `--` separator, and positional args.
 - **`--help`/`-h` support** on all commands and subcommands (`nia --help`, `nia job --help`, etc.)
 - **TTY detection** — colors and ANSI codes disabled when output is piped
+- **`--prompt` and `--prompt-file`** flags for `nia job add` and `nia job update` — supports inline text, quoted strings, or reading from a file for long/multi-line prompts
 
 ### Changed
 - **Documentation updated** — README.md and AGENTS.md brought up to date with all current commands, features, architecture, and release process. Fixed stale descriptions (Codex runner, memory on-demand, missing CLI files/commands/skills).

@@ -18,12 +18,15 @@ Commands:
   show [name]                   Full job details + recent runs
   status [name]                 Quick status check
   add <name> <schedule> <prompt>  Add a job
+      --prompt <text>             Prompt text (alternative to positional)
+      --prompt-file <path>        Read prompt from file (for long/multi-line)
       --type cron|interval|once   Schedule type (default: cron)
       --always                    Run 24/7 regardless of active hours
       --agent <name>              Assign an agent to the job
   update <name>                 Update a job
       --schedule <schedule>       New schedule
-      --prompt <prompt>           New prompt
+      --prompt <text>             New prompt
+      --prompt-file <path>        Read prompt from file (for long/multi-line)
       --type cron|interval|once   Change schedule type
       --always / --no-always      Toggle 24/7 mode
       --agent <name>              Assign agent (--no-agent to remove)
@@ -100,7 +103,18 @@ export async function jobCommand(): Promise<void> {
       const agent = args.getString("agent");
 
       const [name, schedule, ...promptParts] = args.positional;
-      const prompt = promptParts.join(" ");
+      const promptFlag = args.getString("prompt");
+      const promptFile = args.getString("prompt-file");
+      let prompt: string;
+      if (promptFile) {
+        const { existsSync, readFileSync } = await import("fs");
+        if (!existsSync(promptFile)) fail(`File not found: ${promptFile}`);
+        prompt = readFileSync(promptFile, "utf8").trim();
+      } else if (promptFlag) {
+        prompt = promptFlag;
+      } else {
+        prompt = promptParts.join(" ");
+      }
 
       if (!name || !schedule || !prompt) {
         console.error('Usage: nia job add <name> <schedule> <prompt> [--always] [--type cron|interval|once] [--agent <name>]');
@@ -164,7 +178,13 @@ export async function jobCommand(): Promise<void> {
 
       const fields: Partial<{ schedule: string; prompt: string; always: boolean; scheduleType: ScheduleType; agent: string | null }> = {};
       const schedule = args.getString("schedule");
-      const prompt = args.getString("prompt");
+      const promptFile = args.getString("prompt-file");
+      let prompt = args.getString("prompt");
+      if (promptFile) {
+        const { existsSync, readFileSync } = await import("fs");
+        if (!existsSync(promptFile)) fail(`File not found: ${promptFile}`);
+        prompt = readFileSync(promptFile, "utf8").trim();
+      }
       const scheduleType = args.getString("type") as ScheduleType | undefined;
       const always = args.getBool("always");
       const agent = args.getString("agent");
