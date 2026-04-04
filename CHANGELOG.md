@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [0.2.53] - 2026-04-01
+## [0.2.52] - 2026-04-01
 
 ### Fixed
 - **Concurrent job execution guard** — jobs that take longer than their interval no longer spawn duplicate instances. Scheduler skips if the previous run is still in progress, runs again as soon as it finishes.
