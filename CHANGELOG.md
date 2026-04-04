@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.2.55] - 2026-04-05
+
+### Added
+- **Marketing execution skills** — added 5 skills from coreyhaines31/marketingskills: product-marketing-context (foundational context), copywriting, page-cro, seo-audit, and launch-strategy
+
 ## [0.2.54] - 2026-04-04
 
 ### Added
