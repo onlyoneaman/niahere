@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **Google Workspace CLI skill** — reference guide for `gws` CLI setup, usage, multi-account config, and helper commands (Gmail, Drive, Calendar, Sheets, etc.)
+
 ## [0.2.52] - 2026-04-01
 
 ### Fixed
