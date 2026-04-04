@@ -6,6 +6,9 @@
 
 ### Added
 - **Marketing execution skills** — added 5 skills from coreyhaines31/marketingskills: product-marketing-context (foundational context), copywriting, page-cro, seo-audit, and launch-strategy
+- **Conversion funnel skills** — customer-research, competitor-alternatives, onboarding-cro, signup-flow-cro, churn-prevention
+- **Outreach & content skills** — social-content, email-sequence, copy-editing, ai-seo, cold-email
+- **Minimalist review skill** — decision audit tool from slavingia/skills (8-principle business decision framework)
 
 ## [0.2.54] - 2026-04-04
 
