@@ -23,13 +23,15 @@ export async function addJob(args: {
   schedule_type?: ScheduleType;
   always?: boolean;
   agent?: string;
+  stateless?: boolean;
 }): Promise<string> {
   const scheduleType = args.schedule_type || "cron";
   const always = args.always || false;
+  const stateless = args.stateless || false;
   const config = getConfig();
 
   const nextRunAt = computeInitialNextRun(scheduleType, args.schedule, config.timezone);
-  await Job.create(args.name, args.schedule, args.prompt, always, scheduleType, nextRunAt, args.agent);
+  await Job.create(args.name, args.schedule, args.prompt, always, scheduleType, nextRunAt, args.agent, stateless);
   const agentNote = args.agent ? ` [agent: ${args.agent}]` : "";
   return `Job "${args.name}" created (${scheduleType}: ${args.schedule})${agentNote}. Next run: ${nextRunAt.toISOString()}`;
 }
@@ -40,16 +42,18 @@ export async function updateJob(args: {
   prompt?: string;
   always?: boolean;
   agent?: string | null;
+  stateless?: boolean;
   schedule_type?: "cron" | "interval" | "once";
 }): Promise<string> {
-  const fields: Partial<{ schedule: string; prompt: string; always: boolean; agent: string | null; scheduleType: "cron" | "interval" | "once" }> = {};
+  const fields: Partial<{ schedule: string; prompt: string; always: boolean; stateless: boolean; agent: string | null; scheduleType: "cron" | "interval" | "once" }> = {};
   if (args.schedule) fields.schedule = args.schedule;
   if (args.prompt) fields.prompt = args.prompt;
   if (args.always !== undefined) fields.always = args.always;
+  if (args.stateless !== undefined) fields.stateless = args.stateless;
   if (args.agent !== undefined) fields.agent = args.agent;
   if (args.schedule_type) fields.scheduleType = args.schedule_type;
 
-  if (Object.keys(fields).length === 0) return "Nothing to update. Pass at least one field (schedule, prompt, always, agent, or schedule_type).";
+  if (Object.keys(fields).length === 0) return "Nothing to update. Pass at least one field (schedule, prompt, always, stateless, agent, or schedule_type).";
 
   const updated = await Job.update(args.name, fields);
   if (!updated) return `Job "${args.name}" not found.`;

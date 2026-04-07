@@ -23,6 +23,7 @@ Commands:
       --type cron|interval|once   Schedule type (default: cron)
       --always                    Run 24/7 regardless of active hours
       --agent <name>              Assign an agent to the job
+      --stateless yes|no          Disable working memory for this job
   update <name>                 Update a job
       --schedule <schedule>       New schedule
       --prompt <text>             New prompt
@@ -30,6 +31,7 @@ Commands:
       --type cron|interval|once   Change schedule type
       --always / --no-always      Toggle 24/7 mode
       --agent <name>              Assign agent (--no-agent to remove)
+      --stateless yes|no            Toggle working memory
   remove <name>                 Delete a job
   enable <name>                 Enable a job
   disable <name>                Disable a job
@@ -100,6 +102,8 @@ export async function jobCommand(): Promise<void> {
       }
 
       const always = args.getBool("always") ?? false;
+      const statelessRaw = args.getString("stateless");
+      const stateless = statelessRaw ? ["yes", "y", "true", "t", "1"].includes(statelessRaw.toLowerCase()) : false;
       const agent = args.getString("agent");
 
       const [name, schedule, ...promptParts] = args.positional;
@@ -125,7 +129,7 @@ export async function jobCommand(): Promise<void> {
         const config = getConfig();
         const nextRunAt = computeInitialNextRun(scheduleType, schedule, config.timezone);
         await withDb(async () => {
-          await Job.create(name, schedule, prompt, always, scheduleType, nextRunAt, agent);
+          await Job.create(name, schedule, prompt, always, scheduleType, nextRunAt, agent, stateless);
           console.log(`Job "${name}" added (${scheduleType}: ${schedule}).${always ? " (runs 24/7)" : ""}`);
         });
       } catch (err) {
@@ -176,7 +180,7 @@ export async function jobCommand(): Promise<void> {
         fail('Example: nia job update curator --schedule "4h" --prompt "New prompt"');
       }
 
-      const fields: Partial<{ schedule: string; prompt: string; always: boolean; scheduleType: ScheduleType; agent: string | null }> = {};
+      const fields: Partial<{ schedule: string; prompt: string; always: boolean; stateless: boolean; scheduleType: ScheduleType; agent: string | null }> = {};
       const schedule = args.getString("schedule");
       const promptFile = args.getString("prompt-file");
       let prompt = args.getString("prompt");
@@ -187,6 +191,7 @@ export async function jobCommand(): Promise<void> {
       }
       const scheduleType = args.getString("type") as ScheduleType | undefined;
       const always = args.getBool("always");
+      const statelessRaw = args.getString("stateless");
       const agent = args.getString("agent");
       const noAgent = args.getBool("agent");
 
@@ -199,11 +204,12 @@ export async function jobCommand(): Promise<void> {
         fields.scheduleType = scheduleType;
       }
       if (always !== undefined) fields.always = always;
+      if (statelessRaw) fields.stateless = ["yes", "y", "true", "t", "1"].includes(statelessRaw.toLowerCase());
       if (agent) fields.agent = agent;
       if (noAgent === false) fields.agent = null;
 
       if (Object.keys(fields).length === 0) {
-        fail("Nothing to update. Pass at least one flag (--schedule, --prompt, --type, --always, --agent).");
+        fail("Nothing to update. Pass at least one flag (--schedule, --prompt, --type, --always, --stateless, --agent).");
       }
 
       try {
@@ -231,6 +237,7 @@ export async function jobCommand(): Promise<void> {
           console.log(`  enabled:  ${job.enabled}`);
           console.log(`  always:   ${job.always}`);
           if (job.agent) console.log(`  agent:    ${job.agent}`);
+          if (job.stateless) console.log(`  stateless: true`);
           console.log(`  prompt:   ${job.prompt}`);
 
           const state = readState();

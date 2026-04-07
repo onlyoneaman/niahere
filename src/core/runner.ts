@@ -1,5 +1,6 @@
 import { homedir } from "os";
-import { existsSync } from "fs";
+import { existsSync, mkdirSync, readFileSync } from "fs";
+import { join } from "path";
 import { randomUUID } from "crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { JobInput, JobResult } from "../types";
@@ -11,6 +12,7 @@ import { scanAgents } from "./agents";
 import { truncate, formatToolUse } from "../utils/format-activity";
 import { getMcpServers } from "../mcp";
 import { ActiveEngine } from "../db/models";
+import { getPaths } from "../utils/paths";
 import { log } from "../utils/log";
 
 export type ActivityCallback = (line: string) => void;
@@ -256,9 +258,39 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
       systemPrompt = buildSystemPrompt("job");
     }
 
-    const jobPrompt = job.prompt
+    let jobPrompt = job.prompt
       ? `Job: ${job.name} (schedule: ${job.schedule})\n\n${job.prompt}`
       : `Job: ${job.name} (schedule: ${job.schedule})\n\nExecute your scheduled tasks.`;
+
+    // Working memory: give stateful jobs a persistent workspace
+    if (!job.stateless) {
+      const jobDir = join(getPaths().jobsDir, job.name);
+      mkdirSync(jobDir, { recursive: true });
+      const statePath = join(jobDir, "state.md");
+      let stateContent = "";
+      if (existsSync(statePath)) {
+        try {
+          stateContent = readFileSync(statePath, "utf8").trim();
+        } catch {
+          stateContent = "";
+        }
+      }
+
+      const stateBlock = stateContent
+        ? `\n${stateContent}\n`
+        : "(first run — no prior state)";
+
+      jobPrompt = `${jobPrompt}
+
+## Working Memory
+
+You have a persistent workspace at \`${jobDir}/\`. This directory is yours — create files, organize data, track history, maintain state however you need.
+
+Your \`state.md\` from last run:
+${stateBlock}
+
+Before finishing, update \`state.md\` with: what you did this run, what you noticed, and what to do or focus on next time. Keep it concise — a working notebook, not a log.`;
+    }
 
     if (config.runner === "codex") {
       const fullPrompt = `${systemPrompt}\n\n---\n\n${jobPrompt}`;

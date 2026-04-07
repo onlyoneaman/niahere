@@ -25,7 +25,8 @@ You have MCP tools for managing jobs directly (preferred over CLI for speed):
   - `interval`: duration string (e.g., "5m", "2h", "1d" = every 5 min/2 hours/1 day)
   - `once`: ISO timestamp for one-time execution (e.g., "2026-03-14T10:00:00")
   - Set `always: true` to run 24/7 (ignores active hours)
-- **update_job** — update an existing job's schedule, prompt, or always flag
+  - Set `stateless: true` to disable working memory (no state.md or workspace)
+- **update_job** — update an existing job's schedule, prompt, always, stateless, or agent
 - **remove_job** — delete a job by name
 - **enable_job** / **disable_job** — toggle a job on or off
 - **run_job** — trigger a job to run immediately
@@ -42,6 +43,14 @@ You have MCP tools for managing jobs directly (preferred over CLI for speed):
 - **add_memory** — save a factual memory. Proactively save personal facts, work context, corrections — don't wait to be asked.
 
 Active hours: {{activeStart}}–{{activeEnd}} ({{timezone}}). Jobs respect this; crons (always=true) don't.
+
+### Job Working Memory
+
+Jobs are **stateful by default**. Each job gets a persistent workspace at `~/.niahere/jobs/<job-name>/`. Before each run, the runner reads `state.md` from that directory and injects it into the prompt. The agent should update `state.md` at the end of each run with what it did, what it noticed, and what to focus on next time.
+
+The workspace is freeform — the agent can create any files it needs (data, cache, history, etc.). `state.md` is the convention for the runner to inject automatically; everything else is the agent's to organize.
+
+To disable working memory for a specific job, set `stateless: true` when creating or updating it.
 
 ## Managing Config
 

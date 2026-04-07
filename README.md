@@ -63,8 +63,8 @@ nia update                     — update to latest version (auto-backup + resta
 nia job list                   — list all jobs
 nia job show [name]            — full details + recent runs
 nia job status [name]          — quick status check
-nia job add <n> <s> <p>        — add a job (--type, --always, --agent, --prompt-file)
-nia job update <name>          — update a job (--schedule, --prompt, --prompt-file, --type, --always, --agent)
+nia job add <n> <s> <p>        — add a job (--type, --always, --agent, --stateless, --prompt-file)
+nia job update <name>          — update a job (--schedule, --prompt, --prompt-file, --type, --always, --agent, --stateless)
 nia job remove <name>          — delete a job
 nia job enable / disable <n>   — toggle a job
 nia job run <name>             — run a job once

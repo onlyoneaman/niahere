@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **Job working memory** — jobs are now stateful by default. Each job gets a persistent workspace at `~/.niahere/jobs/<name>/` with a `state.md` file that is automatically injected into the prompt on each run. The agent updates it at the end of each run with what it did, what it noticed, and what to focus on next. Jobs can opt out with `--stateless yes`. Supports CLI (`nia job add/update --stateless yes|no`) and MCP tools.
+
 ## [0.2.56] - 2026-04-07
 
 ### Added
