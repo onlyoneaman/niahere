@@ -225,6 +225,42 @@ export async function runTask(opts: TaskOptions): Promise<RunnerOutput> {
 }
 
 // ---------------------------------------------------------------------------
+// Working memory
+// ---------------------------------------------------------------------------
+
+/** Build the working memory block for a stateful job. Returns empty string for stateless jobs. */
+export function buildWorkingMemory(jobName: string, stateless?: boolean): string {
+  if (stateless) return "";
+
+  const jobDir = join(getPaths().jobsDir, jobName);
+  mkdirSync(jobDir, { recursive: true });
+  const statePath = join(jobDir, "state.md");
+  let stateContent = "";
+  if (existsSync(statePath)) {
+    try {
+      stateContent = readFileSync(statePath, "utf8").trim();
+    } catch {
+      stateContent = "";
+    }
+  }
+
+  const stateBlock = stateContent
+    ? `\n${stateContent}\n`
+    : "(first run — no prior state)";
+
+  return `
+
+## Working Memory
+
+You have a persistent workspace at \`${jobDir}/\`. This directory is yours — create files, organize data, track history, maintain state however you need.
+
+Your \`state.md\` from last run:
+${stateBlock}
+
+Before finishing, update \`state.md\` with: what you did this run, what you noticed, and what to do or focus on next time. Keep it concise — a working notebook, not a log.`;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -263,34 +299,7 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
       : `Job: ${job.name} (schedule: ${job.schedule})\n\nExecute your scheduled tasks.`;
 
     // Working memory: give stateful jobs a persistent workspace
-    if (!job.stateless) {
-      const jobDir = join(getPaths().jobsDir, job.name);
-      mkdirSync(jobDir, { recursive: true });
-      const statePath = join(jobDir, "state.md");
-      let stateContent = "";
-      if (existsSync(statePath)) {
-        try {
-          stateContent = readFileSync(statePath, "utf8").trim();
-        } catch {
-          stateContent = "";
-        }
-      }
-
-      const stateBlock = stateContent
-        ? `\n${stateContent}\n`
-        : "(first run — no prior state)";
-
-      jobPrompt = `${jobPrompt}
-
-## Working Memory
-
-You have a persistent workspace at \`${jobDir}/\`. This directory is yours — create files, organize data, track history, maintain state however you need.
-
-Your \`state.md\` from last run:
-${stateBlock}
-
-Before finishing, update \`state.md\` with: what you did this run, what you noticed, and what to do or focus on next time. Keep it concise — a working notebook, not a log.`;
-    }
+    jobPrompt += buildWorkingMemory(job.name, job.stateless);
 
     if (config.runner === "codex") {
       const fullPrompt = `${systemPrompt}\n\n---\n\n${jobPrompt}`;

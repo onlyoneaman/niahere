@@ -261,6 +261,31 @@ describe("Job model", () => {
     expect(job!.agent).toBeNull();
   });
 
+  test("create with stateless flag", async () => {
+    const name = TEST_JOB + "-stateless";
+    await Job.create(name, "*/5 * * * *", "fire and forget", false, "cron", undefined, undefined, true);
+    const job = await Job.get(name);
+    expect(job).not.toBeNull();
+    expect(job!.stateless).toBe(true);
+  });
+
+  test("stateless defaults to false", async () => {
+    const job = await Job.get(TEST_JOB);
+    expect(job!.stateless).toBe(false);
+  });
+
+  test("update stateless flag", async () => {
+    const name = TEST_JOB + "-stateless-update";
+    await Job.create(name, "*/5 * * * *", "test");
+    expect((await Job.get(name))!.stateless).toBe(false);
+
+    await Job.update(name, { stateless: true });
+    expect((await Job.get(name))!.stateless).toBe(true);
+
+    await Job.update(name, { stateless: false });
+    expect((await Job.get(name))!.stateless).toBe(false);
+  });
+
   test("list includes created job", async () => {
     const jobs = await Job.list();
     const found = jobs.find((j) => j.name === TEST_JOB);

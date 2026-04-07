@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync, readFileSync } from "fs";
-import { runJob } from "../../src/core/runner";
+import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from "fs";
+import { join } from "path";
+import { runJob, buildWorkingMemory } from "../../src/core/runner";
 import { readState, writeState } from "../../src/utils/logger";
 import { resetConfig } from "../../src/utils/config";
 import type { JobInput } from "../../src/types";
@@ -75,6 +76,39 @@ describe("runJob", () => {
     expect(finalState["job-a"]?.duration_ms).toBe(2000);
     expect(finalState["job-b"]?.status).toBe("ok");
     expect(finalState["job-b"]?.duration_ms).toBe(5000);
+  });
+
+  test("creates job workspace for stateful jobs", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, `runner: claude\n`);
+    resetConfig();
+
+    const result = buildWorkingMemory("test-echo");
+    expect(result).toContain("## Working Memory");
+    expect(result).toContain("persistent workspace");
+    expect(result).toContain("first run");
+    expect(existsSync(join(TEST_DIR, "jobs", "test-echo"))).toBe(true);
+  });
+
+  test("injects existing state.md content", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, `runner: claude\n`);
+    resetConfig();
+
+    const jobDir = join(TEST_DIR, "jobs", "test-echo");
+    mkdirSync(jobDir, { recursive: true });
+    writeFileSync(join(jobDir, "state.md"), "Last run: checked 3 feeds, found 2 new items.");
+
+    const result = buildWorkingMemory("test-echo");
+    expect(result).toContain("Last run: checked 3 feeds, found 2 new items.");
+    expect(result).not.toContain("first run");
+  });
+
+  test("returns empty string for stateless jobs", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, `runner: claude\n`);
+    resetConfig();
+
+    const result = buildWorkingMemory("test-echo", true);
+    expect(result).toBe("");
+    expect(existsSync(join(TEST_DIR, "jobs", "test-echo"))).toBe(false);
   });
 
   test("executes via claude agent sdk and returns result", async () => {
