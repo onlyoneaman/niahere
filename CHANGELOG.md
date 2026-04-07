@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.56] - 2026-04-07
+
 ### Added
 - **AWS CLI skill** — reference guide for AWS CLI usage, auth troubleshooting (default profile vs SSO), and common commands for S3, DynamoDB, CloudWatch, Lambda, STS, IAM. Includes Kay-specific context (account, buckets, tables, region).
 
