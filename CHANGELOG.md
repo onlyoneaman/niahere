@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Slack image messages silently dropped** — messages with image/file attachments have `subtype: "file_share"` which was caught by a blanket `if (message.subtype) return` guard. The full image pipeline (download, resize, base64, vision) was already built but never reached. Now allows `file_share` through.
+
 ## [0.2.55] - 2026-04-05
 
 ### Added

@@ -304,7 +304,7 @@ class SlackChannel implements Channel {
 
     // Handle messages (DMs + @mentions)
     app.message(async ({ message, say, client }) => {
-      if (message.subtype) return;
+      if (message.subtype && message.subtype !== "file_share") return;
       const msg = message as {
         text?: string;
         channel: string;
