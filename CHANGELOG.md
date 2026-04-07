@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **AWS CLI skill** — reference guide for AWS CLI usage, auth troubleshooting (default profile vs SSO), and common commands for S3, DynamoDB, CloudWatch, Lambda, STS, IAM. Includes Kay-specific context (account, buckets, tables, region).
+
 ### Fixed
 - **Slack image messages silently dropped** — messages with image/file attachments have `subtype: "file_share"` which was caught by a blanket `if (message.subtype) return` guard. The full image pipeline (download, resize, base64, vision) was already built but never reached. Now allows `file_share` through.
 
