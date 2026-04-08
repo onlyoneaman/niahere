@@ -5,6 +5,7 @@
 ### Added
 
 - **Per-job model override** — jobs can now specify a model (`--model haiku`, `--model sonnet`) that overrides the agent model and global config. Enables cost savings by routing simple jobs to cheaper models. Priority: job model > agent model > config model. Supports CLI (`nia job add/update --model <model>`) and MCP tools.
+- **SDK upgrade to v0.2.97** — bumped from v0.2.74. Adds `terminal_reason` to job and chat results, showing exactly why an agent stopped (`completed`, `max_turns`, `aborted_tools`, `hook_stopped`, etc.). Surfaced in `nia job run` output, audit logs, and message metadata.
 
 ### Fixed
 

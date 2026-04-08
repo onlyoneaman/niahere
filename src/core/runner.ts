@@ -20,6 +20,7 @@ export type ActivityCallback = (line: string) => void;
 interface RunnerOutput {
   agentText: string;
   sessionId: string;
+  terminalReason?: string;
   error?: string;
 }
 
@@ -136,6 +137,7 @@ export async function runJobWithClaude(
 
   let agentText = "";
   let actualSessionId = sessionId;
+  let terminalReason: string | undefined;
   let accumulatedThinking = "";
   let lastThinkingLine = "";
 
@@ -205,11 +207,14 @@ export async function runJobWithClaude(
       if (message.type === "result") {
         if (!(message as any).is_error) {
           agentText = (message as any).result || "";
+          terminalReason = (message as any).terminal_reason;
         } else {
           const errors = (message as any).errors;
+          terminalReason = (message as any).terminal_reason;
           return {
             agentText: "",
             sessionId: actualSessionId,
+            terminalReason,
             error: errors?.join(", ") || "unknown error",
           };
         }
@@ -219,7 +224,7 @@ export async function runJobWithClaude(
     handle.close();
   }
 
-  return { agentText, sessionId: actualSessionId };
+  return { agentText, sessionId: actualSessionId, terminalReason };
 }
 
 // ---------------------------------------------------------------------------
@@ -368,6 +373,7 @@ export async function runJob(
       result: output.agentText.trim(),
       duration_ms,
       session_id: output.sessionId || undefined,
+      terminal_reason: output.terminalReason,
       error: output.error,
     };
 
@@ -378,6 +384,7 @@ export async function runJob(
       result: result.result.slice(0, 2000),
       duration_ms: result.duration_ms,
       session_id: result.session_id,
+      terminal_reason: result.terminal_reason,
       error: result.error,
     };
     appendAudit(auditEntry);

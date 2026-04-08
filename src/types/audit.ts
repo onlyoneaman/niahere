@@ -7,6 +7,7 @@ export interface AuditEntry {
   result: string;
   duration_ms: number;
   session_id?: string;
+  terminal_reason?: string;
   error?: string;
 }
 

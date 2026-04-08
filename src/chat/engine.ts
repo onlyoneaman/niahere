@@ -382,6 +382,7 @@ export async function createChatEngine(
                 duration_ms: msg.duration_ms,
                 duration_api_ms: msg.duration_api_ms,
                 stop_reason: msg.stop_reason,
+                terminal_reason: msg.terminal_reason,
                 session_id: msg.session_id,
                 subtype: msg.subtype,
                 usage: msg.usage,

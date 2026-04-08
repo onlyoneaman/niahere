@@ -444,6 +444,9 @@ export async function jobCommand(): Promise<void> {
 
       console.log(`Status: ${result.status}`);
       console.log(`Duration: ${formatDuration(result.duration_ms)}`);
+      if (result.terminal_reason && result.terminal_reason !== "completed") {
+        console.log(`Stopped: ${result.terminal_reason}`);
+      }
       if (result.result) console.log(`\nResult:\n${result.result}`);
       if (result.error) console.log(`\nError: ${result.error}`);
       // Exit immediately — background consolidation keeps the event loop alive otherwise
