@@ -5,6 +5,7 @@ export interface JobInput {
   schedule: string;
   prompt: string;
   agent?: string | null;
+  model?: string | null;
   stateless?: boolean;
 }
 

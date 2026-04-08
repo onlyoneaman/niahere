@@ -29,6 +29,7 @@ Commands:
       --type cron|interval|once   Schedule type (default: cron)
       --always                    Run 24/7 regardless of active hours
       --agent <name>              Assign an agent to the job
+      --model <model>             Model override (e.g. haiku, sonnet, opus)
       --stateless yes|no          Disable working memory for this job
   update <name>                 Update a job
       --schedule <schedule>       New schedule
@@ -37,6 +38,7 @@ Commands:
       --type cron|interval|once   Change schedule type
       --always / --no-always      Toggle 24/7 mode
       --agent <name>              Assign agent (--no-agent to remove)
+      --model <model>             Model override (--no-model to remove)
       --stateless yes|no            Toggle working memory
   remove <name>                 Delete a job
   enable <name>                 Enable a job
@@ -140,6 +142,7 @@ export async function jobCommand(): Promise<void> {
         ? ["yes", "y", "true", "t", "1"].includes(statelessRaw.toLowerCase())
         : false;
       const agent = args.getString("agent");
+      const model = args.getString("model");
 
       const [name, schedule, ...promptParts] = args.positional;
       const promptFlag = args.getString("prompt");
@@ -181,6 +184,7 @@ export async function jobCommand(): Promise<void> {
             nextRunAt,
             agent,
             stateless,
+            model,
           );
           console.log(
             `Job "${name}" added (${scheduleType}: ${schedule}).${always ? " (runs 24/7)" : ""}`,
@@ -252,6 +256,7 @@ export async function jobCommand(): Promise<void> {
         prompt: string;
         always: boolean;
         stateless: boolean;
+        model: string | null;
         scheduleType: ScheduleType;
         agent: string | null;
       }> = {};
@@ -286,10 +291,14 @@ export async function jobCommand(): Promise<void> {
         );
       if (agent) fields.agent = agent;
       if (noAgent === false) fields.agent = null;
+      const modelFlag = args.getString("model");
+      const noModel = args.getBool("model");
+      if (modelFlag) fields.model = modelFlag;
+      if (noModel === false) fields.model = null;
 
       if (Object.keys(fields).length === 0) {
         fail(
-          "Nothing to update. Pass at least one flag (--schedule, --prompt, --type, --always, --stateless, --agent).",
+          "Nothing to update. Pass at least one flag (--schedule, --prompt, --type, --always, --stateless, --model, --agent).",
         );
       }
 
@@ -321,6 +330,7 @@ export async function jobCommand(): Promise<void> {
           console.log(`  enabled:  ${job.enabled}`);
           console.log(`  always:   ${job.always}`);
           if (job.agent) console.log(`  agent:    ${job.agent}`);
+          if (job.model) console.log(`  model:    ${job.model}`);
           if (job.stateless) console.log(`  stateless: true`);
           console.log(`  prompt:   ${job.prompt}`);
 

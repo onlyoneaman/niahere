@@ -20,31 +20,84 @@ export function createNiaMcpServer() {
         "Create a new scheduled job. Supports cron expressions (0 9 * * *), interval durations (5m, 2h, 1d), or one-time ISO timestamps.",
         {
           name: z.string().describe("Unique job name"),
-          schedule: z.string().describe("Cron expression, duration string, or ISO timestamp"),
+          schedule: z
+            .string()
+            .describe("Cron expression, duration string, or ISO timestamp"),
           prompt: z.string().describe("What the job should do"),
-          schedule_type: z.enum(["cron", "interval", "once"]).default("cron").describe("Schedule type"),
-          always: z.boolean().default(false).describe("If true, runs 24/7 ignoring active hours"),
-          agent: z.string().optional().describe("Agent name to use for this job (loads agent's AGENT.md as system prompt)"),
-          stateless: z.boolean().default(false).describe("If true, disables working memory (no state.md injection or workspace)"),
+          schedule_type: z
+            .enum(["cron", "interval", "once"])
+            .default("cron")
+            .describe("Schedule type"),
+          always: z
+            .boolean()
+            .default(false)
+            .describe("If true, runs 24/7 ignoring active hours"),
+          agent: z
+            .string()
+            .optional()
+            .describe(
+              "Agent name to use for this job (loads agent's AGENT.md as system prompt)",
+            ),
+          stateless: z
+            .boolean()
+            .default(false)
+            .describe(
+              "If true, disables working memory (no state.md injection or workspace)",
+            ),
+          model: z
+            .string()
+            .optional()
+            .describe(
+              "Model override for this job (e.g. haiku, sonnet, opus). Overrides agent and global model.",
+            ),
         },
         async (args) => ({
-          content: [{ type: "text" as const, text: await handlers.addJob(args) }],
+          content: [
+            { type: "text" as const, text: await handlers.addJob(args) },
+          ],
         }),
       ),
       tool(
         "update_job",
-        "Update an existing job's schedule, prompt, always flag, agent, stateless, or schedule_type. Only pass fields you want to change.",
+        "Update an existing job's schedule, prompt, always flag, agent, model, stateless, or schedule_type. Only pass fields you want to change.",
         {
           name: z.string().describe("Job name to update"),
-          schedule: z.string().optional().describe("New schedule (cron expression, interval duration, or ISO timestamp)"),
+          schedule: z
+            .string()
+            .optional()
+            .describe(
+              "New schedule (cron expression, interval duration, or ISO timestamp)",
+            ),
           prompt: z.string().optional().describe("New prompt"),
-          always: z.boolean().optional().describe("If true, runs 24/7 ignoring active hours"),
-          agent: z.string().nullable().optional().describe("Agent name (set null to remove agent)"),
-          stateless: z.boolean().optional().describe("If true, disables working memory (no state.md injection or workspace)"),
-          schedule_type: z.enum(["cron", "interval", "once"]).optional().describe("Schedule type (must match the schedule format)"),
+          always: z
+            .boolean()
+            .optional()
+            .describe("If true, runs 24/7 ignoring active hours"),
+          agent: z
+            .string()
+            .nullable()
+            .optional()
+            .describe("Agent name (set null to remove agent)"),
+          model: z
+            .string()
+            .nullable()
+            .optional()
+            .describe("Model override (set null to remove and use default)"),
+          stateless: z
+            .boolean()
+            .optional()
+            .describe(
+              "If true, disables working memory (no state.md injection or workspace)",
+            ),
+          schedule_type: z
+            .enum(["cron", "interval", "once"])
+            .optional()
+            .describe("Schedule type (must match the schedule format)"),
         },
         async (args) => ({
-          content: [{ type: "text" as const, text: await handlers.updateJob(args) }],
+          content: [
+            { type: "text" as const, text: await handlers.updateJob(args) },
+          ],
         }),
       ),
       tool(
@@ -52,7 +105,12 @@ export function createNiaMcpServer() {
         "Delete a scheduled job",
         { name: z.string().describe("Job name to remove") },
         async (args) => ({
-          content: [{ type: "text" as const, text: await handlers.removeJob(args.name) }],
+          content: [
+            {
+              type: "text" as const,
+              text: await handlers.removeJob(args.name),
+            },
+          ],
         }),
       ),
       tool(
@@ -60,7 +118,12 @@ export function createNiaMcpServer() {
         "Enable a disabled job",
         { name: z.string().describe("Job name to enable") },
         async (args) => ({
-          content: [{ type: "text" as const, text: await handlers.enableJob(args.name) }],
+          content: [
+            {
+              type: "text" as const,
+              text: await handlers.enableJob(args.name),
+            },
+          ],
         }),
       ),
       tool(
@@ -68,7 +131,12 @@ export function createNiaMcpServer() {
         "Disable a job (stops it from running)",
         { name: z.string().describe("Job name to disable") },
         async (args) => ({
-          content: [{ type: "text" as const, text: await handlers.disableJob(args.name) }],
+          content: [
+            {
+              type: "text" as const,
+              text: await handlers.disableJob(args.name),
+            },
+          ],
         }),
       ),
       tool(
@@ -76,7 +144,12 @@ export function createNiaMcpServer() {
         "Trigger a job to run immediately on the next scheduler tick",
         { name: z.string().describe("Job name to run now") },
         async (args) => ({
-          content: [{ type: "text" as const, text: await handlers.runJobNow(args.name) }],
+          content: [
+            {
+              type: "text" as const,
+              text: await handlers.runJobNow(args.name),
+            },
+          ],
         }),
       ),
       tool(
@@ -84,22 +157,47 @@ export function createNiaMcpServer() {
         "Send a message to the user via configured channel (telegram, slack). Uses default_channel from config if not specified. Can also send a file/image by providing media_path.",
         {
           text: z.string().describe("Message text to send"),
-          channel: z.string().optional().describe("Channel name (telegram, slack). Omit to use default."),
-          media_path: z.string().optional().describe("Absolute path to a file to send as an attachment (image, document)"),
+          channel: z
+            .string()
+            .optional()
+            .describe("Channel name (telegram, slack). Omit to use default."),
+          media_path: z
+            .string()
+            .optional()
+            .describe(
+              "Absolute path to a file to send as an attachment (image, document)",
+            ),
         },
         async (args) => ({
-          content: [{ type: "text" as const, text: await handlers.sendMessage(args.text, args.channel, args.media_path) }],
+          content: [
+            {
+              type: "text" as const,
+              text: await handlers.sendMessage(
+                args.text,
+                args.channel,
+                args.media_path,
+              ),
+            },
+          ],
         }),
       ),
       tool(
         "list_messages",
         "Read recent chat history",
         {
-          limit: z.number().default(20).describe("Number of messages to return"),
+          limit: z
+            .number()
+            .default(20)
+            .describe("Number of messages to return"),
           room: z.string().optional().describe("Filter by room name"),
         },
         async (args) => ({
-          content: [{ type: "text" as const, text: await handlers.listMessages(args.limit, args.room) }],
+          content: [
+            {
+              type: "text" as const,
+              text: await handlers.listMessages(args.limit, args.room),
+            },
+          ],
         }),
       ),
       tool(
@@ -107,10 +205,18 @@ export function createNiaMcpServer() {
         "Browse past conversation sessions with previews. Returns session IDs you can pass to read_session.",
         {
           room: z.string().optional().describe("Filter by room name"),
-          limit: z.number().default(10).describe("Number of sessions to return"),
+          limit: z
+            .number()
+            .default(10)
+            .describe("Number of sessions to return"),
         },
         async (args) => ({
-          content: [{ type: "text" as const, text: await handlers.listSessions(args.limit, args.room) }],
+          content: [
+            {
+              type: "text" as const,
+              text: await handlers.listSessions(args.limit, args.room),
+            },
+          ],
         }),
       ),
       tool(
@@ -122,7 +228,16 @@ export function createNiaMcpServer() {
           limit: z.number().default(20).describe("Max results to return"),
         },
         async (args) => ({
-          content: [{ type: "text" as const, text: await handlers.searchMessages(args.query, args.limit, args.room) }],
+          content: [
+            {
+              type: "text" as const,
+              text: await handlers.searchMessages(
+                args.query,
+                args.limit,
+                args.room,
+              ),
+            },
+          ],
         }),
       ),
       tool(
@@ -132,28 +247,55 @@ export function createNiaMcpServer() {
           session_id: z.string().describe("Session ID to read"),
         },
         async (args) => ({
-          content: [{ type: "text" as const, text: await handlers.readSession(args.session_id) }],
+          content: [
+            {
+              type: "text" as const,
+              text: await handlers.readSession(args.session_id),
+            },
+          ],
         }),
       ),
       tool(
         "add_watch_channel",
         "Add or update a Slack watch channel. Watch channels receive ALL messages (not just @mentions) and act based on the behavior prompt. Takes effect on next message (hot-reloads).",
         {
-          name: z.string().describe("Slack channel key as 'channel_id#channel_name', e.g. 'C1234567890#ask-kay-thread-notifications'"),
-          behavior: z.string().describe("What to monitor and how to respond, e.g. 'Monitor thread notifications. Flag failures to #tech.'"),
+          name: z
+            .string()
+            .describe(
+              "Slack channel key as 'channel_id#channel_name', e.g. 'C1234567890#ask-kay-thread-notifications'",
+            ),
+          behavior: z
+            .string()
+            .describe(
+              "What to monitor and how to respond, e.g. 'Monitor thread notifications. Flag failures to #tech.'",
+            ),
         },
         async (args) => ({
-          content: [{ type: "text" as const, text: handlers.addWatchChannel(args.name, args.behavior) }],
+          content: [
+            {
+              type: "text" as const,
+              text: handlers.addWatchChannel(args.name, args.behavior),
+            },
+          ],
         }),
       ),
       tool(
         "remove_watch_channel",
         "Remove a Slack watch channel. Takes effect on next message (hot-reloads).",
         {
-          name: z.string().describe("Slack channel key to stop watching (e.g. 'C1234567890#ask-kay-thread-notifications')"),
+          name: z
+            .string()
+            .describe(
+              "Slack channel key to stop watching (e.g. 'C1234567890#ask-kay-thread-notifications')",
+            ),
         },
         async (args) => ({
-          content: [{ type: "text" as const, text: handlers.removeWatchChannel(args.name) }],
+          content: [
+            {
+              type: "text" as const,
+              text: handlers.removeWatchChannel(args.name),
+            },
+          ],
         }),
       ),
       tool(
@@ -163,7 +305,12 @@ export function createNiaMcpServer() {
           name: z.string().describe("Slack channel key to enable"),
         },
         async (args) => ({
-          content: [{ type: "text" as const, text: handlers.enableWatchChannel(args.name) }],
+          content: [
+            {
+              type: "text" as const,
+              text: handlers.enableWatchChannel(args.name),
+            },
+          ],
         }),
       ),
       tool(
@@ -173,17 +320,28 @@ export function createNiaMcpServer() {
           name: z.string().describe("Slack channel key to disable"),
         },
         async (args) => ({
-          content: [{ type: "text" as const, text: handlers.disableWatchChannel(args.name) }],
+          content: [
+            {
+              type: "text" as const,
+              text: handlers.disableWatchChannel(args.name),
+            },
+          ],
         }),
       ),
       tool(
         "add_rule",
         "Add a behavioral rule. Rules are loaded into every session and take effect without restart. Use for 'from now on' / 'always' / 'never' type instructions.",
         {
-          rule: z.string().describe("The rule to add (e.g. 'stamp updates: 1-2 lines max, no preamble')"),
+          rule: z
+            .string()
+            .describe(
+              "The rule to add (e.g. 'stamp updates: 1-2 lines max, no preamble')",
+            ),
         },
         async (args) => ({
-          content: [{ type: "text" as const, text: handlers.addRule(args.rule) }],
+          content: [
+            { type: "text" as const, text: handlers.addRule(args.rule) },
+          ],
         }),
       ),
       tool(
@@ -198,10 +356,17 @@ export function createNiaMcpServer() {
         "add_memory",
         "Save a concise factual memory for future reference. Proactively save personal facts (travel, schedule), work context (decisions, deadlines), and corrections — don't wait to be asked. RULES: Max 300 chars. One insight per entry. NO raw logs, NO transcripts, NO status dumps.",
         {
-          entry: z.string().max(300).describe("A single concise insight (max 300 chars, no raw logs or transcripts)"),
+          entry: z
+            .string()
+            .max(300)
+            .describe(
+              "A single concise insight (max 300 chars, no raw logs or transcripts)",
+            ),
         },
         async (args) => ({
-          content: [{ type: "text" as const, text: handlers.addMemory(args.entry) }],
+          content: [
+            { type: "text" as const, text: handlers.addMemory(args.entry) },
+          ],
         }),
       ),
       tool(

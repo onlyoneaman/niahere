@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Per-job model override** — jobs can now specify a model (`--model haiku`, `--model sonnet`) that overrides the agent model and global config. Enables cost savings by routing simple jobs to cheaper models. Priority: job model > agent model > config model. Supports CLI (`nia job add/update --model <model>`) and MCP tools.
+
 ### Fixed
 
 - **`nia job run` and `nia run` hang after completion** — background consolidation kept the event loop alive, preventing the process from exiting. Both commands now exit immediately after printing results.

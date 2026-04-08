@@ -32,9 +32,22 @@ function resolveCodexPath(): string {
   return candidates.find((p) => existsSync(p)) || "codex";
 }
 
-async function runJobWithCodex(fullPrompt: string, cwd: string, model: string): Promise<RunnerOutput> {
+async function runJobWithCodex(
+  fullPrompt: string,
+  cwd: string,
+  model: string,
+): Promise<RunnerOutput> {
   const codexPath = resolveCodexPath();
-  const args = [codexPath, "exec", fullPrompt, "-C", cwd, "--json", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox"];
+  const args = [
+    codexPath,
+    "exec",
+    fullPrompt,
+    "-C",
+    cwd,
+    "--json",
+    "--skip-git-repo-check",
+    "--dangerously-bypass-approvals-and-sandbox",
+  ];
   if (model && model !== "default") {
     args.splice(3, 0, "-m", model);
   }
@@ -58,14 +71,21 @@ async function runJobWithCodex(fullPrompt: string, cwd: string, model: string): 
       if (event.type === "thread.started" && event.thread_id) {
         sessionId = event.thread_id;
       }
-      if (event.type === "item.completed" && event.item?.type === "agent_message") {
+      if (
+        event.type === "item.completed" &&
+        event.item?.type === "agent_message"
+      ) {
         agentText = event.item.text || "";
       }
     } catch {}
   }
 
   if (exitCode !== 0) {
-    return { agentText, sessionId, error: stderr.trim() || `exit code ${exitCode}` };
+    return {
+      agentText,
+      sessionId,
+      error: stderr.trim() || `exit code ${exitCode}`,
+    };
   }
   return { agentText, sessionId };
 }
@@ -79,6 +99,7 @@ export async function runJobWithClaude(
   jobPrompt: string,
   cwd: string,
   onActivity?: ActivityCallback,
+  model?: string,
 ): Promise<RunnerOutput> {
   const sessionId = randomUUID();
 
@@ -98,6 +119,10 @@ export async function runJobWithClaude(
     permissionMode: "bypassPermissions",
     sessionId,
   };
+
+  if (model && model !== "default") {
+    options.model = model;
+  }
 
   const mcpServers = getMcpServers();
   if (mcpServers) {
@@ -126,7 +151,10 @@ export async function runJobWithClaude(
 
         if (message.type === "stream_event") {
           const event = msg.event;
-          if (event?.type === "content_block_start" && event.content_block?.type === "thinking") {
+          if (
+            event?.type === "content_block_start" &&
+            event.content_block?.type === "thinking"
+          ) {
             accumulatedThinking = "";
             lastThinkingLine = "";
             onActivity("thinking...");
@@ -179,7 +207,11 @@ export async function runJobWithClaude(
           agentText = (message as any).result || "";
         } else {
           const errors = (message as any).errors;
-          return { agentText: "", sessionId: actualSessionId, error: errors?.join(", ") || "unknown error" };
+          return {
+            agentText: "",
+            sessionId: actualSessionId,
+            error: errors?.join(", ") || "unknown error",
+          };
         }
       }
     }
@@ -216,7 +248,10 @@ export async function runTask(opts: TaskOptions): Promise<RunnerOutput> {
     if (output.error) {
       log.error({ task: opts.name, error: output.error }, "task failed");
     } else {
-      log.info({ task: opts.name, resultChars: output.agentText.length }, "task completed");
+      log.info(
+        { task: opts.name, resultChars: output.agentText.length },
+        "task completed",
+      );
     }
     return output;
   } finally {
@@ -229,7 +264,10 @@ export async function runTask(opts: TaskOptions): Promise<RunnerOutput> {
 // ---------------------------------------------------------------------------
 
 /** Build the working memory block for a stateful job. Returns empty string for stateless jobs. */
-export function buildWorkingMemory(jobName: string, stateless?: boolean): string {
+export function buildWorkingMemory(
+  jobName: string,
+  stateless?: boolean,
+): string {
   if (stateless) return "";
 
   const jobDir = join(getPaths().jobsDir, jobName);
@@ -264,7 +302,10 @@ Before finishing, update \`state.md\` with: what you did this run, what you noti
 // Public API
 // ---------------------------------------------------------------------------
 
-export async function runJob(job: JobInput, onActivity?: ActivityCallback): Promise<JobResult> {
+export async function runJob(
+  job: JobInput,
+  onActivity?: ActivityCallback,
+): Promise<JobResult> {
   const config = getConfig();
   const timestamp = new Date().toISOString();
   const startMs = performance.now();
@@ -301,11 +342,20 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
     // Working memory: give stateful jobs a persistent workspace
     jobPrompt += buildWorkingMemory(job.name, job.stateless);
 
+    // Model priority: job.model > agent.model > config.model
+    const resolvedModel = job.model || agentModel || config.model;
+
     if (config.runner === "codex") {
       const fullPrompt = `${systemPrompt}\n\n---\n\n${jobPrompt}`;
-      output = await runJobWithCodex(fullPrompt, cwd, agentModel || config.model);
+      output = await runJobWithCodex(fullPrompt, cwd, resolvedModel);
     } else {
-      output = await runJobWithClaude(systemPrompt, jobPrompt, cwd, onActivity);
+      output = await runJobWithClaude(
+        systemPrompt,
+        jobPrompt,
+        cwd,
+        onActivity,
+        resolvedModel,
+      );
     }
 
     const duration_ms = Math.round(performance.now() - startMs);
@@ -344,9 +394,11 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
 
     // Memory consolidation — review what the job learned (fire-and-forget)
     if (ok && result.result) {
-      import("./consolidator").then(({ consolidateJobRun }) => {
-        consolidateJobRun(job.name, jobPrompt, result.result).catch(() => {});
-      }).catch(() => {});
+      import("./consolidator")
+        .then(({ consolidateJobRun }) => {
+          consolidateJobRun(job.name, jobPrompt, result.result).catch(() => {});
+        })
+        .catch(() => {});
     }
 
     return result;

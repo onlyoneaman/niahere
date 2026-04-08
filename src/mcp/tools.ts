@@ -3,7 +3,12 @@ import type { ScheduleType } from "../types";
 import { basename, join } from "path";
 import { Job, Message, Session } from "../db/models";
 import { computeInitialNextRun } from "../core/scheduler";
-import { getConfig, readRawConfig, updateRawConfig, writeRawConfig } from "../utils/config";
+import {
+  getConfig,
+  readRawConfig,
+  updateRawConfig,
+  writeRawConfig,
+} from "../utils/config";
 import { getPaths } from "../utils/paths";
 import { getChannel } from "../channels/registry";
 import { log } from "../utils/log";
@@ -23,6 +28,7 @@ export async function addJob(args: {
   schedule_type?: ScheduleType;
   always?: boolean;
   agent?: string;
+  model?: string;
   stateless?: boolean;
 }): Promise<string> {
   const scheduleType = args.schedule_type || "cron";
@@ -30,10 +36,25 @@ export async function addJob(args: {
   const stateless = args.stateless || false;
   const config = getConfig();
 
-  const nextRunAt = computeInitialNextRun(scheduleType, args.schedule, config.timezone);
-  await Job.create(args.name, args.schedule, args.prompt, always, scheduleType, nextRunAt, args.agent, stateless);
+  const nextRunAt = computeInitialNextRun(
+    scheduleType,
+    args.schedule,
+    config.timezone,
+  );
+  await Job.create(
+    args.name,
+    args.schedule,
+    args.prompt,
+    always,
+    scheduleType,
+    nextRunAt,
+    args.agent,
+    stateless,
+    args.model,
+  );
   const agentNote = args.agent ? ` [agent: ${args.agent}]` : "";
-  return `Job "${args.name}" created (${scheduleType}: ${args.schedule})${agentNote}. Next run: ${nextRunAt.toISOString()}`;
+  const modelNote = args.model ? ` [model: ${args.model}]` : "";
+  return `Job "${args.name}" created (${scheduleType}: ${args.schedule})${agentNote}${modelNote}. Next run: ${nextRunAt.toISOString()}`;
 }
 
 export async function updateJob(args: {
@@ -42,18 +63,29 @@ export async function updateJob(args: {
   prompt?: string;
   always?: boolean;
   agent?: string | null;
+  model?: string | null;
   stateless?: boolean;
   schedule_type?: "cron" | "interval" | "once";
 }): Promise<string> {
-  const fields: Partial<{ schedule: string; prompt: string; always: boolean; stateless: boolean; agent: string | null; scheduleType: "cron" | "interval" | "once" }> = {};
+  const fields: Partial<{
+    schedule: string;
+    prompt: string;
+    always: boolean;
+    stateless: boolean;
+    model: string | null;
+    agent: string | null;
+    scheduleType: "cron" | "interval" | "once";
+  }> = {};
   if (args.schedule) fields.schedule = args.schedule;
   if (args.prompt) fields.prompt = args.prompt;
   if (args.always !== undefined) fields.always = args.always;
   if (args.stateless !== undefined) fields.stateless = args.stateless;
+  if (args.model !== undefined) fields.model = args.model;
   if (args.agent !== undefined) fields.agent = args.agent;
   if (args.schedule_type) fields.scheduleType = args.schedule_type;
 
-  if (Object.keys(fields).length === 0) return "Nothing to update. Pass at least one field (schedule, prompt, always, stateless, agent, or schedule_type).";
+  if (Object.keys(fields).length === 0)
+    return "Nothing to update. Pass at least one field (schedule, prompt, always, stateless, model, agent, or schedule_type).";
 
   const updated = await Job.update(args.name, fields);
   if (!updated) return `Job "${args.name}" not found.`;
@@ -72,7 +104,11 @@ export async function enableJob(name: string): Promise<string> {
   const job = await Job.get(name);
   if (job) {
     const config = getConfig();
-    const nextRun = computeInitialNextRun(job.scheduleType, job.schedule, config.timezone);
+    const nextRun = computeInitialNextRun(
+      job.scheduleType,
+      job.schedule,
+      config.timezone,
+    );
     const { getSql } = await import("../db/connection");
     await getSql()`UPDATE jobs SET next_run_at = ${nextRun} WHERE name = ${name}`;
   }
@@ -97,10 +133,17 @@ export async function runJobNow(name: string): Promise<string> {
 export function guessMime(filePath: string): string {
   const ext = filePath.split(".").pop()?.toLowerCase();
   const map: Record<string, string> = {
-    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
-    gif: "image/gif", webp: "image/webp",
-    txt: "text/plain", md: "text/markdown", csv: "text/csv",
-    json: "application/json", pdf: "application/pdf", html: "text/html",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+    txt: "text/plain",
+    md: "text/markdown",
+    csv: "text/csv",
+    json: "application/json",
+    pdf: "application/pdf",
+    html: "text/html",
   };
   return map[ext || ""] || "application/octet-stream";
 }
@@ -113,7 +156,8 @@ async function sendDirect(target: string, text: string): Promise<void> {
     const token = config.channels.telegram.bot_token;
     const chatId = config.channels.telegram.chat_id;
     if (!token) throw new Error("Telegram not configured (no bot token)");
-    if (!chatId) throw new Error("No Telegram chat ID — send a message to the bot first");
+    if (!chatId)
+      throw new Error("No Telegram chat ID — send a message to the bot first");
     const { Bot } = await import("grammy");
     const bot = new Bot(token);
     await bot.api.sendMessage(chatId, text);
@@ -122,9 +166,13 @@ async function sendDirect(target: string, text: string): Promise<void> {
 
   if (target === "slack") {
     const token = config.channels.slack.bot_token;
-    const recipient = config.channels.slack.channel_id || config.channels.slack.dm_user_id;
+    const recipient =
+      config.channels.slack.channel_id || config.channels.slack.dm_user_id;
     if (!token) throw new Error("Slack not configured (no bot token)");
-    if (!recipient) throw new Error("No Slack recipient — DM the bot first, or set slack_channel_id in config");
+    if (!recipient)
+      throw new Error(
+        "No Slack recipient — DM the bot first, or set slack_channel_id in config",
+      );
     const { App } = await import("@slack/bolt");
     const app = new App({ token, signingSecret: "unused" });
     await app.client.chat.postMessage({ token, channel: recipient, text });
@@ -135,14 +183,20 @@ async function sendDirect(target: string, text: string): Promise<void> {
 }
 
 /** Send media directly via API (no started channel). */
-async function sendMediaDirect(target: string, data: Buffer, mimeType: string, filename?: string): Promise<void> {
+async function sendMediaDirect(
+  target: string,
+  data: Buffer,
+  mimeType: string,
+  filename?: string,
+): Promise<void> {
   const config = getConfig();
 
   if (target === "telegram") {
     const token = config.channels.telegram.bot_token;
     const chatId = config.channels.telegram.chat_id;
     if (!token) throw new Error("Telegram not configured (no bot token)");
-    if (!chatId) throw new Error("No Telegram chat ID — send a message to the bot first");
+    if (!chatId)
+      throw new Error("No Telegram chat ID — send a message to the bot first");
     const { Bot, InputFile } = await import("grammy");
     const bot = new Bot(token);
     const file = new InputFile(data, filename);
@@ -156,9 +210,13 @@ async function sendMediaDirect(target: string, data: Buffer, mimeType: string, f
 
   if (target === "slack") {
     const token = config.channels.slack.bot_token;
-    const recipient = config.channels.slack.channel_id || config.channels.slack.dm_user_id;
+    const recipient =
+      config.channels.slack.channel_id || config.channels.slack.dm_user_id;
     if (!token) throw new Error("Slack not configured (no bot token)");
-    if (!recipient) throw new Error("No Slack recipient — DM the bot first, or set slack_channel_id in config");
+    if (!recipient)
+      throw new Error(
+        "No Slack recipient — DM the bot first, or set slack_channel_id in config",
+      );
     const { App } = await import("@slack/bolt");
     const app = new App({ token, signingSecret: "unused" });
     await app.client.filesUploadV2({
@@ -172,7 +230,11 @@ async function sendMediaDirect(target: string, data: Buffer, mimeType: string, f
   throw new Error(`Channel "${target}" not configured`);
 }
 
-export async function sendMessage(text: string, channelName?: string, mediaPath?: string): Promise<string> {
+export async function sendMessage(
+  text: string,
+  channelName?: string,
+  mediaPath?: string,
+): Promise<string> {
   const config = getConfig();
   const target = channelName || config.channels.default;
 
@@ -182,7 +244,8 @@ export async function sendMessage(text: string, channelName?: string, mediaPath?
   try {
     // Handle media attachment if provided
     if (mediaPath) {
-      if (!existsSync(mediaPath)) return `Failed to send: file not found: ${mediaPath}`;
+      if (!existsSync(mediaPath))
+        return `Failed to send: file not found: ${mediaPath}`;
       const data = readFileSync(mediaPath);
       const mimeType = guessMime(mediaPath);
       const filename = basename(mediaPath);
@@ -225,7 +288,9 @@ export async function sendMessage(text: string, channelName?: string, mediaPath?
         const fullRoom = `${room}-${idx}`;
         const sessionId = await Session.getLatest(fullRoom);
         if (sessionId) {
-          const content = mediaPath ? `${text} [media: ${basename(mediaPath)}]` : text;
+          const content = mediaPath
+            ? `${text} [media: ${basename(mediaPath)}]`
+            : text;
           await Message.save({
             sessionId,
             room: fullRoom,
@@ -256,7 +321,11 @@ export async function listSessions(limit = 10, room?: string): Promise<string> {
   return JSON.stringify(sessions, null, 2);
 }
 
-export async function searchMessages(query: string, limit = 20, room?: string): Promise<string> {
+export async function searchMessages(
+  query: string,
+  limit = 20,
+  room?: string,
+): Promise<string> {
   const results = await Message.search(query, limit, room);
   if (results.length === 0) return "No matching messages found.";
   return JSON.stringify(results, null, 2);
@@ -280,7 +349,10 @@ export function addWatchChannel(name: string, behavior: string): string {
   const raw = readRawConfig();
   const channels = (raw.channels || {}) as Record<string, unknown>;
   const slack = (channels.slack || {}) as Record<string, unknown>;
-  const watch = { ...((slack.watch || {}) as Record<string, unknown>), [name]: { behavior, enabled: true } };
+  const watch = {
+    ...((slack.watch || {}) as Record<string, unknown>),
+    [name]: { behavior, enabled: true },
+  };
   updateRawConfig({ channels: { slack: { watch } } });
   return `Watch channel "${name}" added (enabled). Takes effect on next message.`;
 }
@@ -326,7 +398,9 @@ export function readMemory(): string {
   if (!existsSync(memoryPath)) return "No memories saved yet.";
   const content = readFileSync(memoryPath, "utf8").trim();
   // Extract just the entries, skip the header/instructions
-  const lines = content.split("\n").filter((l) => l.startsWith("- ") || l.startsWith("## "));
+  const lines = content
+    .split("\n")
+    .filter((l) => l.startsWith("- ") || l.startsWith("## "));
   if (lines.length === 0) return "No memories saved yet.";
   return lines.join("\n");
 }
@@ -335,13 +409,21 @@ export function addMemory(entry: string): string {
   // Guard: reject raw logs, transcripts, and overly long entries
   const trimmed = entry.trim();
   if (!trimmed) return "Rejected: empty entry.";
-  if (trimmed.length > 300) return "Rejected: too long (max 300 chars). Distill to a single concise insight.";
-  if (trimmed.includes("[Thread context]") || trimmed.includes("[Current messag")) return "Rejected: no raw conversation transcripts.";
-  if (trimmed.split("\n").length > 5) return "Rejected: too many lines. One concise insight per memory.";
+  if (trimmed.length > 300)
+    return "Rejected: too long (max 300 chars). Distill to a single concise insight.";
+  if (
+    trimmed.includes("[Thread context]") ||
+    trimmed.includes("[Current messag")
+  )
+    return "Rejected: no raw conversation transcripts.";
+  if (trimmed.split("\n").length > 5)
+    return "Rejected: too many lines. One concise insight per memory.";
 
   const { selfDir } = getPaths();
   const memoryPath = join(selfDir, "memory.md");
-  const existing = existsSync(memoryPath) ? readFileSync(memoryPath, "utf8") : "";
+  const existing = existsSync(memoryPath)
+    ? readFileSync(memoryPath, "utf8")
+    : "";
 
   // TODO: add semantic dedup later (embeddings or similar)
 
@@ -361,7 +443,12 @@ export function listAgents(): string {
   const agents = scanAgents();
   if (agents.length === 0) return "No agents found.";
   return JSON.stringify(
-    agents.map((a) => ({ name: a.name, description: a.description, model: a.model, source: a.source })),
+    agents.map((a) => ({
+      name: a.name,
+      description: a.description,
+      model: a.model,
+      source: a.source,
+    })),
     null,
     2,
   );
