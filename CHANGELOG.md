@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Optimization loop skill** — the Karpathy Loop / autoresearch pattern as a reusable skill. Covers the full discipline: frozen contract + rubric, pairwise scoring with anti-bias controls, staged exploration strategy, workspace layout, results audit trail (JSONL), resumability, and scoring integrity rules. Domain-agnostic — works for code benchmarks, prompt quality, copy effectiveness, or any scorable target.
+- **Optimize skill** — orchestration layer for scheduling optimization runs. Handles proactive suggestions after immediate work, spec confirmation with user, job prompt composition, one-shot job scheduling, and result delivery. References optimization-loop for the loop discipline.
+
 ### Fixed
 
 - **False "telegram: unreachable" alerts** — health check fetches to Telegram and Slack now retry 3 times with Fibonacci backoff (1s, 1s, 2s) and a 5s timeout per attempt. Transient network blips (macOS sleep, DNS hiccups) no longer trigger the LLM recovery agent. Unreachable channels report `warn` instead of `fail`, reserving `fail` for real auth errors.
