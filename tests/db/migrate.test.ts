@@ -1,9 +1,14 @@
-import { describe, expect, test, beforeAll } from "bun:test";
+import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { getSql } from "../../src/db/connection";
 import { runMigrations } from "../../src/db/migrate";
+import { setupTestDb, teardownTestDb } from "./setup";
 
 beforeAll(async () => {
-  await runMigrations();
+  await setupTestDb();
+});
+
+afterAll(async () => {
+  await teardownTestDb();
 });
 
 describe("runMigrations", () => {

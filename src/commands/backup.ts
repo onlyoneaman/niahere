@@ -57,9 +57,25 @@ export async function createBackup(silent = false): Promise<string> {
   if (dbUrl) {
     const dumpPath = join(home, "tmp", "db-backup.sql");
     mkdirSync(join(home, "tmp"), { recursive: true });
-    const pg = Bun.spawn(["pg_dump", dbUrl, "-f", dumpPath], {
+    // Parse URL to avoid exposing password in process list (visible via ps)
+    const url = new URL(dbUrl);
+    const dbName = decodeURIComponent(url.pathname.replace(/^\//, ""));
+    const pgArgs = ["pg_dump", "-f", dumpPath];
+    if (url.hostname) pgArgs.push("-h", url.hostname);
+    if (url.port) pgArgs.push("-p", url.port);
+    if (url.username) pgArgs.push("-U", decodeURIComponent(url.username));
+    if (dbName) pgArgs.push("-d", dbName);
+    const pgEnv: Record<string, string> = { ...process.env } as Record<
+      string,
+      string
+    >;
+    if (url.password) pgEnv.PGPASSWORD = decodeURIComponent(url.password);
+    const sslmode = url.searchParams.get("sslmode");
+    if (sslmode) pgEnv.PGSSLMODE = sslmode;
+    const pg = Bun.spawn(pgArgs, {
       stdout: "pipe",
       stderr: "pipe",
+      env: pgEnv,
     });
     const exitCode = await pg.exited;
     if (exitCode === 0 && existsSync(dumpPath)) {
@@ -71,7 +87,9 @@ export async function createBackup(silent = false): Promise<string> {
       dbDumped = true;
     } else if (!silent) {
       const stderr = await new Response(pg.stderr).text();
-      console.log(`  ⚠ db dump skipped: ${stderr.trim() || `exit ${exitCode}`}`);
+      console.log(
+        `  ⚠ db dump skipped: ${stderr.trim() || `exit ${exitCode}`}`,
+      );
     }
   }
 
@@ -94,8 +112,12 @@ export async function createBackup(silent = false): Promise<string> {
 
   // Clean up temp db dump
   if (dbDumped) {
-    try { unlinkSync(join(home, "db-backup.sql")); } catch {}
-    try { unlinkSync(join(home, "tmp", "db-backup.sql")); } catch {}
+    try {
+      unlinkSync(join(home, "db-backup.sql"));
+    } catch {}
+    try {
+      unlinkSync(join(home, "tmp", "db-backup.sql"));
+    } catch {}
   }
 
   const size = statSync(outPath).size;

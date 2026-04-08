@@ -8,7 +8,15 @@ import { randomUUID } from "crypto";
 import { buildSystemPrompt, getSessionContext } from "./identity";
 import { getAgentDefinitions } from "../core/agents";
 import { Session, Message, ActiveEngine } from "../db/models";
-import type { Attachment, SendResult, StreamCallback, ActivityCallback, SendCallbacks, ChatEngine, EngineOptions } from "../types";
+import type {
+  Attachment,
+  SendResult,
+  StreamCallback,
+  ActivityCallback,
+  SendCallbacks,
+  ChatEngine,
+  EngineOptions,
+} from "../types";
 import { truncate, formatToolUse } from "../utils/format-activity";
 import { consolidateSession } from "../core/consolidator";
 import { summarizeSession } from "../core/summarizer";
@@ -25,10 +33,19 @@ interface SDKUserMessage {
 }
 
 /** Convert provider-agnostic attachments to Anthropic content blocks. */
-export function buildContentBlocks(text: string, attachments?: Attachment[]): MessageParam["content"] {
+export function buildContentBlocks(
+  text: string,
+  attachments?: Attachment[],
+): MessageParam["content"] {
   if (!attachments?.length) return text;
 
-  const blocks: Array<{ type: "text"; text: string } | { type: "image"; source: { type: "base64"; media_type: string; data: string } }> = [];
+  const blocks: Array<
+    | { type: "text"; text: string }
+    | {
+        type: "image";
+        source: { type: "base64"; media_type: string; data: string };
+      }
+  > = [];
 
   for (const att of attachments) {
     if (att.type === "image") {
@@ -94,6 +111,7 @@ class MessageStream {
 
 interface PendingResult {
   userMessage: string;
+  userSaved: boolean;
   onStream: StreamCallback | null;
   onActivity: ActivityCallback | null;
   accumulatedText: string;
@@ -103,15 +121,22 @@ interface PendingResult {
   reject: (error: Error) => void;
 }
 
-
 function sessionFileExists(sessionId: string, cwd: string): boolean {
   // SDK stores sessions at ~/.claude/projects/<encoded-cwd>/<session-id>.jsonl
   const encoded = cwd.replace(/\//g, "-");
-  const sessionFile = join(homedir(), ".claude", "projects", encoded, `${sessionId}.jsonl`);
+  const sessionFile = join(
+    homedir(),
+    ".claude",
+    "projects",
+    encoded,
+    `${sessionId}.jsonl`,
+  );
   return existsSync(sessionFile);
 }
 
-export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine> {
+export async function createChatEngine(
+  opts: EngineOptions,
+): Promise<ChatEngine> {
   const { room, channel, resume, mcpServers } = opts;
   let systemPrompt = buildSystemPrompt("chat", channel);
 
@@ -156,7 +181,10 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
     idleTimer = setTimeout(async () => {
       if (pending) {
         // Don't tear down while a request is in flight
-        log.warn({ room }, "idle timer fired while request pending, skipping teardown");
+        log.warn(
+          { room },
+          "idle timer fired while request pending, skipping teardown",
+        );
         return;
       }
       // Memory consolidation + session summary before "sleep"
@@ -165,7 +193,10 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
           log.error({ err, room }, "consolidation failed during idle teardown");
         });
         summarizeSession(sessionId, room).catch((err) => {
-          log.error({ err, room }, "session summary failed during idle teardown");
+          log.error(
+            { err, room },
+            "session summary failed during idle teardown",
+          );
         });
       }
       teardown();
@@ -185,7 +216,10 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
     longRunningTimer = setTimeout(() => {
       if (pending) {
         longRunningWarned = true;
-        log.warn({ room, elapsed: LONG_RUNNING_WARN / 1000 }, "engine request running for 30+ minutes");
+        log.warn(
+          { room, elapsed: LONG_RUNNING_WARN / 1000 },
+          "engine request running for 30+ minutes",
+        );
       }
     }, LONG_RUNNING_WARN);
   }
@@ -250,7 +284,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
               await Session.create(sessionId, room);
             }
 
-            if (pending) {
+            if (pending && !pending.userSaved) {
               await Message.save({
                 sessionId,
                 room,
@@ -258,6 +292,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
                 content: pending.userMessage,
                 isFromAgent: false,
               });
+              pending.userSaved = true;
               messageCount++;
             }
           }
@@ -279,7 +314,10 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
                 if (lines.length > 1) {
                   // Show the last complete line (not the partial one being typed)
                   const completeLine = lines[lines.length - 2]?.trim();
-                  if (completeLine && completeLine !== pending.lastThinkingLine) {
+                  if (
+                    completeLine &&
+                    completeLine !== pending.lastThinkingLine
+                  ) {
                     pending.lastThinkingLine = completeLine;
                     pending.onActivity?.(truncate(completeLine, 70));
                   }
@@ -364,15 +402,26 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
                 try {
                   messageId = await Message.save(saveParams);
                 } catch {
-                  messageId = await Message.save({ ...saveParams, metadata: undefined });
+                  messageId = await Message.save({
+                    ...saveParams,
+                    metadata: undefined,
+                  });
                 }
                 await Session.touch(sessionId);
-                Session.accumulateMetadata(sessionId, { ...metadata, channel }).catch(() => {});
+                Session.accumulateMetadata(sessionId, {
+                  ...metadata,
+                  channel,
+                }).catch(() => {});
               }
 
               await ActiveEngine.unregister(room);
               clearLongRunningTimer();
-              pending.resolve({ result: resultText, costUsd, turns, messageId });
+              pending.resolve({
+                result: resultText,
+                costUsd,
+                turns,
+                messageId,
+              });
               pending = null;
               resetIdleTimer();
             } else {
@@ -390,9 +439,16 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
         // Stream ended without a result — subprocess exited or was killed
         if (pending) {
           const partial = pending.accumulatedText;
-          log.error({ room, partialChars: partial.length }, "query stream ended without result, rejecting pending request");
+          log.error(
+            { room, partialChars: partial.length },
+            "query stream ended without result, rejecting pending request",
+          );
           await ActiveEngine.unregister(room).catch(() => {});
-          pending.reject(new Error(`stream ended without result (${partial.length} chars accumulated)`));
+          pending.reject(
+            new Error(
+              `stream ended without result (${partial.length} chars accumulated)`,
+            ),
+          );
           pending = null;
         }
       } catch (err) {
@@ -419,7 +475,11 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
       return room;
     },
 
-    async send(userMessage: string, callbacks?: SendCallbacks, attachments?: Attachment[]) {
+    async send(
+      userMessage: string,
+      callbacks?: SendCallbacks,
+      attachments?: Attachment[],
+    ) {
       // Clear idle timer — engine is not idle while processing a request
       clearIdleTimer();
       startLongRunningTimer();
@@ -430,9 +490,26 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
         startQuery();
       }
 
+      // Save user message to DB if session already exists (resumed session).
+      // For new sessions, the init handler saves it once sessionId is known.
+      let userSaved = false;
+      if (sessionId) {
+        await Message.save({
+          sessionId,
+          room,
+          sender: "user",
+          content: userMessage,
+          isFromAgent: false,
+        });
+        await Session.touch(sessionId);
+        userSaved = true;
+        messageCount++;
+      }
+
       return new Promise<SendResult>((resolve, reject) => {
         pending = {
           userMessage,
+          userSaved,
           onStream: callbacks?.onStream || null,
           onActivity: callbacks?.onActivity || null,
           accumulatedText: "",

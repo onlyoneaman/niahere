@@ -26,7 +26,9 @@ export async function unregister(room: string): Promise<void> {
   await sql`DELETE FROM active_engines WHERE room = ${room}`;
 }
 
-export async function clearStale(maxAgeMs: number = 5 * 60 * 1000): Promise<void> {
+export async function clearStale(
+  maxAgeMs: number = 5 * 60 * 1000,
+): Promise<void> {
   const sql = getSql();
   await sql`DELETE FROM active_engines WHERE last_ping < NOW() - ${maxAgeMs / 1000}::int * interval '1 second'`;
 }
@@ -38,8 +40,8 @@ export async function clearAll(): Promise<void> {
 
 export async function list(): Promise<ActiveEngine[]> {
   const sql = getSql();
-  await clearStale();
-  const rows = await sql`SELECT room, channel, started_at, last_ping FROM active_engines ORDER BY started_at`;
+  const rows =
+    await sql`SELECT room, channel, started_at, last_ping FROM active_engines ORDER BY started_at`;
   return rows.map((r) => ({
     room: r.room,
     channel: r.channel,

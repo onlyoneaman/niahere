@@ -1,22 +1,22 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
-import { getSql, closeDb } from "../../src/db/connection";
-import { runMigrations } from "../../src/db/migrate";
+import { getSql } from "../../src/db/connection";
 import * as Session from "../../src/db/models/session";
 import * as Message from "../../src/db/models/message";
 import * as ActiveEngine from "../../src/db/models/active_engine";
 import * as Job from "../../src/db/models/job";
+import { setupTestDb, teardownTestDb } from "./setup";
 
 const TEST_ROOM = `test-room-${Date.now()}`;
 
 beforeAll(async () => {
-  await runMigrations();
+  await setupTestDb();
 });
 
 afterAll(async () => {
   const sql = getSql();
   await sql`DELETE FROM messages WHERE room = ${TEST_ROOM}`;
   await sql`DELETE FROM sessions WHERE room = ${TEST_ROOM}`;
-  await closeDb();
+  await teardownTestDb();
 });
 
 describe("Session model", () => {
@@ -50,12 +50,15 @@ describe("Session model", () => {
     const id = `test-touch-${Date.now()}`;
     await Session.create(id, TEST_ROOM);
 
-    const [before] = await sql`SELECT updated_at FROM sessions WHERE id = ${id}`;
+    const [before] =
+      await sql`SELECT updated_at FROM sessions WHERE id = ${id}`;
     await new Promise((r) => setTimeout(r, 10));
     await Session.touch(id);
     const [after] = await sql`SELECT updated_at FROM sessions WHERE id = ${id}`;
 
-    expect(new Date(after.updated_at).getTime()).toBeGreaterThan(new Date(before.updated_at).getTime());
+    expect(new Date(after.updated_at).getTime()).toBeGreaterThan(
+      new Date(before.updated_at).getTime(),
+    );
   });
 });
 
@@ -110,9 +113,27 @@ describe("Message model", () => {
     const sessionId = `test-order-${Date.now()}`;
     await Session.create(sessionId, TEST_ROOM);
 
-    await Message.save({ sessionId, room: TEST_ROOM, sender: "user", content: "first", isFromAgent: false });
-    await Message.save({ sessionId, room: TEST_ROOM, sender: "nia", content: "second", isFromAgent: true });
-    await Message.save({ sessionId, room: TEST_ROOM, sender: "user", content: "third", isFromAgent: false });
+    await Message.save({
+      sessionId,
+      room: TEST_ROOM,
+      sender: "user",
+      content: "first",
+      isFromAgent: false,
+    });
+    await Message.save({
+      sessionId,
+      room: TEST_ROOM,
+      sender: "nia",
+      content: "second",
+      isFromAgent: true,
+    });
+    await Message.save({
+      sessionId,
+      room: TEST_ROOM,
+      sender: "user",
+      content: "third",
+      isFromAgent: false,
+    });
 
     const rows = await sql`
       SELECT content FROM messages
@@ -185,8 +206,20 @@ describe("Message.getBySession", () => {
   test("returns messages for a session in chronological order", async () => {
     const sessionId = `test-bysession-${Date.now()}`;
     await Session.create(sessionId, TEST_ROOM);
-    await Message.save({ sessionId, room: TEST_ROOM, sender: "user", content: "msg1", isFromAgent: false });
-    await Message.save({ sessionId, room: TEST_ROOM, sender: "nia", content: "msg2", isFromAgent: true });
+    await Message.save({
+      sessionId,
+      room: TEST_ROOM,
+      sender: "user",
+      content: "msg1",
+      isFromAgent: false,
+    });
+    await Message.save({
+      sessionId,
+      room: TEST_ROOM,
+      sender: "nia",
+      content: "msg2",
+      isFromAgent: true,
+    });
 
     const messages = await Message.getBySession(sessionId);
     expect(messages).toHaveLength(2);
@@ -250,7 +283,15 @@ describe("Job model", () => {
 
   test("create with agent and get", async () => {
     const name = TEST_JOB + "-agent";
-    await Job.create(name, "*/5 * * * *", "do something", false, "cron", undefined, "marketer");
+    await Job.create(
+      name,
+      "*/5 * * * *",
+      "do something",
+      false,
+      "cron",
+      undefined,
+      "marketer",
+    );
     const job = await Job.get(name);
     expect(job).not.toBeNull();
     expect(job!.agent).toBe("marketer");
@@ -263,7 +304,16 @@ describe("Job model", () => {
 
   test("create with stateless flag", async () => {
     const name = TEST_JOB + "-stateless";
-    await Job.create(name, "*/5 * * * *", "fire and forget", false, "cron", undefined, undefined, true);
+    await Job.create(
+      name,
+      "*/5 * * * *",
+      "fire and forget",
+      false,
+      "cron",
+      undefined,
+      undefined,
+      true,
+    );
     const job = await Job.get(name);
     expect(job).not.toBeNull();
     expect(job!.stateless).toBe(true);
@@ -293,7 +343,10 @@ describe("Job model", () => {
   });
 
   test("update changes fields", async () => {
-    const updated = await Job.update(TEST_JOB, { enabled: false, prompt: "updated prompt" });
+    const updated = await Job.update(TEST_JOB, {
+      enabled: false,
+      prompt: "updated prompt",
+    });
     expect(updated).toBe(true);
 
     const job = await Job.get(TEST_JOB);

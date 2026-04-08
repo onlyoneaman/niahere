@@ -22,8 +22,11 @@ import { runTask } from "./runner";
 import { log } from "../utils/log";
 import type { SessionMessage } from "../types";
 
-/** Track sessions already consolidated to prevent double runs. */
-const consolidated = new Set<string>();
+/** Bounded dedup: sessionId → message count at last consolidation. Prevents re-processing
+ *  the same messages while allowing re-consolidation when new turns arrive. */
+const processedCounts = new Map<string, number>();
+const inFlight = new Set<string>();
+const MAX_TRACKED = 500;
 
 /** Max messages to include in transcript (most recent). Keeps prompt size bounded. */
 const MAX_TRANSCRIPT_MESSAGES = 50;
@@ -37,11 +40,15 @@ function shouldSkip(room: string): boolean {
 function formatTranscript(messages: SessionMessage[]): string {
   const recent = messages.slice(-MAX_TRANSCRIPT_MESSAGES);
   const skipped = messages.length - recent.length;
-  const prefix = skipped > 0 ? `[...${skipped} earlier messages omitted]\n\n` : "";
+  const prefix =
+    skipped > 0 ? `[...${skipped} earlier messages omitted]\n\n` : "";
 
-  return prefix + recent
-    .map((m) => `[${m.sender}] (${m.createdAt}): ${m.content.slice(0, 2000)}`)
-    .join("\n\n");
+  return (
+    prefix +
+    recent
+      .map((m) => `[${m.sender}] (${m.createdAt}): ${m.content.slice(0, 2000)}`)
+      .join("\n\n")
+  );
 }
 
 /** Build the extraction prompt from a conversation transcript. */
@@ -80,7 +87,10 @@ Do NOT message the user about this. Save silently and report a brief summary of 
 }
 
 /** Run the consolidation agent loop. */
-async function runConsolidation(transcript: string, source: string): Promise<void> {
+async function runConsolidation(
+  transcript: string,
+  source: string,
+): Promise<void> {
   await runTask({
     name: "consolidator",
     prompt: buildConsolidationPrompt(transcript, source),
@@ -91,21 +101,42 @@ async function runConsolidation(transcript: string, source: string): Promise<voi
  * Consolidate a chat session's conversation into memories.
  * Called when a chat engine goes idle or is explicitly closed.
  */
-export async function consolidateSession(sessionId: string, room: string): Promise<void> {
+export async function consolidateSession(
+  sessionId: string,
+  room: string,
+): Promise<void> {
   if (shouldSkip(room)) return;
-  if (consolidated.has(sessionId)) return;
-  consolidated.add(sessionId);
+  if (inFlight.has(sessionId)) return;
 
   try {
     const messages = await Message.getBySession(sessionId);
     if (messages.length < 2) return;
 
-    log.info({ sessionId, room, messageCount: messages.length }, "consolidator: extracting memories from chat");
+    // Skip if already processed this exact message count
+    if (processedCounts.get(sessionId) === messages.length) return;
+
+    inFlight.add(sessionId);
+
+    log.info(
+      { sessionId, room, messageCount: messages.length },
+      "consolidator: extracting memories from chat",
+    );
 
     const transcript = formatTranscript(messages);
     await runConsolidation(transcript, `chat session idle — ${room}`);
+
+    // Mark as processed only on success
+    processedCounts.set(sessionId, messages.length);
+
+    // Evict oldest entries when over cap
+    if (processedCounts.size > MAX_TRACKED) {
+      const firstKey = processedCounts.keys().next().value;
+      if (firstKey) processedCounts.delete(firstKey);
+    }
   } catch (err) {
     log.error({ err, sessionId, room }, "consolidator: chat extraction failed");
+  } finally {
+    inFlight.delete(sessionId);
   }
 }
 
@@ -113,7 +144,11 @@ export async function consolidateSession(sessionId: string, room: string): Promi
  * Consolidate a job run's output into memories.
  * Called after a job completes in the runner.
  */
-export async function consolidateJobRun(jobName: string, jobPrompt: string, result: string): Promise<void> {
+export async function consolidateJobRun(
+  jobName: string,
+  jobPrompt: string,
+  result: string,
+): Promise<void> {
   // Skip if the job itself is the consolidator (prevent infinite loop)
   if (jobName === "memory-consolidation") return;
 
@@ -123,7 +158,10 @@ export async function consolidateJobRun(jobName: string, jobPrompt: string, resu
   if (result.length < 50) return;
 
   try {
-    log.info({ jobName, resultChars: result.length }, "consolidator: extracting memories from job");
+    log.info(
+      { jobName, resultChars: result.length },
+      "consolidator: extracting memories from job",
+    );
     await runConsolidation(transcript, `job run — ${jobName}`);
   } catch (err) {
     log.error({ err, jobName }, "consolidator: job extraction failed");

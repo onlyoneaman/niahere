@@ -9,6 +9,11 @@
 
 ### Fixed
 
+- **Multi-turn user messages not persisted** — in live chat sessions, only the first user message was saved to the database. Subsequent messages in the same session were lost, corrupting history, search, summaries, and memory consolidation. Now saved in `send()` before pushing to the stream.
+- **Active-engine tracking broken for long tasks** — `list()` silently deleted entries older than 5 minutes via `clearStale()`, causing long-running chats and jobs to vanish from tracking and get terminated during shutdown. Removed mutation from `list()`.
+- **Consolidation/summarization one-shot forever** — a process-global `Set` permanently marked sessions as processed, preventing re-consolidation when sessions got new turns. Replaced with a bounded `Map` (sessionId → message count) that re-processes when new messages arrive. Capped at 500 entries to prevent memory leaks. Transient failures are now retried.
+- **DB tests hit real database** — `tests/db/` used the production database. Now auto-creates a `niahere_test` database and points all test config at it.
+- **Backup exposed DB credentials via `ps`** — `pg_dump` was called with the full postgres URL as a CLI arg. Now parses the URL and passes the password via `PGPASSWORD` env var.
 - **Case-sensitive skill/agent dedup** — skills and agents with differently-cased names (e.g., `Optimization-Loop` vs `optimization-loop`) could appear twice in the list. Dedup is now case-insensitive.
 - **False "telegram: unreachable" alerts** — health check fetches to Telegram and Slack now retry 3 times with Fibonacci backoff (1s, 1s, 2s) and a 5s timeout per attempt. Transient network blips (macOS sleep, DNS hiccups) no longer trigger the LLM recovery agent. Unreachable channels report `warn` instead of `fail`, reserving `fail` for real auth errors.
 

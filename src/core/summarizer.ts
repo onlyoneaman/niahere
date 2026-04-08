@@ -15,8 +15,10 @@ import { runTask } from "./runner";
 import { log } from "../utils/log";
 import type { SessionMessage } from "../types";
 
-/** Track sessions already summarized to prevent double runs. */
-const summarized = new Set<string>();
+/** Bounded dedup: sessionId → message count at last summarization. */
+const processedCounts = new Map<string, number>();
+const inFlight = new Set<string>();
+const MAX_TRACKED = 500;
 
 /** Max messages to include (most recent). */
 const MAX_MESSAGES = 30;
@@ -33,16 +35,26 @@ function formatTranscript(messages: SessionMessage[]): string {
  * Summarize a session and store the result in the sessions table.
  * Called when a chat engine goes idle — produces a context bridge for the next session.
  */
-export async function summarizeSession(sessionId: string, room: string): Promise<void> {
+export async function summarizeSession(
+  sessionId: string,
+  room: string,
+): Promise<void> {
   if (room.includes("placeholder")) return;
-  if (summarized.has(sessionId)) return;
-  summarized.add(sessionId);
+  if (inFlight.has(sessionId)) return;
 
   try {
     const messages = await Message.getBySession(sessionId);
     if (messages.length < 2) return;
 
-    log.info({ sessionId, room, messageCount: messages.length }, "summarizer: generating session summary");
+    // Skip if already processed this exact message count
+    if (processedCounts.get(sessionId) === messages.length) return;
+
+    inFlight.add(sessionId);
+
+    log.info(
+      { sessionId, room, messageCount: messages.length },
+      "summarizer: generating session summary",
+    );
 
     const transcript = formatTranscript(messages);
 
@@ -71,11 +83,24 @@ Keep it concise — a handoff note, not a report. Output ONLY the summary text.`
     const summary = output.agentText.trim();
     if (summary && summary.length > 10 && summary.length < 2000) {
       await Session.setSummary(sessionId, summary);
-      log.info({ sessionId, room, summaryChars: summary.length }, "summarizer: saved");
+      processedCounts.set(sessionId, messages.length);
+      if (processedCounts.size > MAX_TRACKED) {
+        const firstKey = processedCounts.keys().next().value;
+        if (firstKey) processedCounts.delete(firstKey);
+      }
+      log.info(
+        { sessionId, room, summaryChars: summary.length },
+        "summarizer: saved",
+      );
     } else {
-      log.warn({ sessionId, room, length: summary.length }, "summarizer: output too short or too long, skipped");
+      log.warn(
+        { sessionId, room, length: summary.length },
+        "summarizer: output too short or too long, skipped",
+      );
     }
   } catch (err) {
     log.error({ err, sessionId, room }, "summarizer: failed");
+  } finally {
+    inFlight.delete(sessionId);
   }
 }
