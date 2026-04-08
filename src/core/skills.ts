@@ -40,15 +40,25 @@ export function scanSkills(): SkillInfo[] {
       try {
         meta = (yaml.load(fmMatch[1]) as Record<string, unknown>) || {};
       } catch (err) {
-        log.warn({ err, skill: entry.name, path: skillFile }, "failed to parse skill metadata, skipping");
+        log.warn(
+          { err, skill: entry.name, path: skillFile },
+          "failed to parse skill metadata, skipping",
+        );
         continue;
       }
-      const name = (typeof meta.name === "string" ? meta.name : "") || entry.name;
+      const name =
+        (typeof meta.name === "string" ? meta.name : "") || entry.name;
 
-      if (seen.has(name)) continue;
-      seen.add(name);
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
 
-      skills.push({ name, description: typeof meta.description === "string" ? meta.description : "", source });
+      skills.push({
+        name,
+        description:
+          typeof meta.description === "string" ? meta.description : "",
+        source,
+      });
     }
   }
 
@@ -62,6 +72,8 @@ export function getSkillNames(): string[] {
 export function getSkillsSummary(): string {
   const skills = scanSkills();
   if (skills.length === 0) return "";
-  const lines = skills.map((s) => s.description ? `- /${s.name}: ${s.description}` : `- /${s.name}`);
+  const lines = skills.map((s) =>
+    s.description ? `- /${s.name}: ${s.description}` : `- /${s.name}`,
+  );
   return `Available skills:\n${lines.join("\n")}`;
 }

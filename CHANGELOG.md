@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- **Case-sensitive skill/agent dedup** — skills and agents with differently-cased names (e.g., `Optimization-Loop` vs `optimization-loop`) could appear twice in the list. Dedup is now case-insensitive.
 - **False "telegram: unreachable" alerts** — health check fetches to Telegram and Slack now retry 3 times with Fibonacci backoff (1s, 1s, 2s) and a 5s timeout per attempt. Transient network blips (macOS sleep, DNS hiccups) no longer trigger the LLM recovery agent. Unreachable channels report `warn` instead of `fail`, reserving `fail` for real auth errors.
 
 ## [0.2.57] - 2026-04-07
