@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`nia job run` and `nia run` hang after completion** — background consolidation kept the event loop alive, preventing the process from exiting. Both commands now exit immediately after printing results.
+
 ## [0.2.58] - 2026-04-09
 
 ### Added

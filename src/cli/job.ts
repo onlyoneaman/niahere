@@ -8,7 +8,13 @@ import { Job } from "../db/models";
 import { withDb } from "../db/connection";
 import type { ScheduleType } from "../types";
 import { errMsg } from "../utils/errors";
-import { fail, parseArgs, pickFromList, ICON_PASS, ICON_FAIL } from "../utils/cli";
+import {
+  fail,
+  parseArgs,
+  pickFromList,
+  ICON_PASS,
+  ICON_FAIL,
+} from "../utils/cli";
 import { computeInitialNextRun } from "../core/scheduler";
 
 const HELP = `Usage: nia job <command>
@@ -39,16 +45,28 @@ Commands:
   log [name]                    Show recent run history`;
 
 async function pickJob(prompt = "Pick a job"): Promise<string> {
-  let jobs: { name: string; schedule: string; enabled: boolean; prompt: string }[] = [];
+  let jobs: {
+    name: string;
+    schedule: string;
+    enabled: boolean;
+    prompt: string;
+  }[] = [];
   try {
-    await withDb(async () => { jobs = await Job.list(); });
-  } catch { /* DB unavailable */ }
+    await withDb(async () => {
+      jobs = await Job.list();
+    });
+  } catch {
+    /* DB unavailable */
+  }
 
   if (jobs.length === 0) {
     fail("No jobs found.");
   }
 
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
   try {
     const items = jobs.map((j) => ({
       name: j.name,
@@ -65,7 +83,12 @@ async function pickJob(prompt = "Pick a job"): Promise<string> {
 export async function jobCommand(): Promise<void> {
   const subcommand = process.argv[3];
 
-  if (!subcommand || subcommand === "help" || subcommand === "--help" || subcommand === "-h") {
+  if (
+    !subcommand ||
+    subcommand === "help" ||
+    subcommand === "--help" ||
+    subcommand === "-h"
+  ) {
     console.log(HELP);
     process.exit(subcommand ? 0 : 0);
   }
@@ -76,13 +99,18 @@ export async function jobCommand(): Promise<void> {
         await withDb(async () => {
           const jobs = await Job.list();
           if (jobs.length === 0) {
-            console.log("No jobs configured. Use `nia job add` or `nia job import`.");
+            console.log(
+              "No jobs configured. Use `nia job add` or `nia job import`.",
+            );
           } else {
             for (const job of jobs) {
               const tag = job.always ? "  always" : "";
-              const type = job.scheduleType !== "cron" ? ` (${job.scheduleType})` : "";
+              const type =
+                job.scheduleType !== "cron" ? ` (${job.scheduleType})` : "";
               const agentTag = job.agent ? `  [${job.agent}]` : "";
-              console.log(`  ${job.enabled ? "●" : "○"} ${job.name}  ${job.schedule}${type}${tag}${agentTag}`);
+              console.log(
+                `  ${job.enabled ? "●" : "○"} ${job.name}  ${job.schedule}${type}${tag}${agentTag}`,
+              );
             }
           }
         });
@@ -94,16 +122,23 @@ export async function jobCommand(): Promise<void> {
 
     case "add": {
       const args = parseArgs(process.argv.slice(4), ["always"]);
-      if (args.help) { console.log(HELP); return; }
+      if (args.help) {
+        console.log(HELP);
+        return;
+      }
 
       const scheduleType = (args.getString("type") || "cron") as ScheduleType;
       if (!["cron", "interval", "once"].includes(scheduleType)) {
-        fail(`Invalid --type: "${scheduleType}". Must be cron, interval, or once.`);
+        fail(
+          `Invalid --type: "${scheduleType}". Must be cron, interval, or once.`,
+        );
       }
 
       const always = args.getBool("always") ?? false;
       const statelessRaw = args.getString("stateless");
-      const stateless = statelessRaw ? ["yes", "y", "true", "t", "1"].includes(statelessRaw.toLowerCase()) : false;
+      const stateless = statelessRaw
+        ? ["yes", "y", "true", "t", "1"].includes(statelessRaw.toLowerCase())
+        : false;
       const agent = args.getString("agent");
 
       const [name, schedule, ...promptParts] = args.positional;
@@ -121,16 +156,35 @@ export async function jobCommand(): Promise<void> {
       }
 
       if (!name || !schedule || !prompt) {
-        console.error('Usage: nia job add <name> <schedule> <prompt> [--always] [--type cron|interval|once] [--agent <name>]');
-        fail('Example: nia job add heartbeat "*/10 * * * *" Check system health --always');
+        console.error(
+          "Usage: nia job add <name> <schedule> <prompt> [--always] [--type cron|interval|once] [--agent <name>]",
+        );
+        fail(
+          'Example: nia job add heartbeat "*/10 * * * *" Check system health --always',
+        );
       }
 
       try {
         const config = getConfig();
-        const nextRunAt = computeInitialNextRun(scheduleType, schedule, config.timezone);
+        const nextRunAt = computeInitialNextRun(
+          scheduleType,
+          schedule,
+          config.timezone,
+        );
         await withDb(async () => {
-          await Job.create(name, schedule, prompt, always, scheduleType, nextRunAt, agent, stateless);
-          console.log(`Job "${name}" added (${scheduleType}: ${schedule}).${always ? " (runs 24/7)" : ""}`);
+          await Job.create(
+            name,
+            schedule,
+            prompt,
+            always,
+            scheduleType,
+            nextRunAt,
+            agent,
+            stateless,
+          );
+          console.log(
+            `Job "${name}" added (${scheduleType}: ${schedule}).${always ? " (runs 24/7)" : ""}`,
+          );
         });
       } catch (err) {
         fail(`Failed to add job: ${errMsg(err)}`);
@@ -145,7 +199,9 @@ export async function jobCommand(): Promise<void> {
       try {
         await withDb(async () => {
           const removed = await Job.remove(name);
-          console.log(removed ? `Job "${name}" removed.` : `Job not found: ${name}`);
+          console.log(
+            removed ? `Job "${name}" removed.` : `Job not found: ${name}`,
+          );
         });
       } catch (err) {
         fail(`Failed to remove job: ${errMsg(err)}`);
@@ -162,7 +218,11 @@ export async function jobCommand(): Promise<void> {
       try {
         await withDb(async () => {
           const updated = await Job.update(name, { enabled });
-          console.log(updated ? `Job "${name}" ${subcommand}d.` : `Job not found: ${name}`);
+          console.log(
+            updated
+              ? `Job "${name}" ${subcommand}d.`
+              : `Job not found: ${name}`,
+          );
         });
       } catch (err) {
         fail(`Failed: ${errMsg(err)}`);
@@ -172,15 +232,29 @@ export async function jobCommand(): Promise<void> {
 
     case "update": {
       const args = parseArgs(process.argv.slice(4), ["always"]);
-      if (args.help) { console.log(HELP); return; }
+      if (args.help) {
+        console.log(HELP);
+        return;
+      }
 
       const name = args.positional[0];
       if (!name) {
-        console.error('Usage: nia job update <name> [--schedule <s>] [--prompt <p>] [--type <t>] [--always] [--no-always]');
-        fail('Example: nia job update curator --schedule "4h" --prompt "New prompt"');
+        console.error(
+          "Usage: nia job update <name> [--schedule <s>] [--prompt <p>] [--type <t>] [--always] [--no-always]",
+        );
+        fail(
+          'Example: nia job update curator --schedule "4h" --prompt "New prompt"',
+        );
       }
 
-      const fields: Partial<{ schedule: string; prompt: string; always: boolean; stateless: boolean; scheduleType: ScheduleType; agent: string | null }> = {};
+      const fields: Partial<{
+        schedule: string;
+        prompt: string;
+        always: boolean;
+        stateless: boolean;
+        scheduleType: ScheduleType;
+        agent: string | null;
+      }> = {};
       const schedule = args.getString("schedule");
       const promptFile = args.getString("prompt-file");
       let prompt = args.getString("prompt");
@@ -199,23 +273,33 @@ export async function jobCommand(): Promise<void> {
       if (prompt) fields.prompt = prompt;
       if (scheduleType) {
         if (!["cron", "interval", "once"].includes(scheduleType)) {
-          fail(`Invalid --type: "${scheduleType}". Must be cron, interval, or once.`);
+          fail(
+            `Invalid --type: "${scheduleType}". Must be cron, interval, or once.`,
+          );
         }
         fields.scheduleType = scheduleType;
       }
       if (always !== undefined) fields.always = always;
-      if (statelessRaw) fields.stateless = ["yes", "y", "true", "t", "1"].includes(statelessRaw.toLowerCase());
+      if (statelessRaw)
+        fields.stateless = ["yes", "y", "true", "t", "1"].includes(
+          statelessRaw.toLowerCase(),
+        );
       if (agent) fields.agent = agent;
       if (noAgent === false) fields.agent = null;
 
       if (Object.keys(fields).length === 0) {
-        fail("Nothing to update. Pass at least one flag (--schedule, --prompt, --type, --always, --stateless, --agent).");
+        fail(
+          "Nothing to update. Pass at least one flag (--schedule, --prompt, --type, --always, --stateless, --agent).",
+        );
       }
 
       try {
         await withDb(async () => {
           const updated = await Job.update(name, fields);
-          if (!updated) fail(`Job not found: "${name}". Use \`nia job list\` to see available jobs.`);
+          if (!updated)
+            fail(
+              `Job not found: "${name}". Use \`nia job list\` to see available jobs.`,
+            );
           console.log(`Job "${name}" updated.`);
         });
       } catch (err) {
@@ -225,7 +309,7 @@ export async function jobCommand(): Promise<void> {
     }
 
     case "show": {
-      const name = process.argv[4] || await pickJob("Show job");
+      const name = process.argv[4] || (await pickJob("Show job"));
 
       try {
         await withDb(async () => {
@@ -258,8 +342,11 @@ export async function jobCommand(): Promise<void> {
               const time = localTime(new Date(e.timestamp));
               const dur = `${formatDuration(e.duration_ms)}`;
               const icon = e.status === "ok" ? ICON_PASS : ICON_FAIL;
-              const summary = e.error || e.result.slice(0, 60).replace(/\n/g, " ") || "-";
-              console.log(`    ${icon} ${time}  ${dur.padStart(8)}  ${summary}`);
+              const summary =
+                e.error || e.result.slice(0, 60).replace(/\n/g, " ") || "-";
+              console.log(
+                `    ${icon} ${time}  ${dur.padStart(8)}  ${summary}`,
+              );
             }
           }
         });
@@ -270,7 +357,7 @@ export async function jobCommand(): Promise<void> {
     }
 
     case "status": {
-      const name = process.argv[4] || await pickJob("Job status");
+      const name = process.argv[4] || (await pickJob("Job status"));
 
       try {
         await withDb(async () => {
@@ -283,7 +370,9 @@ export async function jobCommand(): Promise<void> {
             ? `${info.status} (${localTime(new Date(info.lastRun))}, ${formatDuration(info.duration_ms)})`
             : "never run";
           const tag = job.always ? " always" : "";
-          console.log(`  ${job.enabled ? "●" : "○"} ${job.name}  [${job.schedule}]${tag}  ${status}`);
+          console.log(
+            `  ${job.enabled ? "●" : "○"} ${job.name}  [${job.schedule}]${tag}  ${status}`,
+          );
           if (info?.error) console.log(`    error: ${info.error}`);
         });
       } catch (err) {
@@ -296,10 +385,15 @@ export async function jobCommand(): Promise<void> {
       const name = process.argv[4];
       if (!name) fail("Usage: nia job run <name>");
 
-      let found: { name: string; schedule: string; prompt: string } | null = null;
+      let found: { name: string; schedule: string; prompt: string } | null =
+        null;
       try {
-        await withDb(async () => { found = await Job.get(name); });
-      } catch { /* DB unavailable */ }
+        await withDb(async () => {
+          found = await Job.get(name);
+        });
+      } catch {
+        /* DB unavailable */
+      }
 
       if (!found) fail(`Job not found: ${name}`);
       const job = found as { name: string; schedule: string; prompt: string };
@@ -320,10 +414,12 @@ export async function jobCommand(): Promise<void> {
         }
 
         // Render current log lines
-        const output = logLines.map((l, i) => {
-          const dim = i < logLines.length - 1;
-          return dim ? `  \x1b[2m${l}\x1b[0m` : `  \x1b[36m▸\x1b[0m ${l}`;
-        }).join("\n");
+        const output = logLines
+          .map((l, i) => {
+            const dim = i < logLines.length - 1;
+            return dim ? `  \x1b[2m${l}\x1b[0m` : `  \x1b[36m▸\x1b[0m ${l}`;
+          })
+          .join("\n");
 
         process.stdout.write(output + "\n");
         linesRendered = logLines.length;
@@ -340,22 +436,30 @@ export async function jobCommand(): Promise<void> {
       console.log(`Duration: ${formatDuration(result.duration_ms)}`);
       if (result.result) console.log(`\nResult:\n${result.result}`);
       if (result.error) console.log(`\nError: ${result.error}`);
-      break;
+      // Exit immediately — background consolidation keeps the event loop alive otherwise
+      process.exit(result.status === "ok" ? 0 : 1);
     }
 
     case "log": {
       const logName = process.argv[4];
       const entries = readAudit(logName, 20);
       if (entries.length === 0) {
-        console.log(logName ? `No runs found for ${logName}` : "No job runs recorded yet.");
+        console.log(
+          logName
+            ? `No runs found for ${logName}`
+            : "No job runs recorded yet.",
+        );
         break;
       }
       for (const e of entries) {
         const time = localTime(new Date(e.timestamp));
         const dur = `${formatDuration(e.duration_ms)}`;
         const status = e.status === "ok" ? ICON_PASS : ICON_FAIL;
-        const summary = e.error || e.result.slice(0, 80).replace(/\n/g, " ") || "-";
-        console.log(`  ${status} ${time}  ${dur.padStart(8)}  ${e.job}  ${summary}`);
+        const summary =
+          e.error || e.result.slice(0, 80).replace(/\n/g, " ") || "-";
+        console.log(
+          `  ${status} ${time}  ${dur.padStart(8)}  ${e.job}  ${summary}`,
+        );
       }
       break;
     }
