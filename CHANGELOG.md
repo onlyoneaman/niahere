@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.59] - 2026-04-09
+
 ### Added
 
 - **Per-job model override** — jobs can now specify a model (`--model haiku`, `--model sonnet`) that overrides the agent model and global config. Enables cost savings by routing simple jobs to cheaper models. Priority: job model > agent model > config model. Supports CLI (`nia job add/update --model <model>`) and MCP tools.
