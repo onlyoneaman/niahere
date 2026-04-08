@@ -1,5 +1,9 @@
 # nia
 
+[![npm version](https://img.shields.io/npm/v/niahere.svg)](https://www.npmjs.com/package/niahere)
+[![npm downloads](https://img.shields.io/npm/dm/niahere.svg)](https://www.npmjs.com/package/niahere)
+[![license](https://img.shields.io/npm/l/niahere.svg)](https://github.com/onlyoneaman/niahere/blob/main/LICENSE)
+
 A personal AI agent you fork and make your own. Small enough to understand, built for one user. Powered by Claude Agent SDK.
 
 - npm package: [`niahere`](https://www.npmjs.com/package/niahere)
@@ -33,7 +37,7 @@ nia start               # starts daemon + registers OS service
 - **Telegram** — message your agent from your phone, typing indicator while processing
 - **Slack** — Socket Mode bot with thread awareness, thinking emoji, watch channels for proactive monitoring
 - **Terminal chat** — REPL with session resume support
-- **Scheduled jobs** — recurring jobs and crons that run Claude and can message you back
+- **Scheduled jobs** — recurring jobs and crons that run Claude and can message you back. Stateful by default (working memory), per-job model routing for cost savings
 - **Persona system** — customizable identity, soul, owner profile, rules, and memory (preloaded every session)
 - **Agents** — domain specialists (marketer, senior-dev) via Claude Agent SDK subagents
 - **Skills** — loads skills from multiple directories, invokable as slash commands
@@ -63,8 +67,8 @@ nia update                     — update to latest version (auto-backup + resta
 nia job list                   — list all jobs
 nia job show [name]            — full details + recent runs
 nia job status [name]          — quick status check
-nia job add <n> <s> <p>        — add a job (--type, --always, --agent, --stateless, --prompt-file)
-nia job update <name>          — update a job (--schedule, --prompt, --prompt-file, --type, --always, --agent, --stateless)
+nia job add <n> <s> <p>        — add a job (--type, --always, --agent, --model, --stateless, --prompt-file)
+nia job update <name>          — update a job (--schedule, --prompt, --prompt-file, --type, --always, --agent, --model, --stateless)
 nia job remove <name>          — delete a job
 nia job enable / disable <n>   — toggle a job
 nia job run <name>             — run a job once
@@ -106,6 +110,8 @@ All config and data lives in `~/.niahere/`:
     soul.md         — how the agent works
     rules.md        — behavioral instructions (loaded every session)
     memory.md       — persistent facts and context (loaded every session)
+  jobs/               — per-job working memory and state (auto-created)
+  optimizations/      — optimization loop run workspaces
   images/
     reference.webp  — visual identity reference image
     profile.webp    — profile picture for Telegram/Slack

@@ -133,8 +133,8 @@ log_level: info
 gemini_api_key: ...
 openai_api_key: ...
 active_hours:
-  start: '11:00'
-  end: '02:00'
+  start: "11:00"
+  end: "02:00"
 channels:
   enabled: true
   default: telegram
@@ -162,7 +162,7 @@ npm run typecheck      # TypeScript type check only
 bun run dev            # Run daemon in foreground
 ```
 
-Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig()` in cleanup.
+Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig()` in cleanup. DB tests use a shared `tests/db/setup.ts` that auto-creates a `niahere_test` database and points config at it.
 
 **Keep tests up to date.** When adding, changing, or removing functionality, add, update, or remove the corresponding tests. Good test coverage is expected — don't skip tests for new code paths.
 
@@ -179,7 +179,10 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 - **Lazy DB:** `getSql()` creates connection on first use, `withDb()` wraps migrate+execute+close
 - **LISTEN/NOTIFY:** Job mutations call `pg_notify('nia_jobs')`, daemon listens and auto-reloads schedules
 - **Jobs vs crons:** Jobs respect `active_hours`, crons (`always: true`) run 24/7. Both use the same `jobs` table.
-- **Job execution:** Configurable via `runner` in config.yaml — `"claude"` (default, uses Claude Agent SDK `query()`) or `"codex"` (uses `codex exec --json`). Session ID stored in audit for inspection.
+- **Job execution:** Configurable via `runner` in config.yaml — `"claude"` (default, uses Claude Agent SDK `query()`) or `"codex"` (uses `codex exec --json`). Session ID stored in audit for inspection. `terminal_reason` tracks why a job ended (`completed`, `max_turns`, `aborted_tools`, etc.).
+- **Job working memory:** Jobs are stateful by default. Each job gets a workspace at `~/.niahere/jobs/<name>/` with `state.md` auto-injected into the prompt. Set `stateless: true` to disable. The agent updates `state.md` at the end of each run.
+- **Per-job model routing:** Jobs can specify a `model` field (e.g. `haiku`, `sonnet`) that overrides agent and global model. Priority: `job.model > agent.model > config.model`. Use for cost savings on simple jobs.
+- **Optimization workspaces:** The `optimize` skill creates self-contained run directories at `~/.niahere/optimizations/{slug}-{hex}/` with frozen contracts, rubrics, baselines, and JSONL result logs.
 - **Channel registration:** Channels export factory functions, `registerAllChannels()` wires them up explicitly. No side-effect imports.
 - **Daemon lifecycle:** Blocking stop (waits for engines, escalates to SIGKILL). Service-aware restart via launchctl/systemd. Startup guard prevents duplicate daemons.
 - **Health checks:** (`src/core/health.ts`) Shared module used by both `nia health` CLI and alive monitor. Checks: version, daemon, config, DB connectivity, channel connectivity (actual API calls), API keys, persona files, logs.
@@ -192,7 +195,7 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 - **Visual identity:** Images at `~/.niahere/images/`. Generated during `nia init` via Gemini.
 - **Service:** `nia start` registers OS service (launchd/systemd). `nia restart` is service-aware.
 - **Agents:** Role/domain specialists defined as `AGENT.md` files in `agents/` directories. Scanned from project `agents/`, `~/.niahere/agents/`, `~/.shared/agents/`. Passed to Claude Agent SDK as subagents via `query()` options — SDK handles routing and context isolation. Jobs can reference an agent via `agent` column — agent body becomes the systemPrompt. See [MULTI_AGENT_PHILOSOPHY.md](MULTI_AGENT_PHILOSOPHY.md).
-- **Skills:** Scanned from project `skills/`, `~/.niahere/skills/`, `~/.shared/skills/`, `~/.claude/skills/`, `~/.codex/skills/`
+- **Skills:** Scanned from project `skills/`, `~/.niahere/skills/`, `~/.shared/skills/`, `~/.claude/skills/`, `~/.codex/skills/`. Dedup is case-insensitive (first found wins by scan order).
 - **Paths:** All from `getPaths()` → `getNiaHome()` (`NIA_HOME` env or `~/.niahere/`)
 - **One-shot jobs:** `once` schedule type auto-disables after execution, hidden from `nia status`
 - **Dev mode:** `nia channels off` disables Telegram/Slack for local development
@@ -217,6 +220,7 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 **Release cadence:** Don't release with every small change. Batch changes and ask for confirmation before releasing. Only release when explicitly asked or when there are meaningful changes worth a version bump.
 
 **Release flow:**
+
 1. Ensure all changes are committed and tests pass (`npm run test`)
 2. Move `[Unreleased]` items in `CHANGELOG.md` under a new version header (e.g. `## [0.2.50] - YYYY-MM-DD`)
 3. `npm version patch --no-git-tag-version`
