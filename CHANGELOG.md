@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.58] - 2026-04-09
+
 ### Added
 
 - **Optimization loop skill** — the Karpathy Loop / autoresearch pattern as a reusable skill. Covers the full discipline: frozen contract + rubric, pairwise scoring with anti-bias controls, staged exploration strategy, workspace layout, results audit trail (JSONL), resumability, and scoring integrity rules. Domain-agnostic — works for code benchmarks, prompt quality, copy effectiveness, or any scorable target.
