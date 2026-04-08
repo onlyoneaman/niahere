@@ -7,6 +7,12 @@
 - **Optimization loop skill** — the Karpathy Loop / autoresearch pattern as a reusable skill. Covers the full discipline: frozen contract + rubric, pairwise scoring with anti-bias controls, staged exploration strategy, workspace layout, results audit trail (JSONL), resumability, and scoring integrity rules. Domain-agnostic — works for code benchmarks, prompt quality, copy effectiveness, or any scorable target.
 - **Optimize skill** — orchestration layer for scheduling optimization runs. Handles proactive suggestions after immediate work, spec confirmation with user, job prompt composition, one-shot job scheduling, and result delivery. References optimization-loop for the loop discipline.
 
+### Tests
+
+- **Scheduler integration tests** — one-shot auto-disable, `listDue` filtering (enabled + due only), `markRun` advancing `next_run_at`, invalid schedule error handling
+- **Active engine tracking tests** — verifies `list()` no longer deletes stale entries, register upsert, `ping()` updates, `clearAll`
+- **Test DB auto-creation** — shared `tests/db/setup.ts` creates `niahere_test` database automatically on first run
+
 ### Fixed
 
 - **Multi-turn user messages not persisted** — in live chat sessions, only the first user message was saved to the database. Subsequent messages in the same session were lost, corrupting history, search, summaries, and memory consolidation. Now saved in `send()` before pushing to the stream.
