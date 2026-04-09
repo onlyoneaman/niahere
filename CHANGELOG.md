@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Improved
+
+- **Unified session finalizer** — consolidated ad-hoc consolidation/summarization calls into a single DB-backed finalizer queue (`finalization_requests` table). REPL and CLI exits are now instant — the daemon processes post-session work reliably via `pg_notify`. Fixes `CONNECTION_ENDED` errors on `nia chat` exit.
+
 ## [0.2.60] - 2026-04-09
 
 ### Improved
