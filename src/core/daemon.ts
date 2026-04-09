@@ -12,6 +12,7 @@ import { startScheduler, stopScheduler, recomputeAllNextRuns } from "./scheduler
 import { startAlive, stopAlive } from "./alive";
 import { createNiaMcpServer } from "../mcp/server";
 import { setMcpFactory } from "../mcp";
+import { setRole, processPending, cleanupOldRequests } from "./finalizer";
 
 export function writePid(pid: number): void {
   const { pid: pidPath } = getPaths();
@@ -107,7 +108,9 @@ function waitForExit(timeoutMs: number): void {
   // Still alive — escalate to SIGKILL
   const remaining = findDaemonPids();
   for (const pid of remaining) {
-    try { process.kill(pid, "SIGKILL"); } catch {}
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {}
   }
 
   // Brief wait for SIGKILL to take effect
@@ -124,7 +127,8 @@ export function findDaemonPids(): number[] {
     const result = Bun.spawnSync(["pgrep", "-f", "src/cli\\.ts run$"]);
     const stdout = new TextDecoder().decode(result.stdout).trim();
     if (!stdout) return [];
-    return stdout.split("\n")
+    return stdout
+      .split("\n")
       .map((l) => parseInt(l, 10))
       .filter((pid) => !isNaN(pid) && pid !== process.pid);
   } catch {
@@ -138,12 +142,17 @@ function killAllDaemons(knownPid?: number | null): number {
   if (knownPid && knownPid !== process.pid) toKill.add(knownPid);
 
   for (const pid of toKill) {
-    try { process.kill(pid, "SIGTERM"); } catch {}
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {}
   }
   return toKill.size;
 }
 
 export async function runDaemon(): Promise<void> {
+  // Mark this process as the daemon for the finalizer
+  setRole("daemon");
+
   // Ensure we never pass nested-session env vars to SDK subprocesses,
   // regardless of how the daemon was launched (nia start, nia run, etc.)
   delete process.env.CLAUDECODE;
@@ -189,10 +198,12 @@ export async function runDaemon(): Promise<void> {
     const { version } = await import("../../package.json");
     const update = await checkForUpdate(version);
     if (update) {
-      log.warn({ current: update.current, latest: update.latest }, "update available — run `npm i -g niahere` to update");
+      log.warn(
+        { current: update.current, latest: update.latest },
+        "update available — run `npm i -g niahere` to update",
+      );
     }
   } catch {}
-
 
   // Startup recovery
   try {
@@ -259,6 +270,35 @@ export async function runDaemon(): Promise<void> {
   } catch (err) {
     log.warn({ err }, "could not subscribe to nia_jobs, falling back to SIGHUP only");
   }
+
+  // Listen for session finalization requests from CLI processes
+  try {
+    const sql = getSql();
+    await sql.listen("nia_finalize", async () => {
+      log.info("finalization request received via NOTIFY, processing pending");
+      await processPending().catch((err) => {
+        log.warn({ err }, "failed to process pending finalizations on notify");
+      });
+    });
+    log.info("listening for finalization requests on nia_finalize channel");
+  } catch (err) {
+    log.warn({ err }, "could not subscribe to nia_finalize");
+  }
+
+  // Drain any finalization requests that arrived while daemon was down
+  processPending().catch((err) => {
+    log.warn({ err }, "startup: failed to drain pending finalizations");
+  });
+
+  // Clean up old finalization requests every 24h
+  setInterval(
+    () => {
+      cleanupOldRequests().catch((err) => {
+        log.warn({ err }, "failed to cleanup old finalization requests");
+      });
+    },
+    24 * 60 * 60 * 1000,
+  );
 
   // SIGHUP: reload config, reconcile channels, recompute jobs
   process.on("SIGHUP", async () => {
