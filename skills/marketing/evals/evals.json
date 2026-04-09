@@ -1,0 +1,378 @@
+{
+  "skill_name": "marketing",
+  "evals": [
+    {
+      "id": 1,
+      "source": "competitor-alternatives",
+      "prompt": "Create a 'Best Asana Alternatives' page for our project management tool. We compete mainly on price (we're $8/user vs their $24/user) and simplicity (they've become bloated). Target audience is small teams (5-20 people).",
+      "expected_output": "Should check for product-marketing-context.md first. Should identify this as the plural alternatives format ([Competitor] Alternatives). Should include the essential sections: TL;DR comparison, brief paragraphs on each alternative (including the user's product positioned first or prominently), feature comparison table, pricing comparison, who each alternative is best for. Should use the modular content architecture approach. Should address SEO considerations for the target keyword 'Asana alternatives.' Should position the user's product with the stated differentiators (price, simplicity).",
+      "assertions": [
+        "Checks for product-marketing-context.md",
+        "Identifies as plural alternatives format",
+        "Includes TL;DR comparison section",
+        "Includes feature comparison table",
+        "Includes pricing comparison",
+        "Includes 'who it's best for' per alternative",
+        "Positions user's product prominently with differentiators",
+        "Addresses SEO for target keyword"
+      ],
+      "files": []
+    },
+    {
+      "id": 2,
+      "source": "competitor-alternatives",
+      "prompt": "Write a 'HubSpot vs Salesforce' comparison page. We're HubSpot and want to show why we're the better choice for SMBs.",
+      "expected_output": "Should identify this as the 'you vs competitor' format. Should include structured comparison sections: overview of both, feature-by-feature comparison, pricing comparison, pros/cons of each, who each is best for, and migration path. Should be factually accurate about the competitor while strategically positioning the user's product. Should include a TL;DR at the top. Should address the SMB angle throughout. Should use the centralized competitor data architecture pattern.",
+      "assertions": [
+        "Identifies as 'you vs competitor' format",
+        "Includes structured comparison sections",
+        "Includes feature-by-feature comparison",
+        "Includes pricing comparison",
+        "Includes TL;DR at the top",
+        "Factually accurate about competitor",
+        "Strategically positions user's product for SMBs",
+        "Includes migration path or switching section"
+      ],
+      "files": []
+    },
+    {
+      "id": 3,
+      "source": "competitor-alternatives",
+      "prompt": "we need a page targeting 'mailchimp alternative' (singular). we're an email marketing platform focused on e-commerce brands.",
+      "expected_output": "Should trigger on casual phrasing. Should identify this as the singular alternative format ([Competitor] Alternative — positioning your product as THE alternative). Should focus the entire page on why the user's product is the best Mailchimp alternative for e-commerce. Should include: why people switch from Mailchimp, what the user's product does better (e-commerce specific features), feature comparison, pricing comparison, migration guide, customer testimonials. Should optimize for the singular keyword 'Mailchimp alternative.'",
+      "assertions": [
+        "Triggers on casual phrasing",
+        "Identifies as singular alternative format",
+        "Focuses on user's product as THE alternative",
+        "Includes why people switch from Mailchimp",
+        "Highlights e-commerce-specific advantages",
+        "Includes feature and pricing comparison",
+        "Includes migration guide",
+        "Optimizes for singular keyword"
+      ],
+      "files": []
+    },
+    {
+      "id": 4,
+      "source": "competitor-alternatives",
+      "prompt": "Can you create a comparison page for 'Notion vs Coda'? We're a third-party review site, not affiliated with either product.",
+      "expected_output": "Should identify this as the 'competitor vs competitor' format (third-party perspective). Should maintain objectivity since the user isn't either product. Should include balanced comparison: overview of both, feature comparison, pricing, pros/cons, use case recommendations. Should use the essential page sections from the skill. Should suggest how to monetize the page (affiliate links, CTA to the user's own product if relevant). Should address SEO for the 'Notion vs Coda' keyword.",
+      "assertions": [
+        "Identifies as 'competitor vs competitor' format",
+        "Maintains objectivity (third-party perspective)",
+        "Includes balanced feature comparison",
+        "Includes pricing comparison",
+        "Includes use case recommendations",
+        "Addresses SEO considerations",
+        "Suggests monetization approach"
+      ],
+      "files": []
+    },
+    {
+      "id": 5,
+      "source": "competitor-alternatives",
+      "prompt": "We want to build a whole competitor comparison hub. We have 5 main competitors and want to create alternative pages for each, plus head-to-head comparisons. How should we structure this?",
+      "expected_output": "Should apply the centralized competitor data architecture. Should recommend a hub structure with: individual alternative pages for each competitor (5 singular pages), a 'best alternatives' roundup page, head-to-head comparison pages for key matchups. Should address internal linking strategy between these pages. Should recommend the research process for gathering competitive data. Should address URL structure and site architecture for the hub.",
+      "assertions": [
+        "Applies centralized competitor data architecture",
+        "Recommends hub structure with multiple page types",
+        "Suggests individual and roundup alternative pages",
+        "Addresses internal linking between comparison pages",
+        "Recommends research process for competitive data",
+        "Addresses URL structure"
+      ],
+      "files": []
+    },
+    {
+      "id": 6,
+      "source": "competitor-alternatives",
+      "prompt": "I need to create a battle card for our sales team comparing us to Zendesk. It should help reps handle competitive objections during sales calls.",
+      "expected_output": "Should recognize this is internal sales enablement material rather than a public comparison page. Should adapt the competitive positioning frameworks (strengths, weaknesses, objection handling) for an internal audience. May use a more direct, feature-by-feature format suited for sales reps rather than the public page templates.",
+      "assertions": [
+        "Recognizes this as internal sales enablement material",
+        "Adapts competitive frameworks for internal use",
+        "Provides objection handling guidance"
+      ],
+      "files": []
+    },
+    {
+      "id": 7,
+      "source": "social-content",
+      "prompt": "Help me create a LinkedIn content strategy. I'm a SaaS founder building in public and want to grow my personal brand to drive awareness for my product. I currently have 500 followers and post maybe once a week.",
+      "expected_output": "Should check for product-marketing-context.md first. Should establish content pillars (3-5) appropriate for a SaaS founder building in public: industry insights, behind-the-scenes, educational content, personal stories, promotional (minimal). Should apply the platform quick reference for LinkedIn (3-5x/week recommended, carousels and stories perform well). Should provide hook formulas for LinkedIn posts. Should create a weekly content calendar. Should include engagement strategy (daily 30-min routine). Should address going from 1x/week to 3-5x/week with a batching strategy.",
+      "assertions": [
+        "Checks for product-marketing-context.md",
+        "Establishes 3-5 content pillars",
+        "Applies LinkedIn platform guidance",
+        "Provides hook formulas",
+        "Creates weekly content calendar",
+        "Includes engagement strategy",
+        "Addresses batching strategy for consistency",
+        "Recommends increasing from 1x to 3-5x per week"
+      ],
+      "files": []
+    },
+    {
+      "id": 8,
+      "source": "social-content",
+      "prompt": "Write me a Twitter/X thread about the lessons I learned bootstrapping my SaaS to $10k MRR. Include hooks and a CTA at the end.",
+      "expected_output": "Should apply the hook formulas for a story hook (e.g., '6 months ago, I had $0 MRR. Today, I hit $10k.'). Should structure the thread following platform best practices: strong hook in tweet 1, each tweet should stand alone but flow together, use specific numbers and stories, end with a CTA. Should reference the content pillar this fits into (behind-the-scenes / founder journey). Should provide the actual thread content with 8-12 tweets. Should include engagement prompts.",
+      "assertions": [
+        "Applies hook formulas from the skill",
+        "Uses a story hook for the first tweet",
+        "Structures thread with standalone but flowing tweets",
+        "Uses specific numbers and stories",
+        "Ends with clear CTA",
+        "Provides 8-12 tweet thread content",
+        "Includes engagement prompts"
+      ],
+      "files": []
+    },
+    {
+      "id": 9,
+      "source": "social-content",
+      "prompt": "i have a blog post that did really well. how do i turn it into social media content for multiple platforms?",
+      "expected_output": "Should trigger on casual phrasing. Should apply the content repurposing system. Should use the Blog Post → Social Content mapping: LinkedIn (key insight post + carousel of main points), Twitter/X (thread of key takeaways), Instagram (carousel with visuals + Reel summarizing the post). Should follow the repurposing workflow: create pillar content → extract key insights (3-5) → adapt to each platform → schedule across the week. Should provide specific format recommendations per platform.",
+      "assertions": [
+        "Triggers on casual phrasing",
+        "Applies content repurposing system",
+        "Uses Blog Post → Social Content mapping",
+        "Provides format for LinkedIn, Twitter/X, and Instagram",
+        "Follows the repurposing workflow",
+        "Extracts 3-5 key insights to repurpose",
+        "Provides platform-specific format recommendations"
+      ],
+      "files": []
+    },
+    {
+      "id": 10,
+      "source": "social-content",
+      "prompt": "My LinkedIn posts get like 200 impressions and almost no engagement. What am I doing wrong?",
+      "expected_output": "Should apply the analytics and optimization section, specifically the 'if engagement is low' guidance. Should diagnose potential issues: weak hooks (first line not compelling), posting at wrong times, not engaging with others' content, poor formatting (no line breaks, walls of text), content not resonating with audience. Should recommend specific fixes: test new hook formulas, post at different times, increase engagement with others (the daily engagement routine), try different formats (carousels, stories). Should provide before/after hook examples.",
+      "assertions": [
+        "Applies analytics and optimization guidance",
+        "Diagnoses potential engagement issues",
+        "Addresses hook quality",
+        "Addresses posting timing",
+        "Recommends daily engagement routine",
+        "Suggests trying different content formats",
+        "Provides specific before/after hook examples"
+      ],
+      "files": []
+    },
+    {
+      "id": 11,
+      "source": "social-content",
+      "prompt": "Help me reverse-engineer what's working for top creators in the DevTools space on Twitter. I want to understand their content patterns.",
+      "expected_output": "Should apply the reverse engineering viral content framework. Should walk through the process: identify 10-20 top accounts in DevTools, collect high-performing posts, analyze patterns (hooks, formats, CTAs, topics, posting times), codify a playbook of repeatable patterns, then layer the user's authentic voice. Should provide specific guidance on what to look for in the analysis. Should recommend tools or methods for collecting the data.",
+      "assertions": [
+        "Applies reverse engineering viral content framework",
+        "Walks through the full process (find, collect, analyze, codify, apply)",
+        "Recommends identifying 10-20 accounts",
+        "Describes what patterns to analyze",
+        "Emphasizes layering authentic voice",
+        "Provides data collection guidance"
+      ],
+      "files": []
+    },
+    {
+      "id": 12,
+      "source": "social-content",
+      "prompt": "Write me a 5-email welcome sequence for new email subscribers who came from my LinkedIn audience.",
+      "expected_output": "Should recognize this is an email sequence task, not social content. Should defer to or cross-reference the email skill, which handles welcome sequences, drip campaigns, and lifecycle emails. May note the social-to-email bridge context but should make clear that email is the right skill for writing email sequences.",
+      "assertions": [
+        "Recognizes this as email sequence work",
+        "References or defers to email skill",
+        "Does not attempt to write email sequence using social content patterns",
+        "May note social-to-email bridge context"
+      ],
+      "files": []
+    },
+    {
+      "id": 13,
+      "source": "launch-strategy",
+      "prompt": "We're launching a new B2B SaaS product for design teams in 6 weeks. It's a design review tool. We have a small audience (500 email subscribers, 2k Twitter followers). Help us plan the launch.",
+      "expected_output": "Should check for product-marketing-context.md first. Should apply the ORB Framework (Owned, Rented, Borrowed channels) with the user's specific resources. Owned: email list (500 subscribers), website. Rented: Twitter (2k followers). Borrowed: partnerships, communities, Product Hunt. Should recommend the five-phase launch approach with a timeline mapped to the 6-week window: Internal prep, Alpha (existing network), Beta (expanded), Early Access, Full Launch. Should provide specific tactics for each phase. Should recommend building up the audience before launch day. Should include a launch day checklist.",
+      "assertions": [
+        "Checks for product-marketing-context.md",
+        "Applies ORB Framework (Owned, Rented, Borrowed)",
+        "Maps to user's specific channels and audience sizes",
+        "Recommends five-phase launch approach",
+        "Provides timeline mapped to 6-week window",
+        "Provides specific tactics for each phase",
+        "Recommends audience building before launch",
+        "Includes launch day checklist"
+      ],
+      "files": []
+    },
+    {
+      "id": 14,
+      "source": "launch-strategy",
+      "prompt": "We want to launch on Product Hunt. Any tips? We've never done it before.",
+      "expected_output": "Should apply the Product Hunt strategy section. Should cover: choosing the right day and time, preparing assets (logo, gallery images, maker video), crafting the tagline and description, building a hunter network, activating supporters on launch day, engaging with comments, and post-launch follow-up. Should recommend preparation timeline (start 2-4 weeks before). Should mention common mistakes to avoid. Should set realistic expectations about outcomes.",
+      "assertions": [
+        "Applies Product Hunt strategy section",
+        "Covers timing (day and time selection)",
+        "Covers asset preparation",
+        "Addresses hunter network and supporter activation",
+        "Recommends preparation timeline",
+        "Mentions common mistakes to avoid",
+        "Sets realistic expectations"
+      ],
+      "files": []
+    },
+    {
+      "id": 15,
+      "source": "launch-strategy",
+      "prompt": "we just shipped a major feature update. how should we announce it? it's not a full product launch, just a big new feature.",
+      "expected_output": "Should trigger on casual phrasing. Should apply the ongoing launch strategy section, specifically the major/medium/minor update matrix. Should identify this as a major feature update. Should recommend appropriate channels and tactics for a feature launch (less than a full product launch but more than a changelog entry). Should include: announcement email, blog post, social media push, in-app notification, and possibly a mini Product Hunt launch. Should provide a feature announcement framework.",
+      "assertions": [
+        "Triggers on casual phrasing",
+        "Applies ongoing launch strategy / update matrix",
+        "Identifies as major feature update",
+        "Scales tactics appropriately (not full launch)",
+        "Recommends announcement channels",
+        "Includes email, blog, social, and in-app notification",
+        "Provides feature announcement framework"
+      ],
+      "files": []
+    },
+    {
+      "id": 16,
+      "source": "launch-strategy",
+      "prompt": "Our launch flopped. We launched 3 weeks ago and only got 50 signups. We expected at least 500. What went wrong and what can we do now?",
+      "expected_output": "Should apply the post-launch product marketing section. Should diagnose potential failure causes: insufficient audience building pre-launch, wrong channels, weak value proposition messaging, poor launch execution, targeting the wrong audience. Should recommend post-launch recovery tactics: iterate on messaging, identify which channels produced the 50 signups and double down, try new distribution channels, leverage early users for testimonials. Should provide a specific 30-day recovery plan.",
+      "assertions": [
+        "Applies post-launch product marketing guidance",
+        "Diagnoses potential failure causes",
+        "Addresses pre-launch audience building gap",
+        "Recommends post-launch recovery tactics",
+        "Suggests analyzing which channels produced signups",
+        "Provides specific recovery plan"
+      ],
+      "files": []
+    },
+    {
+      "id": 17,
+      "source": "launch-strategy",
+      "prompt": "How do we leverage partnerships and borrowed audiences for our launch? We don't have a big audience of our own.",
+      "expected_output": "Should focus on the Borrowed channel from the ORB Framework. Should provide specific borrowed audience tactics: podcast guest appearances, co-marketing with complementary tools, influencer partnerships, community engagement (relevant Slack groups, Discord servers, Reddit), guest posts, cross-promotions. Should recommend how to identify and approach potential partners. Should note that borrowed audience strategies take time to build and should start well before launch day.",
+      "assertions": [
+        "Focuses on Borrowed channel from ORB Framework",
+        "Provides specific borrowed audience tactics",
+        "Mentions partnerships, communities, guest content",
+        "Recommends how to identify and approach partners",
+        "Notes borrowed strategies take time to build",
+        "Suggests starting well before launch day"
+      ],
+      "files": []
+    },
+    {
+      "id": 18,
+      "source": "launch-strategy",
+      "prompt": "Give me some creative marketing ideas to promote our product. We're bootstrapped and don't have a big budget.",
+      "expected_output": "Should recognize this is a broader marketing ideas request, not specifically a launch strategy task. Should defer to or cross-reference the content-strategy skill, which provides marketing ideas organized by category and filtered by budget. May provide some launch-related tactical ideas but should make clear that content-strategy is the right skill for a broader brainstorming session.",
+      "assertions": [
+        "Recognizes this as broader marketing ideas request",
+        "References or defers to content-strategy skill",
+        "Does not attempt full marketing brainstorm using launch strategy patterns",
+        "May provide some launch-related tactical ideas"
+      ],
+      "files": []
+    },
+    {
+      "id": 19,
+      "source": "churn-prevention",
+      "prompt": "Our SaaS product has a 7% monthly churn rate and we need to bring it down. We're a $49/month project management tool with about 2,000 paying customers. Can you help us design a churn prevention strategy?",
+      "expected_output": "Should check for product-marketing-context.md first. Should address both voluntary and involuntary churn. Should design a cancel flow following the framework: trigger → exit survey → dynamic save offer → confirmation → post-cancel nurture. Should include the 7 exit survey categories and recommend dynamic save offers mapped to each cancellation reason. Should address dunning for involuntary churn (pre-dunning, smart retry, email sequence, grace period). Should recommend a health score model. Should provide prioritized implementation plan.",
+      "assertions": [
+        "Checks for product-marketing-context.md",
+        "Addresses both voluntary and involuntary churn",
+        "Designs cancel flow with proper stages",
+        "Includes exit survey with multiple categories",
+        "Maps save offers to cancellation reasons",
+        "Addresses dunning stack for payment recovery",
+        "Recommends health score model",
+        "Provides prioritized implementation plan"
+      ],
+      "files": []
+    },
+    {
+      "id": 20,
+      "source": "churn-prevention",
+      "prompt": "We keep losing customers because their credit cards expire. About 15% of our churn is from failed payments. How do we fix this?",
+      "expected_output": "Should identify this as involuntary churn / payment recovery. Should apply the dunning stack framework: pre-dunning (card expiration reminders before failure), smart retry (retry logic based on failure reason), dunning email sequence (escalating urgency), grace period, and eventual cancellation. Should provide specific timing for each stage. Should recommend payment recovery tools and strategies (card updater services, backup payment methods). Should include recovery rate benchmarks.",
+      "assertions": [
+        "Identifies as involuntary churn / payment recovery",
+        "Applies dunning stack framework",
+        "Includes pre-dunning card expiration reminders",
+        "Includes smart retry logic",
+        "Provides dunning email sequence with escalating urgency",
+        "Recommends grace period before cancellation",
+        "Mentions card updater services or backup payment methods",
+        "Includes recovery benchmarks"
+      ],
+      "files": []
+    },
+    {
+      "id": 21,
+      "source": "churn-prevention",
+      "prompt": "what should we show users when they click the cancel button? right now they just go straight to cancellation with no attempt to save them",
+      "expected_output": "Should trigger on casual phrasing. Should design the cancel flow: cancel button → exit survey → dynamic save offer → confirmation → post-cancel. Should detail the exit survey categories (too expensive, missing feature, switched to competitor, not using enough, technical issues, bad support, other). Should provide dynamic save offers matched to each reason (e.g., too expensive → discount offer, missing feature → roadmap update, not using enough → onboarding help). Should include copy recommendations for each screen. Should warn against dark patterns (making it impossible to cancel).",
+      "assertions": [
+        "Triggers on casual phrasing",
+        "Designs multi-step cancel flow",
+        "Includes exit survey with 7 categories",
+        "Provides dynamic save offers mapped to reasons",
+        "Includes copy recommendations",
+        "Warns against dark patterns",
+        "Includes confirmation and post-cancel steps"
+      ],
+      "files": []
+    },
+    {
+      "id": 22,
+      "source": "churn-prevention",
+      "prompt": "How do we identify which customers are at risk of churning before they actually cancel? We want to be proactive.",
+      "expected_output": "Should apply the health score model framework. Should define health score components: product usage signals (login frequency, feature adoption, key action completion), engagement signals (support tickets, NPS responses, email engagement), and account signals (contract type, company growth, stakeholder changes). Should recommend scoring methodology (0-100 scale). Should define risk tiers and recommended interventions for each tier. Should suggest data sources and implementation approach.",
+      "assertions": [
+        "Applies health score model framework",
+        "Defines usage-based health signals",
+        "Defines engagement-based health signals",
+        "Defines account-based health signals",
+        "Recommends scoring methodology",
+        "Defines risk tiers with interventions",
+        "Suggests data sources and implementation"
+      ],
+      "files": []
+    },
+    {
+      "id": 23,
+      "source": "churn-prevention",
+      "prompt": "Our exit survey shows that 40% of cancellations say 'too expensive' as the reason. What save offers should we try?",
+      "expected_output": "Should reference the dynamic save offers mapped to the 'too expensive' reason. Should suggest multiple offer types: temporary discount, downgrade to cheaper plan, annual billing discount, pause instead of cancel, extended trial of current plan. Should recommend testing different offers to find what works best. Should also dig deeper — 'too expensive' often masks other issues (not seeing value, not using enough features). Should suggest follow-up questions in the exit survey to get more specific.",
+      "assertions": [
+        "References save offers for 'too expensive' reason",
+        "Suggests multiple offer types (discount, downgrade, pause)",
+        "Recommends testing different offers",
+        "Notes that 'too expensive' often masks other issues",
+        "Suggests deeper follow-up questions",
+        "Provides specific save offer copy or structure"
+      ],
+      "files": []
+    },
+    {
+      "id": 24,
+      "source": "churn-prevention",
+      "prompt": "We want to set up a win-back email sequence for customers who already cancelled. Can you help write those emails?",
+      "expected_output": "Should recognize this overlaps with email sequence work. Should defer to or cross-reference the email skill for writing the actual email sequence. May provide churn-specific context (timing post-cancel, re-engagement hooks, win-back offer strategy) but should make clear that email is the right skill for designing and writing the full email sequence.",
+      "assertions": [
+        "Recognizes overlap with email sequence work",
+        "References or defers to email skill",
+        "May provide churn-specific context for the sequence",
+        "Does not attempt to write a full email sequence"
+      ],
+      "files": []
+    }
+  ]
+}

@@ -12,8 +12,8 @@ Approve-stamp a GitHub PR by posting a comment.
 User says "stamp", "stamp it", "stmap", or similar.
 
 - Stamp only → use this skill alone.
-- Stamp + review → run this skill first, then the pr-reviewer skill.
-- Review only → use the pr-reviewer skill, not this.
+- Stamp + review → run this skill first, then the code-review skill.
+- Review only → use the code-review skill, not this.
 
 ## Steps
 

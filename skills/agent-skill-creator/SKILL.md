@@ -1,149 +1,88 @@
 ---
 name: agent-skill-creator
-description: Create or improve reusable agent skills that are framework-agnostic and easy to maintain. Use when building a new skill or updating an existing one with clear triggers, workflows, reusable resources, and validation steps.
+description: "Create or improve AI agent skills with proper progressive disclosure, description optimization, and router patterns. Use when building a new skill, updating an existing one, merging related skills into a router, auditing skill quality, or improving skill activation rates. Also use when the user mentions 'create a skill,' 'write a skill,' 'new skill,' 'skill template,' 'improve this skill,' 'skill isn't triggering,' 'merge these skills,' or 'skill architecture.'"
+metadata:
+  version: 2.1.0
 ---
 
-## Agent Skill Creator
+# Skill Creator
 
-Create skills that any AI assistant can follow, not just one vendor or runtime.
+## Before Starting
 
-## Default Location
+1. **New or improving?** — Creating from scratch vs updating existing
+2. **Process or knowledge?** — Workflow steps → skill. Reference catalog → `references/` file, not a standalone skill.
+3. **Standalone or merge?** — Check if related skills exist that should become one router.
 
-New skills go in `~/.niahere/skills/<skill-name>/SKILL.md`. This directory is auto-scanned.
-When updating an existing skill, edit it in place wherever it lives.
+## Step 1: Write the Description
 
-## Goals
+The description determines activation. Most important thing you write.
 
-- Make the skill portable across tools and agent frameworks.
-- Keep instructions concise, explicit, and testable.
-- Prefer reusable artifacts (scripts, references, templates) over repeating long instructions.
+**Rules:**
+- Third person only
+- WHAT it does + WHEN to use it + 5+ trigger phrases
+- Negative boundaries (what it does NOT do)
+- Max 1024 characters
 
-## Workflow
-
-### 1. Clarify scope with concrete examples
-
-Collect 3-5 realistic user requests the skill should handle.
-
-For each example, define:
-- Input shape (files, links, text, constraints)
-- Expected output
-- Quality bar (correctness, formatting, speed, safety)
-
-### 2. Define trigger metadata
-
-Write metadata that helps an agent decide when to use this skill.
-
-- `name`: short, hyphenated, action-oriented
-- `description`: what it does + clear trigger contexts
-
-Write descriptions with explicit cues such as:
-- task types
-- file types
-- domains
-- decision boundaries (when not to use)
-
-### 3. Design the skill structure
-
-Pick the simplest structure that fits:
-
-- Workflow-based: ordered steps for sequential processes
-- Task-based: independent operations/tooling
-- Reference-based: policy/spec driven tasks
-- Hybrid: small workflow + task sections
-
-Keep core instructions in `SKILL.md`. Move large detail into references.
-
-### 4. Add reusable resources only when they pay off
-
-Use optional folders as needed:
-
-- `scripts/`: deterministic repeatable operations
-- `references/`: detailed docs, schemas, standards
-- `assets/`: templates, boilerplate, media, examples
-
-Rules:
-- Do not create empty folders by default.
-- Avoid duplicate content between `SKILL.md` and references.
-- Prefer one good script over long repeated prose.
-
-### 5. Write implementation instructions
-
-In `SKILL.md`, use imperative instructions and concrete decision points.
-
-Include:
-- quick-start flow
-- fallback path for common failures
-- output formatting expectations
-- minimal examples
-
-Avoid:
-- tool/vendor lock-in unless explicitly required
-- long conceptual explanations without action
-- hidden assumptions about environment
-
-### 6. Validate before shipping
-
-Run this checklist:
-
-- Metadata is clear and triggerable.
-- Instructions are executable end-to-end.
-- Optional resources are referenced from `SKILL.md`.
-- Examples are realistic and match expected outputs.
-- No unnecessary files (README, changelog, process notes).
-- No conflicting or duplicated guidance.
-
-### 7. Iterate from real usage
-
-After first use:
-- note where the agent hesitated or failed
-- tighten trigger text and decision points
-- move repeated logic into scripts/templates
-- keep the file lean as capability grows
-
-## Portable Skill Template
-
-Use this starter when creating a new skill:
-
-```markdown
----
-name: your-skill-name
-description: What this skill does and exactly when to use it.
----
-
-## Overview
-One short paragraph on scope and outcome.
-
-## Quick Start
-1. First action.
-2. Main execution path.
-3. Output requirements.
-
-## Decision Points
-- If condition A: do X.
-- If condition B: do Y.
-- If blocked: fallback path.
-
-## Resources
-- `scripts/...` for deterministic tasks.
-- `references/...` for detailed docs.
-- `assets/...` for templates and boilerplate.
-
-## Validation
-- Command or checklist to verify output quality.
+```yaml
+description: "[What — 1 sentence]. Use when [context]. Also use when the user mentions '[phrase1],' '[phrase2],' ... [For X, see other-skill.]"
 ```
 
-## Editing an Existing Skill
+## Step 2: Choose Structure
 
-When updating a skill:
-- preserve existing behavior unless intentionally changing it
-- document new triggers in description
-- remove stale instructions immediately
-- keep backward-compatible structure when possible
+**Standalone** — single workflow, under ~300 lines total.
+**Router** — multiple modes, combined >300 lines, user may not know which mode they need.
 
-## Output Standard
+For detailed structure patterns with examples, see [references/patterns.md](references/patterns.md).
 
-A finished skill should be:
-- discoverable (clear trigger description)
-- executable (step-by-step, no ambiguity)
-- maintainable (small core, reusable resources)
-- portable (minimal runtime-specific assumptions)
+## Step 3: Write the Body
+
+**Process in SKILL.md, knowledge in references.** Keep body under 500 lines.
+
+For standalone skills — imperative steps with decision points:
+```markdown
+## Workflow
+1. [Action]
+2. [Decision — if X do A, if Y do B]
+3. [Output]
+```
+
+For router skills — just a routing table:
+```markdown
+## Mode Selection
+| Task | File |
+|------|------|
+| Task A | [mode-a.md](mode-a.md) |
+| Task B | [mode-b.md](mode-b.md) |
+```
+
+References one level deep only. Every reference linked from SKILL.md with "when to read" context.
+
+## Step 4: Cross-reference
+
+- **Within skill** (router → sub-files): markdown file links — `[mode-a.md](mode-a.md)`
+- **Between skills**: instructional prose — "Invoke the `other-skill` skill"
+- **Shared knowledge**: relative path links — `[ref](../other-skill/references/ref.md)`
+
+## Step 5: Validate
+
+- [ ] Description: third person, "Use when...", 5+ triggers, negative boundaries, <1024 chars
+- [ ] Body under 500 lines
+- [ ] References linked with "when to read" context, one level deep
+- [ ] Process and knowledge separated
+- [ ] No stale cross-references
+- [ ] If router: routing table clear, sub-files under ~400 lines each
+
+## Step 6: Iterate
+
+After use, observe: Did it trigger correctly? Did the agent load the right content? Tighten description triggers and routing based on what you see.
+
+## Editing Existing Skills
+
+- Preserve behavior unless intentionally changing
+- Update description if scope changed
+- If over 500 lines → convert to router
+- If pure knowledge with no workflow → demote to reference file
+
+## References
+
+- [Architecture Patterns](references/patterns.md) — progressive disclosure tiers, standalone vs router vs shared reference patterns, merge heuristics, description examples across domains, anti-patterns. Read this when choosing structure or writing descriptions.

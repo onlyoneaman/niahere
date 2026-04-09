@@ -5,6 +5,7 @@
 ### Improved
 
 - **CLAUDE.md prompt hardening** — added banned filler phrases list, web search guidelines with data freshness tiers (volatile/recent/stable), user-override-defaults principle, and tighter communication style rules (lead with answer, no hedging). Inspired by competitive prompt analysis.
+- **Skills consolidation** — merged 20+ standalone skills into router skills. Cold email + email sequence → `email`, AI SEO + SEO audit + llms.txt → `seo`, page/signup/onboarding CRO → `cro`, social content + marketing ideas + marketing psychology + launch strategy + competitor alternatives + pricing strategy → `marketing`, copy editing → `copywriting`, minimalist review → `plan-review`, pr-reviewer → `code-review`. Removed docx, pptx, and gh-stamp standalone skills. Slimmed down content-strategy, copywriting, frontend-design, customer-research, and agent-skill-creator. Net: ~12,400 lines removed across 59 files.
 
 ## [0.2.59] - 2026-04-09
 
