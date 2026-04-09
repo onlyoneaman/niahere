@@ -222,11 +222,12 @@ export async function startRepl(mode: ChatMode = "continue", simulateChannel?: s
     rl.prompt();
   });
 
-  rl.on("close", async () => {
+  rl.on("close", () => {
     console.log(`\n${DIM}bye${RESET}`);
     engine.close();
-    await closeDb();
-    process.exit(0);
+    closeDb()
+      .catch(() => {})
+      .finally(() => process.exit(0));
   });
 
   process.on("SIGINT", () => {
