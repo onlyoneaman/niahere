@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.60] - 2026-04-09
+
 ### Improved
 
 - **CLAUDE.md prompt hardening** — added banned filler phrases list, web search guidelines with data freshness tiers (volatile/recent/stable), user-override-defaults principle, and tighter communication style rules (lead with answer, no hedging). Inspired by competitive prompt analysis.
