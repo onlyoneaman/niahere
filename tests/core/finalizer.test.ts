@@ -1,17 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
 describe("finalizer", () => {
-  describe("role detection", () => {
-    test("defaults to cli role", async () => {
-      const { getRole } = await import("../../src/core/finalizer");
-      expect(getRole()).toBe("cli");
-    });
-
-    test("setRole changes role", async () => {
-      const { getRole, setRole } = await import("../../src/core/finalizer");
-      setRole("daemon");
-      expect(getRole()).toBe("daemon");
-      setRole("cli"); // reset
-    });
+  test("exports expected functions", async () => {
+    const mod = await import("../../src/core/finalizer");
+    expect(typeof mod.finalizeSession).toBe("function");
+    expect(typeof mod.cancelPending).toBe("function");
+    expect(typeof mod.processPending).toBe("function");
+    expect(typeof mod.cleanupOldRequests).toBe("function");
   });
 });

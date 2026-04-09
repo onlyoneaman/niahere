@@ -12,7 +12,7 @@ import { startScheduler, stopScheduler, recomputeAllNextRuns } from "./scheduler
 import { startAlive, stopAlive } from "./alive";
 import { createNiaMcpServer } from "../mcp/server";
 import { setMcpFactory } from "../mcp";
-import { setRole, processPending, cleanupOldRequests } from "./finalizer";
+import { processPending, cleanupOldRequests } from "./finalizer";
 
 export function writePid(pid: number): void {
   const { pid: pidPath } = getPaths();
@@ -150,9 +150,6 @@ function killAllDaemons(knownPid?: number | null): number {
 }
 
 export async function runDaemon(): Promise<void> {
-  // Mark this process as the daemon for the finalizer
-  setRole("daemon");
-
   // Ensure we never pass nested-session env vars to SDK subprocesses,
   // regardless of how the daemon was launched (nia start, nia run, etc.)
   delete process.env.CLAUDECODE;

@@ -2,11 +2,9 @@
  * Unified session finalizer — durable queue for post-session work.
  *
  * All callers use finalizeSession() instead of calling consolidator/summarizer
- * directly. The function writes a row to finalization_requests and returns
- * immediately. In daemon mode, it also starts processing inline. In CLI mode,
- * it fires pg_notify('nia_finalize') to wake the daemon.
- *
- * The daemon listens on nia_finalize and also drains pending requests on startup.
+ * directly. The function writes a row to finalization_requests and fires
+ * pg_notify('nia_finalize') to wake the daemon. That's it — all processing
+ * happens in the daemon via processPending().
  */
 
 import { getSql } from "../db/connection";
@@ -14,18 +12,7 @@ import { consolidateSession } from "./consolidator";
 import { summarizeSession } from "./summarizer";
 import { log } from "../utils/log";
 
-type ProcessRole = "daemon" | "cli";
-let role: ProcessRole = "cli";
-
-export function setRole(r: ProcessRole): void {
-  role = r;
-}
-
-export function getRole(): ProcessRole {
-  return role;
-}
-
-/** Enqueue a session for finalization. Returns immediately for CLI callers. */
+/** Enqueue a session for finalization. Always returns immediately. */
 export async function finalizeSession(sessionId: string, room: string): Promise<void> {
   const sql = getSql();
 
@@ -58,17 +45,10 @@ export async function finalizeSession(sessionId: string, room: string): Promise<
     VALUES (${sessionId}, ${room}, ${messageCount}, 'pending')
   `;
 
-  if (role === "daemon") {
-    // Process inline (fire-and-forget) — we're long-lived
-    processOne(sessionId, room, messageCount).catch((err) => {
-      log.error({ err, sessionId, room }, "finalizer: inline processing failed");
-    });
-  } else {
-    // Wake the daemon via NOTIFY
-    await sql.notify("nia_finalize", sessionId).catch((err) => {
-      log.warn({ err, sessionId }, "finalizer: pg_notify failed (daemon may not be running)");
-    });
-  }
+  // Wake the daemon
+  await sql.notify("nia_finalize", sessionId).catch((err) => {
+    log.warn({ err, sessionId }, "finalizer: pg_notify failed (daemon may not be running)");
+  });
 }
 
 /** Cancel pending finalization for a session (e.g. session resumed). */
