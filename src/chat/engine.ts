@@ -18,8 +18,7 @@ import type {
   EngineOptions,
 } from "../types";
 import { truncate, formatToolUse } from "../utils/format-activity";
-import { consolidateSession } from "../core/consolidator";
-import { summarizeSession } from "../core/summarizer";
+import { finalizeSession, cancelPending } from "../core/finalizer";
 import { log } from "../utils/log";
 
 const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
@@ -33,10 +32,7 @@ interface SDKUserMessage {
 }
 
 /** Convert provider-agnostic attachments to Anthropic content blocks. */
-export function buildContentBlocks(
-  text: string,
-  attachments?: Attachment[],
-): MessageParam["content"] {
+export function buildContentBlocks(text: string, attachments?: Attachment[]): MessageParam["content"] {
   if (!attachments?.length) return text;
 
   const blocks: Array<
@@ -124,19 +120,11 @@ interface PendingResult {
 function sessionFileExists(sessionId: string, cwd: string): boolean {
   // SDK stores sessions at ~/.claude/projects/<encoded-cwd>/<session-id>.jsonl
   const encoded = cwd.replace(/\//g, "-");
-  const sessionFile = join(
-    homedir(),
-    ".claude",
-    "projects",
-    encoded,
-    `${sessionId}.jsonl`,
-  );
+  const sessionFile = join(homedir(), ".claude", "projects", encoded, `${sessionId}.jsonl`);
   return existsSync(sessionFile);
 }
 
-export async function createChatEngine(
-  opts: EngineOptions,
-): Promise<ChatEngine> {
+export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine> {
   const { room, channel, resume, mcpServers } = opts;
   let systemPrompt = buildSystemPrompt("chat", channel);
 
@@ -181,22 +169,13 @@ export async function createChatEngine(
     idleTimer = setTimeout(async () => {
       if (pending) {
         // Don't tear down while a request is in flight
-        log.warn(
-          { room },
-          "idle timer fired while request pending, skipping teardown",
-        );
+        log.warn({ room }, "idle timer fired while request pending, skipping teardown");
         return;
       }
-      // Memory consolidation + session summary before "sleep"
+      // Enqueue finalization before "sleep"
       if (sessionId && messageCount > 0) {
-        consolidateSession(sessionId, room).catch((err) => {
-          log.error({ err, room }, "consolidation failed during idle teardown");
-        });
-        summarizeSession(sessionId, room).catch((err) => {
-          log.error(
-            { err, room },
-            "session summary failed during idle teardown",
-          );
+        finalizeSession(sessionId, room).catch((err) => {
+          log.error({ err, room }, "finalization enqueue failed during idle teardown");
         });
       }
       teardown();
@@ -216,10 +195,7 @@ export async function createChatEngine(
     longRunningTimer = setTimeout(() => {
       if (pending) {
         longRunningWarned = true;
-        log.warn(
-          { room, elapsed: LONG_RUNNING_WARN / 1000 },
-          "engine request running for 30+ minutes",
-        );
+        log.warn({ room, elapsed: LONG_RUNNING_WARN / 1000 }, "engine request running for 30+ minutes");
       }
     }, LONG_RUNNING_WARN);
   }
@@ -314,10 +290,7 @@ export async function createChatEngine(
                 if (lines.length > 1) {
                   // Show the last complete line (not the partial one being typed)
                   const completeLine = lines[lines.length - 2]?.trim();
-                  if (
-                    completeLine &&
-                    completeLine !== pending.lastThinkingLine
-                  ) {
+                  if (completeLine && completeLine !== pending.lastThinkingLine) {
                     pending.lastThinkingLine = completeLine;
                     pending.onActivity?.(truncate(completeLine, 70));
                   }
@@ -445,11 +418,7 @@ export async function createChatEngine(
             "query stream ended without result, rejecting pending request",
           );
           await ActiveEngine.unregister(room).catch(() => {});
-          pending.reject(
-            new Error(
-              `stream ended without result (${partial.length} chars accumulated)`,
-            ),
-          );
+          pending.reject(new Error(`stream ended without result (${partial.length} chars accumulated)`));
           pending = null;
         }
       } catch (err) {
@@ -476,14 +445,15 @@ export async function createChatEngine(
       return room;
     },
 
-    async send(
-      userMessage: string,
-      callbacks?: SendCallbacks,
-      attachments?: Attachment[],
-    ) {
+    async send(userMessage: string, callbacks?: SendCallbacks, attachments?: Attachment[]) {
       // Clear idle timer — engine is not idle while processing a request
       clearIdleTimer();
       startLongRunningTimer();
+
+      // Cancel any pending finalization — session is active again
+      if (sessionId) {
+        cancelPending(sessionId).catch(() => {});
+      }
 
       await ActiveEngine.register(room, channel);
 
@@ -524,13 +494,10 @@ export async function createChatEngine(
     },
 
     close() {
-      // Memory consolidation + session summary on explicit close
+      // Enqueue finalization — processed by daemon or inline if we are the daemon
       if (sessionId && messageCount > 0 && !pending) {
-        consolidateSession(sessionId, room).catch((err) => {
-          log.error({ err, room }, "consolidation failed during close");
-        });
-        summarizeSession(sessionId, room).catch((err) => {
-          log.error({ err, room }, "session summary failed during close");
+        finalizeSession(sessionId, room).catch((err) => {
+          log.error({ err, room }, "finalization enqueue failed during close");
         });
       }
       teardown();
