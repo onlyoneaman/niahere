@@ -174,7 +174,7 @@ class SlackChannel implements Channel {
           }
           const id = key.slice(0, hashIdx);
           const name = key.slice(hashIdx + 1);
-          const resolved = resolveWatchBehavior(entry.behavior);
+          const resolved = resolveWatchBehavior(entry.behavior, name);
           if (resolved.filePath) freshFiles.push(resolved.filePath);
           fresh.set(id, { name, behavior: resolved.behavior });
         }
@@ -506,7 +506,8 @@ class SlackChannel implements Channel {
 
       // Prepend watch behavior context for watched channels
       if (watchConfig) {
-        text = `[Watch mode — #${watchConfig.name}]\nBehavior: ${watchConfig.behavior}\nRespond with [NO_REPLY] if no action needed.\n\n${text}`;
+        const behaviorLine = watchConfig.behavior ? `Behavior: ${watchConfig.behavior}\n` : "";
+        text = `[Watch mode — #${watchConfig.name}]\n${behaviorLine}Respond with [NO_REPLY] if no action needed.\n\n${text}`;
       }
 
       log.info(

@@ -1,12 +1,14 @@
 /**
  * Watch behavior resolver.
  *
- * A watch entry's `behavior` field in config.yaml can be either:
- *   1. An inline behavior string (any prose with whitespace/newlines)
- *   2. A simple name like `kay-monitor` — resolved from `<watchesDir>/<name>.md`
+ * Each watch lives in `<watchesDir>/<name>/` and can contain:
+ *   - behavior.md — the prompt (optional)
+ *   - state.md    — working memory (future)
  *
- * Detection rule: if the value is a single token matching [a-zA-Z0-9_-]+
- * (no whitespace, no newlines), treat it as a file reference.
+ * The `behavior` field in config.yaml is optional and has three forms:
+ *   1. omitted/empty: use `watchName` (the part after `#` in the config key) as the identity
+ *   2. single token `[a-zA-Z0-9_-]+`: override identity, loads watches/<token>/behavior.md
+ *   3. prose (contains whitespace or punctuation): inline behavior
  */
 
 import { readFileSync, existsSync } from "fs";
@@ -17,37 +19,50 @@ import { log } from "./log";
 const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 export interface ResolvedBehavior {
-  /** Final behavior text used at runtime */
+  /** Final behavior text used at runtime. Empty string if no behavior was found. */
   behavior: string;
-  /** Absolute path to the file the behavior was loaded from, or null if inline */
+  /** Absolute path to the behavior file the text was loaded from, or null if inline/missing. */
   filePath: string | null;
 }
 
-/** Resolve a single behavior value from config into runtime behavior text. */
-export function resolveWatchBehavior(value: string): ResolvedBehavior {
-  const trimmed = value.trim();
+/**
+ * Resolve a watch behavior.
+ *
+ * @param behaviorValue The raw `behavior` field from config (may be undefined/empty)
+ * @param watchName The watch identity — the part after `#` in the config key
+ */
+export function resolveWatchBehavior(behaviorValue: string | undefined | null, watchName: string): ResolvedBehavior {
+  const raw = behaviorValue ?? "";
+  const trimmed = raw.trim();
 
-  // Inline behavior — contains whitespace, newlines, or punctuation
-  if (!NAME_PATTERN.test(trimmed)) {
-    return { behavior: value, filePath: null };
+  // Form 3: inline prose (contains whitespace or anything not in NAME_PATTERN)
+  if (trimmed && !NAME_PATTERN.test(trimmed)) {
+    return { behavior: raw, filePath: null };
   }
 
-  // Looks like a name — try to load from watches dir
-  const filePath = join(getPaths().watchesDir, `${trimmed}.md`);
+  // Form 1 or 2: resolve to a file
+  // Form 2 (explicit override) wins over Form 1 (implicit from watchName)
+  const name = trimmed || watchName;
+  if (!NAME_PATTERN.test(name)) {
+    log.warn({ watchName, behaviorValue }, "watch: could not derive a valid name for file lookup");
+    return { behavior: "", filePath: null };
+  }
+
+  const filePath = join(getPaths().watchesDir, name, "behavior.md");
   if (!existsSync(filePath)) {
-    log.warn({ name: trimmed, filePath }, "watch behavior file not found — using raw value as inline behavior");
-    return { behavior: value, filePath: null };
+    log.warn({ name, filePath }, "watch behavior file not found — watch will run without explicit behavior");
+    return { behavior: "", filePath: null };
   }
 
   try {
     const content = readFileSync(filePath, "utf8").trim();
     if (!content) {
-      log.warn({ filePath }, "watch behavior file is empty — using raw value");
-      return { behavior: value, filePath: null };
+      log.warn({ filePath }, "watch behavior file is empty");
+      return { behavior: "", filePath: null };
     }
     return { behavior: content, filePath };
   } catch (err) {
     log.error({ err, filePath }, "failed to read watch behavior file");
-    return { behavior: value, filePath: null };
+    return { behavior: "", filePath: null };
   }
 }

@@ -3,12 +3,7 @@ import type { ScheduleType } from "../types";
 import { basename, join } from "path";
 import { Job, Message, Session } from "../db/models";
 import { computeInitialNextRun } from "../core/scheduler";
-import {
-  getConfig,
-  readRawConfig,
-  updateRawConfig,
-  writeRawConfig,
-} from "../utils/config";
+import { getConfig, readRawConfig, updateRawConfig, writeRawConfig } from "../utils/config";
 import { getPaths } from "../utils/paths";
 import { getChannel } from "../channels/registry";
 import { log } from "../utils/log";
@@ -36,11 +31,7 @@ export async function addJob(args: {
   const stateless = args.stateless || false;
   const config = getConfig();
 
-  const nextRunAt = computeInitialNextRun(
-    scheduleType,
-    args.schedule,
-    config.timezone,
-  );
+  const nextRunAt = computeInitialNextRun(scheduleType, args.schedule, config.timezone);
   await Job.create(
     args.name,
     args.schedule,
@@ -104,11 +95,7 @@ export async function enableJob(name: string): Promise<string> {
   const job = await Job.get(name);
   if (job) {
     const config = getConfig();
-    const nextRun = computeInitialNextRun(
-      job.scheduleType,
-      job.schedule,
-      config.timezone,
-    );
+    const nextRun = computeInitialNextRun(job.scheduleType, job.schedule, config.timezone);
     const { getSql } = await import("../db/connection");
     await getSql()`UPDATE jobs SET next_run_at = ${nextRun} WHERE name = ${name}`;
   }
@@ -156,8 +143,7 @@ async function sendDirect(target: string, text: string): Promise<void> {
     const token = config.channels.telegram.bot_token;
     const chatId = config.channels.telegram.chat_id;
     if (!token) throw new Error("Telegram not configured (no bot token)");
-    if (!chatId)
-      throw new Error("No Telegram chat ID — send a message to the bot first");
+    if (!chatId) throw new Error("No Telegram chat ID — send a message to the bot first");
     const { Bot } = await import("grammy");
     const bot = new Bot(token);
     await bot.api.sendMessage(chatId, text);
@@ -166,13 +152,9 @@ async function sendDirect(target: string, text: string): Promise<void> {
 
   if (target === "slack") {
     const token = config.channels.slack.bot_token;
-    const recipient =
-      config.channels.slack.channel_id || config.channels.slack.dm_user_id;
+    const recipient = config.channels.slack.channel_id || config.channels.slack.dm_user_id;
     if (!token) throw new Error("Slack not configured (no bot token)");
-    if (!recipient)
-      throw new Error(
-        "No Slack recipient — DM the bot first, or set slack_channel_id in config",
-      );
+    if (!recipient) throw new Error("No Slack recipient — DM the bot first, or set slack_channel_id in config");
     const { App } = await import("@slack/bolt");
     const app = new App({ token, signingSecret: "unused" });
     await app.client.chat.postMessage({ token, channel: recipient, text });
@@ -183,20 +165,14 @@ async function sendDirect(target: string, text: string): Promise<void> {
 }
 
 /** Send media directly via API (no started channel). */
-async function sendMediaDirect(
-  target: string,
-  data: Buffer,
-  mimeType: string,
-  filename?: string,
-): Promise<void> {
+async function sendMediaDirect(target: string, data: Buffer, mimeType: string, filename?: string): Promise<void> {
   const config = getConfig();
 
   if (target === "telegram") {
     const token = config.channels.telegram.bot_token;
     const chatId = config.channels.telegram.chat_id;
     if (!token) throw new Error("Telegram not configured (no bot token)");
-    if (!chatId)
-      throw new Error("No Telegram chat ID — send a message to the bot first");
+    if (!chatId) throw new Error("No Telegram chat ID — send a message to the bot first");
     const { Bot, InputFile } = await import("grammy");
     const bot = new Bot(token);
     const file = new InputFile(data, filename);
@@ -210,13 +186,9 @@ async function sendMediaDirect(
 
   if (target === "slack") {
     const token = config.channels.slack.bot_token;
-    const recipient =
-      config.channels.slack.channel_id || config.channels.slack.dm_user_id;
+    const recipient = config.channels.slack.channel_id || config.channels.slack.dm_user_id;
     if (!token) throw new Error("Slack not configured (no bot token)");
-    if (!recipient)
-      throw new Error(
-        "No Slack recipient — DM the bot first, or set slack_channel_id in config",
-      );
+    if (!recipient) throw new Error("No Slack recipient — DM the bot first, or set slack_channel_id in config");
     const { App } = await import("@slack/bolt");
     const app = new App({ token, signingSecret: "unused" });
     await app.client.filesUploadV2({
@@ -230,11 +202,7 @@ async function sendMediaDirect(
   throw new Error(`Channel "${target}" not configured`);
 }
 
-export async function sendMessage(
-  text: string,
-  channelName?: string,
-  mediaPath?: string,
-): Promise<string> {
+export async function sendMessage(text: string, channelName?: string, mediaPath?: string): Promise<string> {
   const config = getConfig();
   const target = channelName || config.channels.default;
 
@@ -244,8 +212,7 @@ export async function sendMessage(
   try {
     // Handle media attachment if provided
     if (mediaPath) {
-      if (!existsSync(mediaPath))
-        return `Failed to send: file not found: ${mediaPath}`;
+      if (!existsSync(mediaPath)) return `Failed to send: file not found: ${mediaPath}`;
       const data = readFileSync(mediaPath);
       const mimeType = guessMime(mediaPath);
       const filename = basename(mediaPath);
@@ -288,9 +255,7 @@ export async function sendMessage(
         const fullRoom = `${room}-${idx}`;
         const sessionId = await Session.getLatest(fullRoom);
         if (sessionId) {
-          const content = mediaPath
-            ? `${text} [media: ${basename(mediaPath)}]`
-            : text;
+          const content = mediaPath ? `${text} [media: ${basename(mediaPath)}]` : text;
           await Message.save({
             sessionId,
             room: fullRoom,
@@ -321,11 +286,7 @@ export async function listSessions(limit = 10, room?: string): Promise<string> {
   return JSON.stringify(sessions, null, 2);
 }
 
-export async function searchMessages(
-  query: string,
-  limit = 20,
-  room?: string,
-): Promise<string> {
+export async function searchMessages(query: string, limit = 20, room?: string): Promise<string> {
   const results = await Message.search(query, limit, room);
   if (results.length === 0) return "No matching messages found.";
   return JSON.stringify(results, null, 2);
@@ -345,13 +306,15 @@ export function addRule(rule: string): string {
   return `Rule added to rules.md. Takes effect on next new session.`;
 }
 
-export function addWatchChannel(name: string, behavior: string): string {
+export function addWatchChannel(name: string, behavior?: string): string {
   const raw = readRawConfig();
   const channels = (raw.channels || {}) as Record<string, unknown>;
   const slack = (channels.slack || {}) as Record<string, unknown>;
+  const entry: Record<string, unknown> = { enabled: true };
+  if (behavior !== undefined && behavior !== "") entry.behavior = behavior;
   const watch = {
     ...((slack.watch || {}) as Record<string, unknown>),
-    [name]: { behavior, enabled: true },
+    [name]: entry,
   };
   updateRawConfig({ channels: { slack: { watch } } });
   return `Watch channel "${name}" added (enabled). Takes effect on next message.`;
@@ -398,9 +361,7 @@ export function readMemory(): string {
   if (!existsSync(memoryPath)) return "No memories saved yet.";
   const content = readFileSync(memoryPath, "utf8").trim();
   // Extract just the entries, skip the header/instructions
-  const lines = content
-    .split("\n")
-    .filter((l) => l.startsWith("- ") || l.startsWith("## "));
+  const lines = content.split("\n").filter((l) => l.startsWith("- ") || l.startsWith("## "));
   if (lines.length === 0) return "No memories saved yet.";
   return lines.join("\n");
 }
@@ -409,21 +370,14 @@ export function addMemory(entry: string): string {
   // Guard: reject raw logs, transcripts, and overly long entries
   const trimmed = entry.trim();
   if (!trimmed) return "Rejected: empty entry.";
-  if (trimmed.length > 300)
-    return "Rejected: too long (max 300 chars). Distill to a single concise insight.";
-  if (
-    trimmed.includes("[Thread context]") ||
-    trimmed.includes("[Current messag")
-  )
+  if (trimmed.length > 300) return "Rejected: too long (max 300 chars). Distill to a single concise insight.";
+  if (trimmed.includes("[Thread context]") || trimmed.includes("[Current messag"))
     return "Rejected: no raw conversation transcripts.";
-  if (trimmed.split("\n").length > 5)
-    return "Rejected: too many lines. One concise insight per memory.";
+  if (trimmed.split("\n").length > 5) return "Rejected: too many lines. One concise insight per memory.";
 
   const { selfDir } = getPaths();
   const memoryPath = join(selfDir, "memory.md");
-  const existing = existsSync(memoryPath)
-    ? readFileSync(memoryPath, "utf8")
-    : "";
+  const existing = existsSync(memoryPath) ? readFileSync(memoryPath, "utf8") : "";
 
   // TODO: add semantic dedup later (embeddings or similar)
 

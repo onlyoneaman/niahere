@@ -4,7 +4,7 @@
 
 ### Added
 
-- **File-backed watch behaviors** — Slack watch entries can now reference a markdown file instead of inlining long behavior prompts in `config.yaml`. Set `behavior: kay-monitor` and the runtime loads `~/.niahere/watches/kay-monitor.md`. Short behaviors still work inline (anything with whitespace is treated as inline). Hot-reloads on file edits — no daemon restart needed.
+- **Dir-per-watch layout + optional behavior** — each Slack watch is now a self-contained directory at `~/.niahere/watches/<name>/` (matching the agents pattern). The `behavior` field in `channels.slack.watch` is now optional: omit it and the watch loads `watches/<name>/behavior.md` using the channel name from the config key. Set it to a single word to override the directory, or to prose for an inline behavior. Short behaviors still work inline. Missing files no longer break the watch — agent just runs without explicit behavior. Hot-reloads via mtime tracking of config.yaml AND any referenced behavior files. Auto-creates `watches/` dir on daemon startup and `nia init`.
 
 ### Improved
 

@@ -5,7 +5,14 @@ export interface TelegramConfig {
 }
 
 export interface SlackWatchChannel {
-  behavior: string;
+  /**
+   * Optional. Three forms:
+   *   - omitted/empty: use the watch name (part after # in the key) as identity,
+   *     loads behavior from watches/<name>/behavior.md
+   *   - single token (e.g. "kay-monitor"): override identity, loads watches/<token>/behavior.md
+   *   - prose (contains whitespace): inline behavior
+   */
+  behavior?: string;
   enabled: boolean;
 }
 
