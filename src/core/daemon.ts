@@ -202,6 +202,14 @@ export async function runDaemon(): Promise<void> {
     }
   } catch {}
 
+  // Ensure watches dir exists — used for file-backed watch behaviors and
+  // per-watch working memory. Safe to call on every startup.
+  try {
+    mkdirSync(getPaths().watchesDir, { recursive: true });
+  } catch (err) {
+    log.warn({ err }, "failed to ensure watches dir");
+  }
+
   // Startup recovery
   try {
     await runMigrations();

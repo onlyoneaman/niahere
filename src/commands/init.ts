@@ -50,7 +50,11 @@ async function offerBeadsShellExport(rl: readline.Interface, beadsDir: string): 
     }
   }
 
-  const answer = await ask(rl, `\nAdd BEADS_DIR to ${rcFile.replace(homedir(), "~")} so 'bd' works globally? (y/n)`, "y");
+  const answer = await ask(
+    rl,
+    `\nAdd BEADS_DIR to ${rcFile.replace(homedir(), "~")} so 'bd' works globally? (y/n)`,
+    "y",
+  );
   if (answer.toLowerCase() !== "y") return;
 
   appendFileSync(rcFile, `\n# Beads global task DB\n${exportLine}\n`);
@@ -198,7 +202,9 @@ export async function runInit(): Promise<void> {
         Bun.spawn([openCmd, createUrl], { stdio: ["ignore", "ignore", "ignore"] });
         console.log("  1. Click 'Create' to create the app");
         console.log("  2. Go to 'OAuth & Permissions' → Install to workspace → copy Bot Token (xoxb-...)");
-        console.log("  3. Go to 'Basic Information' → 'App-Level Tokens' → create one with connections:write → copy (xapp-...)\n");
+        console.log(
+          "  3. Go to 'Basic Information' → 'App-Level Tokens' → create one with connections:write → copy (xapp-...)\n",
+        );
 
         slackBotToken = await ask(rl, "Bot token (xoxb-...)", "");
         slackAppToken = await ask(rl, "App token (xapp-...)", "");
@@ -217,7 +223,7 @@ export async function runInit(): Promise<void> {
       const masked = `...${existingGemini.slice(-6)}`;
       const reconfigure = await ask(rl, `\nGemini API: configured (${masked}). Reconfigure? (y/n)`, "n");
       if (reconfigure.toLowerCase() === "y") {
-        geminiApiKey = await ask(rl, "Gemini API key", "") || existingGemini;
+        geminiApiKey = (await ask(rl, "Gemini API key", "")) || existingGemini;
       } else {
         geminiApiKey = existingGemini;
       }
@@ -229,7 +235,7 @@ export async function runInit(): Promise<void> {
     }
 
     // Beads task manager
-    const bdInstalled = await Bun.spawn(["which", "bd"], { stdout: "pipe", stderr: "pipe" }).exited === 0;
+    const bdInstalled = (await Bun.spawn(["which", "bd"], { stdout: "pipe", stderr: "pipe" }).exited) === 0;
     const beadsInitialized = existsSync(`${paths.beadsDir}/.beads`);
 
     if (bdInstalled && beadsInitialized) {
@@ -266,7 +272,7 @@ export async function runInit(): Promise<void> {
           console.log("  \u2713 beads installed");
           mkdirSync(paths.beadsDir, { recursive: true });
           const initProc = Bun.spawn(["bd", "init"], { cwd: paths.beadsDir, stdout: "pipe", stderr: "pipe" });
-          if (await initProc.exited === 0) {
+          if ((await initProc.exited) === 0) {
             console.log(`  \u2713 initialized beads at ${paths.beadsDir}`);
             await offerBeadsShellExport(rl, paths.beadsDir);
           }
@@ -325,28 +331,45 @@ export async function runInit(): Promise<void> {
           // User provided a description — generate from scratch
           console.log("  Generating reference image from description...");
           const prompt = `Ultra photorealistic portrait: ${visualChoice}. Natural skin texture, DSLR quality, 8k, hyper-detailed.`;
-          const proc = Bun.spawn([
-            "python3", GENERATE_SCRIPT,
-            "--no-reference",
-            "--api-key", geminiApiKey,
-            "--aspect-ratio", "9:16",
-            "--prompt", prompt,
-            "--output", `${imagesDir}/reference.webp`,
-          ], { stdout: "pipe", stderr: "pipe" });
+          const proc = Bun.spawn(
+            [
+              "python3",
+              GENERATE_SCRIPT,
+              "--no-reference",
+              "--api-key",
+              geminiApiKey,
+              "--aspect-ratio",
+              "9:16",
+              "--prompt",
+              prompt,
+              "--output",
+              `${imagesDir}/reference.webp`,
+            ],
+            { stdout: "pipe", stderr: "pipe" },
+          );
           const exitCode = await proc.exited;
           if (exitCode === 0) {
             console.log(`  \u2713 generated reference image at ${imagesDir}/reference.webp`);
             // Also generate a profile picture
             console.log("  Generating profile picture...");
-            const profileProc = Bun.spawn([
-              "python3", GENERATE_SCRIPT,
-              "--reference", `${imagesDir}/reference.webp`,
-              "--api-key", geminiApiKey,
-              "--aspect-ratio", "1:1",
-              "--prompt", `Photorealistic close-up portrait of the same person from the reference. Warm slight smile, direct eye contact, soft ambient side lighting, creamy bokeh background, 85mm f/1.8, shallow depth of field. Same face, same style, natural skin texture, DSLR quality, hyper-detailed.`,
-              "--output", `${imagesDir}/profile.webp`,
-            ], { stdout: "pipe", stderr: "pipe" });
-            if (await profileProc.exited === 0) {
+            const profileProc = Bun.spawn(
+              [
+                "python3",
+                GENERATE_SCRIPT,
+                "--reference",
+                `${imagesDir}/reference.webp`,
+                "--api-key",
+                geminiApiKey,
+                "--aspect-ratio",
+                "1:1",
+                "--prompt",
+                `Photorealistic close-up portrait of the same person from the reference. Warm slight smile, direct eye contact, soft ambient side lighting, creamy bokeh background, 85mm f/1.8, shallow depth of field. Same face, same style, natural skin texture, DSLR quality, hyper-detailed.`,
+                "--output",
+                `${imagesDir}/profile.webp`,
+              ],
+              { stdout: "pipe", stderr: "pipe" },
+            );
+            if ((await profileProc.exited) === 0) {
               console.log(`  \u2713 generated profile picture at ${imagesDir}/profile.webp`);
             }
           } else {
@@ -373,6 +396,7 @@ export async function runInit(): Promise<void> {
     // Create directories
     mkdirSync(home, { recursive: true });
     mkdirSync(paths.selfDir, { recursive: true });
+    mkdirSync(paths.watchesDir, { recursive: true });
     mkdirSync(`${home}/tmp`, { recursive: true });
 
     // Write config.yaml
@@ -423,7 +447,10 @@ export async function runInit(): Promise<void> {
 
     if (ownerName) {
       let ownerContent = loadTemplate("owner.md", vars);
-      ownerContent = ownerContent.split("\n").filter((l) => !l.match(/\*\*\w+\*\*:\s*$/)).join("\n");
+      ownerContent = ownerContent
+        .split("\n")
+        .filter((l) => !l.match(/\*\*\w+\*\*:\s*$/))
+        .join("\n");
       writeFileSync(selfFile("owner.md"), ownerContent);
       console.log(`  \u2713 wrote ${selfFile("owner.md")}`);
     }
