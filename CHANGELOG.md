@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`nia validate` rejected watches without inline behavior** — validator was still enforcing the old required-behavior rule after the dir-per-watch rework. Now accepts watches with no `behavior` field and labels them `[file (default)]` in the output.
+
 ## [0.2.61] - 2026-04-11
 
 ### Added

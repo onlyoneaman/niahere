@@ -112,28 +112,30 @@ export function validateConfig(): Result {
         messages.push(`${PASS} slack.app_token set`);
       }
 
-      // Watch channels
+      // Watch channels — behavior is optional (loads from watches/<name>/behavior.md if omitted)
       const watch = sl.watch as Record<string, unknown> | undefined;
       if (watch) {
         for (const [key, val] of Object.entries(watch)) {
           if (!val || typeof val !== "object") {
-            messages.push(`${FAIL} slack.watch.${key}: must be an object with "behavior" field`);
+            messages.push(`${FAIL} slack.watch.${key}: must be an object`);
             ok = false;
             continue;
           }
-          const behavior = (val as Record<string, unknown>).behavior;
-          if (typeof behavior !== "string" || !behavior.trim()) {
-            messages.push(`${FAIL} slack.watch.${key}: missing "behavior" string`);
+          if (!key.includes("#")) {
+            messages.push(`${FAIL} slack.watch.${key}: must use "channel_id#name" format`);
             ok = false;
             continue;
           }
-          if (key.includes("#")) {
-            const enabled = (val as Record<string, unknown>).enabled !== false;
-            messages.push(`${enabled ? PASS : WARN} slack.watch: ${key}${enabled ? "" : " (disabled)"}`);
-          } else {
-            messages.push(`${FAIL} slack.watch.${key}: must use "channel_id#${key}" format`);
+          const entry = val as Record<string, unknown>;
+          const behavior = entry.behavior;
+          if (behavior !== undefined && typeof behavior !== "string") {
+            messages.push(`${FAIL} slack.watch.${key}: "behavior" must be a string if set`);
             ok = false;
+            continue;
           }
+          const enabled = entry.enabled !== false;
+          const source = behavior && behavior.trim() ? "inline/file-ref" : "file (default)";
+          messages.push(`${enabled ? PASS : WARN} slack.watch: ${key} [${source}]${enabled ? "" : " (disabled)"}`);
         }
       }
     }
