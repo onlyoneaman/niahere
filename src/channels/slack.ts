@@ -12,6 +12,7 @@ import { log } from "../utils/log";
 import { getMcpServers } from "../mcp";
 import { getNiaHome, getPaths } from "../utils/paths";
 import { classifyMime, validateAttachment, prepareImage } from "../utils/attachment";
+import { resolveWatchBehavior } from "../utils/watches";
 
 /** Strip markdown backticks so sentinel tokens like [NO_REPLY] match even when the LLM wraps them. */
 function cleanSentinel(text: string): string {
@@ -133,22 +134,36 @@ class SlackChannel implements Channel {
 
     let botUserId: string | undefined;
 
-    // Watch channels: mtime-based hot-reload from config.yaml
-    // Keys are always channel_id#channel_name format
+    // Watch channels: mtime-based hot-reload from config.yaml AND any watch
+    // behavior files referenced by that config. Keys are channel_id#channel_name.
     let watchCache: Map<string, { name: string; behavior: string }> = new Map();
-    let watchConfigMtime = 0;
+    let watchFilePaths: string[] = [];
+    let lastReloadMtime = 0;
+
+    function maxMtime(paths: string[]): number {
+      let max = 0;
+      for (const p of paths) {
+        try {
+          const m = statSync(p).mtimeMs;
+          if (m > max) max = m;
+        } catch {
+          // ignore missing files
+        }
+      }
+      return max;
+    }
 
     function reloadWatchChannels(): Map<string, { name: string; behavior: string }> {
       const configPath = getPaths().config;
-      let mtime = 0;
-      try { mtime = statSync(configPath).mtimeMs; } catch { return watchCache; }
-      if (mtime === watchConfigMtime) return watchCache;
+      const mtime = maxMtime([configPath, ...watchFilePaths]);
+      if (mtime === 0) return watchCache;
+      if (mtime === lastReloadMtime) return watchCache;
 
-      watchConfigMtime = mtime;
       resetConfig(); // clear cached config so getConfig() re-reads from disk
       const cfg = getConfig();
       const watch = cfg.channels.slack.watch;
       const fresh = new Map<string, { name: string; behavior: string }>();
+      const freshFiles: string[] = [];
       if (watch) {
         for (const [key, entry] of Object.entries(watch)) {
           if (!entry.enabled) continue;
@@ -159,13 +174,17 @@ class SlackChannel implements Channel {
           }
           const id = key.slice(0, hashIdx);
           const name = key.slice(hashIdx + 1);
-          fresh.set(id, { name, behavior: entry.behavior });
+          const resolved = resolveWatchBehavior(entry.behavior);
+          if (resolved.filePath) freshFiles.push(resolved.filePath);
+          fresh.set(id, { name, behavior: resolved.behavior });
         }
       }
       if (fresh.size !== watchCache.size) {
         log.info({ count: fresh.size }, "slack: watch channels reloaded");
       }
       watchCache = fresh;
+      watchFilePaths = freshFiles;
+      lastReloadMtime = maxMtime([configPath, ...freshFiles]);
       return watchCache;
     }
 
@@ -209,7 +228,10 @@ class SlackChannel implements Channel {
       const isDm = command.channel_name === "directmessage";
       const key = isDm ? `dm-${command.user_id}` : await resolveChannelName(app, command.channel_id);
       const state = await restartChat(key);
-      log.info({ channel: command.channel_id, key, room: roomName(key, state.roomIndex) }, "new slack session via /nia-new");
+      log.info(
+        { channel: command.channel_id, key, room: roomName(key, state.roomIndex) },
+        "new slack session via /nia-new",
+      );
       await respond("New conversation started.");
     });
 
@@ -264,7 +286,12 @@ class SlackChannel implements Channel {
         if (existsSync(diskPath) && existsSync(metaPath)) {
           try {
             const meta = JSON.parse(readFileSync(metaPath, "utf8"));
-            const entry: CachedFile = { path: diskPath, type: meta.type || attType, mimeType: meta.mimeType || mime, filename: meta.filename || file.name };
+            const entry: CachedFile = {
+              path: diskPath,
+              type: meta.type || attType,
+              mimeType: meta.mimeType || mime,
+              filename: meta.filename || file.name,
+            };
             fileIndex.set(file.url_private_download, entry);
             attachments.push(loadCached(entry));
             continue;
@@ -354,7 +381,10 @@ class SlackChannel implements Channel {
             const parentMsg = parent.messages?.[0];
             if (parentMsg && (parentMsg.user === botUserId || parentMsg.bot_id)) {
               isActiveThread = true;
-              log.debug({ channel: msg.channel, thread_ts: msg.thread_ts }, "thread parent is bot-authored, activating");
+              log.debug(
+                { channel: msg.channel, thread_ts: msg.thread_ts },
+                "thread parent is bot-authored, activating",
+              );
             }
           } catch (err) {
             log.warn({ err, channel: msg.channel, thread_ts: msg.thread_ts }, "failed to check thread parent");
@@ -368,16 +398,19 @@ class SlackChannel implements Channel {
       const isWatched = !!watchConfig;
 
       if (!isDm && !isMention && !isActiveThread && !isWatched) {
-        log.debug({
-          channel: msg.channel,
-          text: (msg.text || "").slice(0, 80),
-          thread_ts: msg.thread_ts,
-          isDm,
-          isMention: !!isMention,
-          isActiveThread,
-          activeChats: [...chats.keys()],
-          reason: !msg.thread_ts ? "no mention in channel" : "no active session for thread",
-        }, "slack message ignored");
+        log.debug(
+          {
+            channel: msg.channel,
+            text: (msg.text || "").slice(0, 80),
+            thread_ts: msg.thread_ts,
+            isDm,
+            isMention: !!isMention,
+            isActiveThread,
+            activeChats: [...chats.keys()],
+            reason: !msg.thread_ts ? "no mention in channel" : "no active session for thread",
+          },
+          "slack message ignored",
+        );
         return;
       }
 
@@ -424,7 +457,7 @@ class SlackChannel implements Channel {
       }
 
       if (!text && (!attachments || attachments.length === 0)) return;
-      if (!text) text = attachments?.some(a => a.type === "image") ? "What's in this image?" : "Here's a file.";
+      if (!text) text = attachments?.some((a) => a.type === "image") ? "What's in this image?" : "Here's a file.";
 
       // When replying in a thread, fetch thread context so Nia can see the full conversation
       if (msg.thread_ts) {
@@ -434,12 +467,11 @@ class SlackChannel implements Channel {
             ts: msg.thread_ts,
             limit: 50,
           });
-          const priorMessages = (replies.messages || [])
-            .filter((m: any) => m.ts !== msg.ts); // exclude the triggering message
+          const priorMessages = (replies.messages || []).filter((m: any) => m.ts !== msg.ts); // exclude the triggering message
 
           const now = new Date();
           const threadMessages = priorMessages.map((m: any) => {
-            const sender = m.bot_id ? "bot" : (m.user || "unknown");
+            const sender = m.bot_id ? "bot" : m.user || "unknown";
             const fileHint = m.files?.length ? ` [${m.files.length} file(s) attached]` : "";
             const age = m.ts ? ` (${relativeTime(new Date(parseFloat(m.ts) * 1000), now)})` : "";
             return `[${sender}]${age}: ${m.text || "(no text)"}${fileHint}`;
@@ -477,7 +509,17 @@ class SlackChannel implements Channel {
         text = `[Watch mode — #${watchConfig.name}]\nBehavior: ${watchConfig.behavior}\nRespond with [NO_REPLY] if no action needed.\n\n${text}`;
       }
 
-      log.info({ channel: msg.channel, key, text: text.slice(0, 100), isDm, watched: isWatched, attachments: attachments?.length || 0 }, "slack message received");
+      log.info(
+        {
+          channel: msg.channel,
+          key,
+          text: text.slice(0, 100),
+          isDm,
+          watched: isWatched,
+          attachments: attachments?.length || 0,
+        },
+        "slack message received",
+      );
 
       let state: ChatState;
       try {
@@ -489,15 +531,20 @@ class SlackChannel implements Channel {
 
       withLock(key, async () => {
         // Add thinking reaction inside the lock so cleanup is guaranteed
-        await client.reactions.add({ channel: msg.channel, timestamp: msg.ts, name: "thinking_face" })
+        await client.reactions
+          .add({ channel: msg.channel, timestamp: msg.ts, name: "thinking_face" })
           .catch((err) => log.debug({ err, channel: msg.channel }, "slack: failed to add thinking reaction"));
 
         try {
-          const { result, messageId } = await state.engine.send(text, {
-            onActivity(status) {
-              log.debug({ status }, "slack engine activity");
+          const { result, messageId } = await state.engine.send(
+            text,
+            {
+              onActivity(status) {
+                log.debug({ status }, "slack engine activity");
+              },
             },
-          }, attachments);
+            attachments,
+          );
 
           const reply = result.trim();
 
@@ -529,16 +576,19 @@ class SlackChannel implements Channel {
           log.error({ err, channel: msg.channel }, "slack message processing failed");
 
           if (replyThreadTs) {
-            await client.chat.postMessage({
-              channel: msg.channel,
-              text: `[error] ${errText}`,
-              thread_ts: replyThreadTs,
-            }).catch(() => {});
+            await client.chat
+              .postMessage({
+                channel: msg.channel,
+                text: `[error] ${errText}`,
+                thread_ts: replyThreadTs,
+              })
+              .catch(() => {});
           } else {
             await say(`[error] ${errText}`).catch(() => {});
           }
         } finally {
-          await client.reactions.remove({ channel: msg.channel, timestamp: msg.ts, name: "thinking_face" })
+          await client.reactions
+            .remove({ channel: msg.channel, timestamp: msg.ts, name: "thinking_face" })
             .catch((err) => log.debug({ err, channel: msg.channel }, "slack: failed to remove thinking reaction"));
         }
       });

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **File-backed watch behaviors** — Slack watch entries can now reference a markdown file instead of inlining long behavior prompts in `config.yaml`. Set `behavior: kay-monitor` and the runtime loads `~/.niahere/watches/kay-monitor.md`. Short behaviors still work inline (anything with whitespace is treated as inline). Hot-reloads on file edits — no daemon restart needed.
+
 ### Improved
 
 - **Unified session finalizer** — consolidated ad-hoc consolidation/summarization calls into a single DB-backed finalizer queue (`finalization_requests` table). REPL and CLI exits are now instant — the daemon processes post-session work reliably via `pg_notify`. Fixes `CONNECTION_ENDED` errors on `nia chat` exit.

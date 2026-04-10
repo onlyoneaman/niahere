@@ -20,5 +20,6 @@ export function getPaths(): Paths {
     beadsDir: resolve(home, "beads"),
     skillsDir: resolve(home, "skills"),
     imagesDir: resolve(home, "images"),
+    watchesDir: resolve(home, "watches"),
   };
 }

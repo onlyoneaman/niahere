@@ -23,5 +23,6 @@ describe("getPaths", () => {
     expect(paths.selfDir).toBe(resolve(TEST_DIR, "self"));
     expect(paths.beadsDir).toBe(resolve(TEST_DIR, "beads"));
     expect(paths.skillsDir).toBe(resolve(TEST_DIR, "skills"));
+    expect(paths.watchesDir).toBe(resolve(TEST_DIR, "watches"));
   });
 });

@@ -10,4 +10,5 @@ export interface Paths {
   beadsDir: string;
   skillsDir: string;
   imagesDir: string;
+  watchesDir: string;
 }
