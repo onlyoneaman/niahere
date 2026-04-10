@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.61] - 2026-04-11
+
 ### Added
 
 - **Dir-per-watch layout + optional behavior** — each Slack watch is now a self-contained directory at `~/.niahere/watches/<name>/` (matching the agents pattern). The `behavior` field in `channels.slack.watch` is now optional: omit it and the watch loads `watches/<name>/behavior.md` using the channel name from the config key. Set it to a single word to override the directory, or to prose for an inline behavior. Short behaviors still work inline. Missing files no longer break the watch — agent just runs without explicit behavior. Hot-reloads via mtime tracking of config.yaml AND any referenced behavior files. Auto-creates `watches/` dir on daemon startup and `nia init`.
