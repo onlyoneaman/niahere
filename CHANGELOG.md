@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Environment system prompt updated for recent releases.** `src/prompts/environment.md` had drifted behind several shipped features: (1) the `update_job` and `add_job` bullets now mention the `model` override from 0.2.59; (2) the `channels.slack.watch` config reference now describes the dir-per-watch layout and the three forms of the optional `behavior` field from 0.2.61; (3) the Persona & Memory section now includes `staging.md` in the persona files list and has a new "How durable memories get made" subsection that describes the two-stage flow (live user-explicit saves vs background consolidation via staging → nightly promoter); (4) the old "When to save (be proactive)" section with two large affirmative tables (16 rows total) has been trimmed to a single 4-row "When to save live" table plus an explicit "let the consolidator handle it" paragraph. The live agent now has a narrower save bar on purpose — the background consolidator catches what the live pass skips, so aggressive proactive saving is no longer necessary.
+- Also fixed a markdown linter corruption in the `add_job` cron example (asterisks were getting escaped into italic markers).
+
 ## [0.2.62] - 2026-04-11
 
 ### Changed
