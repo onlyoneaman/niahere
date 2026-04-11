@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Daemon process detection regex was never matching.** `findDaemonPids()` grepped for `src/cli\.ts run$` but the actual entry path is `src/cli/index.ts`, so the function always returned an empty list. The startup guard would then fall through to "take over from stale pid" and a second daemon could start while one was alive, risking duplicate scheduler ticks and double finalizer drains. Regex now matches the real argv.
+- **Finalizer marked requests `done` even when consolidator or summarizer failed.** A chain of silent swallows (`runTask` returned `{error}` instead of throwing, `runConsolidation`/`summarizeSession` ignored it, outer try/catches logged-and-returned, and `Promise.allSettled` in the finalizer never inspected results) meant any extraction failure was invisible and never retried. The full chain now propagates errors, and the finalizer marks `done` only if both tasks succeeded, otherwise `failed` with per-task error detail in the log.
+- **`Job.update` did not recompute `next_run_at` on schedule changes.** Updating a job's schedule left the old `next_run_at` in place and `recomputeAllNextRuns` skipped jobs that already had one set, so the scheduler kept firing at the old cadence. Now recomputes inline whenever `schedule` or `scheduleType` changes, covered by a new integration test.
+- **`add_memory` tool description contradicted the new two-stage memory flow.** The MCP tool description and its mirror in `environment.md` still said "proactively save personal facts... don't wait to be asked", which directly contradicted the new "When to save live" section added in the previous release. Both now describe `add_memory` as user-explicit only, with observational saves routed through the post-session consolidator.
+
+### Added
+
+- **Race/concurrency tests for the finalizer.** `tests/core/finalizer.integration.test.ts` covers concurrent `finalizeSession()` dedupe, the `< 2 messages` gate, and the already-done-row skip path.
+- **Scheduler recompute integration tests.** Three new cases verify that schedule updates re-base `next_run_at`, non-schedule updates leave it unchanged, and cron→interval type switches recompute correctly.
+- **Import cycle detection.** Added `madge` as a dev dep and a `check:cycles` npm script wired into `bun run test`. 4 existing cycles were broken in this pass (daemon↔alive↔health, db/connection↔db/migrate, and two via the new `Job.update` dynamic import). Pure PID utilities moved to `src/utils/pid.ts`, pure schedule math to `src/utils/schedule.ts`, `withDb` composer to `src/db/with-db.ts`. Madge now reports 0 cycles and the test script fails on any regression.
+- **Direct deps.** `zod` and `@anthropic-ai/sdk` were being imported but only available transitively via `@anthropic-ai/claude-agent-sdk`. Declared as direct deps so transitive drops can't break the build.
+
 ### Changed
 
 - **Environment system prompt updated for recent releases.** `src/prompts/environment.md` had drifted behind several shipped features: (1) the `update_job` and `add_job` bullets now mention the `model` override from 0.2.59; (2) the `channels.slack.watch` config reference now describes the dir-per-watch layout and the three forms of the optional `behavior` field from 0.2.61; (3) the Persona & Memory section now includes `staging.md` in the persona files list and has a new "How durable memories get made" subsection that describes the two-stage flow (live user-explicit saves vs background consolidation via staging → nightly promoter); (4) the old "When to save (be proactive)" section with two large affirmative tables (16 rows total) has been trimmed to a single 4-row "When to save live" table plus an explicit "let the consolidator handle it" paragraph. The live agent now has a narrower save bar on purpose — the background consolidator catches what the live pass skips, so aggressive proactive saving is no longer necessary.
