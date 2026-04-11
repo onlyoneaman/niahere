@@ -26,19 +26,14 @@ const MAX_MESSAGES = 30;
 /** Format transcript for the summarization prompt. */
 function formatTranscript(messages: SessionMessage[]): string {
   const recent = messages.slice(-MAX_MESSAGES);
-  return recent
-    .map((m) => `[${m.sender}]: ${m.content.slice(0, 1000)}`)
-    .join("\n");
+  return recent.map((m) => `[${m.sender}]: ${m.content.slice(0, 1000)}`).join("\n");
 }
 
 /**
  * Summarize a session and store the result in the sessions table.
  * Called when a chat engine goes idle — produces a context bridge for the next session.
  */
-export async function summarizeSession(
-  sessionId: string,
-  room: string,
-): Promise<void> {
+export async function summarizeSession(sessionId: string, room: string): Promise<void> {
   if (room.includes("placeholder")) return;
   if (inFlight.has(sessionId)) return;
 
@@ -51,10 +46,7 @@ export async function summarizeSession(
 
     inFlight.add(sessionId);
 
-    log.info(
-      { sessionId, room, messageCount: messages.length },
-      "summarizer: generating session summary",
-    );
+    log.info({ sessionId, room, messageCount: messages.length }, "summarizer: generating session summary");
 
     const transcript = formatTranscript(messages);
 
@@ -76,8 +68,10 @@ Keep it concise — a handoff note, not a report. Output ONLY the summary text.`
     const output = await runTask({ name: "summarizer", prompt });
 
     if (output.error) {
-      log.error({ sessionId, room, error: output.error }, "summarizer: failed");
-      return;
+      // Throw so the finalizer's Promise.allSettled correctly sees this as
+      // a failure. Returning silently would let the finalizer mark the
+      // request 'done' even though no summary was written.
+      throw new Error(`summarizer task failed: ${output.error}`);
     }
 
     const summary = output.agentText.trim();
@@ -88,18 +82,15 @@ Keep it concise — a handoff note, not a report. Output ONLY the summary text.`
         const firstKey = processedCounts.keys().next().value;
         if (firstKey) processedCounts.delete(firstKey);
       }
-      log.info(
-        { sessionId, room, summaryChars: summary.length },
-        "summarizer: saved",
-      );
+      log.info({ sessionId, room, summaryChars: summary.length }, "summarizer: saved");
     } else {
-      log.warn(
-        { sessionId, room, length: summary.length },
-        "summarizer: output too short or too long, skipped",
-      );
+      log.warn({ sessionId, room, length: summary.length }, "summarizer: output too short or too long, skipped");
     }
   } catch (err) {
     log.error({ err, sessionId, room }, "summarizer: failed");
+    // Re-throw so the finalizer's Promise.allSettled sees this as rejected.
+    // See the matching comment in consolidator.ts consolidateSession().
+    throw err;
   } finally {
     inFlight.delete(sessionId);
   }

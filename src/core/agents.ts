@@ -48,14 +48,10 @@ export function scanAgents(): AgentInfo[] {
       try {
         meta = (yaml.load(fmMatch[1]) as Record<string, unknown>) || {};
       } catch (err) {
-        log.warn(
-          { err, agent: entry.name, path: agentFile },
-          "failed to parse agent metadata, skipping",
-        );
+        log.warn({ err, agent: entry.name, path: agentFile }, "failed to parse agent metadata, skipping");
         continue;
       }
-      const name =
-        (typeof meta.name === "string" ? meta.name : "") || entry.name;
+      const name = (typeof meta.name === "string" ? meta.name : "") || entry.name;
 
       const key = name.toLowerCase();
       if (seen.has(key)) continue;
@@ -65,8 +61,7 @@ export function scanAgents(): AgentInfo[] {
 
       agents.push({
         name,
-        description:
-          typeof meta.description === "string" ? meta.description : "",
+        description: typeof meta.description === "string" ? meta.description : "",
         body,
         model: typeof meta.model === "string" ? meta.model : undefined,
         source,
@@ -80,21 +75,13 @@ export function scanAgents(): AgentInfo[] {
 export function getAgentsSummary(): string {
   const agents = scanAgents();
   if (agents.length === 0) return "";
-  const lines = agents.map((a) =>
-    a.description ? `- @${a.name}: ${a.description}` : `- @${a.name}`,
-  );
+  const lines = agents.map((a) => (a.description ? `- @${a.name}: ${a.description}` : `- @${a.name}`));
   return `Available agents:\n${lines.join("\n")}`;
 }
 
-export function getAgentDefinitions(): Record<
-  string,
-  { description: string; prompt: string; model?: string }
-> {
+export function getAgentDefinitions(): Record<string, { description: string; prompt: string; model?: string }> {
   const agents = scanAgents();
-  const defs: Record<
-    string,
-    { description: string; prompt: string; model?: string }
-  > = {};
+  const defs: Record<string, { description: string; prompt: string; model?: string }> = {};
 
   for (const agent of agents) {
     defs[agent.name] = {

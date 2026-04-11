@@ -78,23 +78,56 @@ async function processOne(sessionId: string, room: string, messageCount: number)
   const requestId = claimed[0].id;
 
   try {
-    await Promise.allSettled([consolidateSession(sessionId, room), summarizeSession(sessionId, room)]);
+    // Run both tasks, tolerating partial failure. Inspect the results to
+    // determine the final status — `done` if both succeeded, `failed` if
+    // either rejected. Previously this marked `done` unconditionally, which
+    // silently hid consolidator/summarizer errors.
+    const results = await Promise.allSettled([consolidateSession(sessionId, room), summarizeSession(sessionId, room)]);
+
+    const [consolidateResult, summarizeResult] = results;
+    const errors: string[] = [];
+    if (consolidateResult.status === "rejected") {
+      errors.push(`consolidate: ${formatRejection(consolidateResult.reason)}`);
+    }
+    if (summarizeResult.status === "rejected") {
+      errors.push(`summarize: ${formatRejection(summarizeResult.reason)}`);
+    }
+
+    const finalStatus = errors.length === 0 ? "done" : "failed";
 
     await sql`
       UPDATE finalization_requests
-      SET status = 'done', updated_at = NOW()
+      SET status = ${finalStatus}, updated_at = NOW()
       WHERE id = ${requestId}
     `;
 
-    log.info({ sessionId, room, messageCount }, "finalizer: completed");
+    if (errors.length === 0) {
+      log.info({ sessionId, room, messageCount }, "finalizer: completed");
+    } else {
+      log.error({ sessionId, room, messageCount, errors }, "finalizer: completed with task failures");
+    }
   } catch (err) {
+    // This catch fires only on infrastructure errors (e.g. DB update failed)
+    // since Promise.allSettled itself never rejects. Still mark 'failed' so
+    // the request doesn't get stuck in 'processing' forever.
     await sql`
       UPDATE finalization_requests
       SET status = 'failed', updated_at = NOW()
       WHERE id = ${requestId}
     `.catch(() => {});
 
-    log.error({ err, sessionId, room }, "finalizer: processing failed");
+    log.error({ err, sessionId, room }, "finalizer: processing failed (infrastructure)");
+  }
+}
+
+/** Normalize a Promise rejection reason into a loggable string. */
+function formatRejection(reason: unknown): string {
+  if (reason instanceof Error) return reason.message;
+  if (typeof reason === "string") return reason;
+  try {
+    return JSON.stringify(reason);
+  } catch {
+    return String(reason);
   }
 }
 

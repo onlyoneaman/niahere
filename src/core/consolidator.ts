@@ -138,12 +138,22 @@ Report a one-line summary of what you did: "staged N new / reinforced M /
 skipped (trivial session)". No preamble.`;
 }
 
-/** Run the consolidation agent loop. */
+/**
+ * Run the consolidation agent loop.
+ *
+ * Throws if the agent task errored. runTask() doesn't throw — it returns
+ * `{ error }` on failure — so we need to inspect the output and escalate.
+ * Without this, consolidateSession() would record the session as processed
+ * even when the agent never actually wrote anything to staging.md.
+ */
 async function runConsolidation(transcript: string, source: string): Promise<void> {
-  await runTask({
+  const output = await runTask({
     name: "consolidator",
     prompt: buildConsolidationPrompt(transcript, source),
   });
+  if (output.error) {
+    throw new Error(`consolidator task failed: ${output.error}`);
+  }
 }
 
 /**
@@ -178,6 +188,10 @@ export async function consolidateSession(sessionId: string, room: string): Promi
     }
   } catch (err) {
     log.error({ err, sessionId, room }, "consolidator: chat extraction failed");
+    // Re-throw so the finalizer's Promise.allSettled sees this as rejected
+    // and can mark the request 'failed' instead of 'done'. Swallowing here
+    // would silently lose the signal that extraction didn't actually run.
+    throw err;
   } finally {
     inFlight.delete(sessionId);
   }

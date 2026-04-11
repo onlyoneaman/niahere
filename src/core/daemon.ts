@@ -122,10 +122,21 @@ function waitForExit(timeoutMs: number): void {
   }
 }
 
-/** Return PIDs of running daemon processes (excluding ourselves). */
+/**
+ * Return PIDs of running daemon processes (excluding ourselves).
+ *
+ * Matches the actual daemon argv pattern — `bun <path>/src/cli/index.ts run`.
+ * This is critical for the startup guard in runDaemon(): if this returns an
+ * empty list while a live daemon is actually running, the guard falls through
+ * to "take over from stale pid" and a second daemon starts, causing duplicate
+ * scheduler ticks, double finalizer drains, and state corruption.
+ *
+ * The previous regex matched `src/cli\.ts run$` which never matched the real
+ * entry path (`src/cli/index.ts`). See code-review 2026-04-11.
+ */
 export function findDaemonPids(): number[] {
   try {
-    const result = Bun.spawnSync(["pgrep", "-f", "src/cli\\.ts run$"]);
+    const result = Bun.spawnSync(["pgrep", "-f", "src/cli/index\\.ts run$"]);
     const stdout = new TextDecoder().decode(result.stdout).trim();
     if (!stdout) return [];
     return stdout

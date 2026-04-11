@@ -290,7 +290,7 @@ export function createNiaMcpServer() {
       ),
       tool(
         "add_memory",
-        "Save a concise factual memory for future reference. Proactively save personal facts (travel, schedule), work context (decisions, deadlines), and corrections — don't wait to be asked. RULES: Max 300 chars. One insight per entry. NO raw logs, NO transcripts, NO status dumps.",
+        "Save a concise factual memory for future reference. Call this when the user explicitly asks you to remember something, or when a correction needs an immediate durable record. For observations you notice on your own during a session, let the post-session consolidator handle it via staging.md — don't preemptively save here. RULES: Max 300 chars. One insight per entry. NO raw logs, NO transcripts, NO status dumps.",
         {
           entry: z.string().max(300).describe("A single concise insight (max 300 chars, no raw logs or transcripts)"),
         },
