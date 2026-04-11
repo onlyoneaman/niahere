@@ -459,6 +459,7 @@ export async function runInit(): Promise<void> {
     writeIfMissing(selfFile("soul.md"), loadTemplate("soul.md", vars), selfFile("soul.md"));
     writeIfMissing(selfFile("rules.md"), loadTemplate("rules.md", vars), selfFile("rules.md"));
     writeIfMissing(selfFile("memory.md"), loadTemplate("memory.md", vars), selfFile("memory.md"));
+    writeIfMissing(selfFile("staging.md"), loadTemplate("staging.md", vars), selfFile("staging.md"));
 
     resetConfig();
 

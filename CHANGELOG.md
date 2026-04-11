@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Two-stage memory architecture** — replaced the direct-write memory consolidator with a staging pipeline. After a chat session goes idle, the consolidator now reflects on the transcript and appends candidate lines to a new `~/.niahere/self/staging.md` file (format: `- [count×] [type] content :: first_seen → last_seen`, types: `persona | project | reference | correction`). Reinforcement happens in-place — seeing a candidate again bumps `[1×] → [2×]`. A new auto-installed system job `memory-promoter` runs nightly at 3am, reaps entries older than 14 days with count<2, and promotes qualifying candidates (`count ≥ 2` + durability review) to `memory.md` or `rules.md`. This replaces the old single-pass consolidator that was producing low-precision, low-recall memories (saving transient incidents as durable facts while missing real patterns).
+- **Job runs no longer flow through the global memory consolidator.** `consolidateJobRun` has been removed. Job-local learnings stay in each job's `state.md` (via `buildWorkingMemory()`), which is the existing per-job working memory that already gets injected into the next run's prompt. Routing job output through global persona memory was a layer violation that caused transient job incidents to get promoted to durable facts.
+- **Consolidator prompt rewritten around reflection, not extraction.** The old prompt listed 5 fact categories and asked the agent to fish for matches. The new prompt asks three reflection questions ("what did the user correct / what new fact do you know / what decision was made") and defaults to doing nothing. It explicitly overrides the "save proactively" framing in `environment.md`, which is correct for live chat but was leaking into the consolidator and biasing it toward saving trivial observations.
+
 ### Added
 
 - **`userinterface-wiki` skill** — imported the 152-rule UI/UX best-practices reference (animation timing, easing, springs, exit animations, CSS pseudo-elements, audio, morphing icons, container animation, Laws of UX, prefetching, typography, visual design). Wired it in as a companion reference from `frontend-design`, `code-review`, `qa`, and `cro` so reviewers and builders can cite specific rule IDs (e.g. `timing-under-300ms`, `ux-fitts-target-size`, `visual-concentric-radius`) instead of vague "feels off" feedback.

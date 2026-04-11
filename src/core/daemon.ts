@@ -1,9 +1,10 @@
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "fs";
-import { dirname } from "path";
+import { dirname, resolve as pathResolve } from "path";
+import { fileURLToPath } from "url";
 import { getPaths } from "../utils/paths";
 import { getConfig, resetConfig } from "../utils/config";
 import { log } from "../utils/log";
-import { ActiveEngine } from "../db/models";
+import { ActiveEngine, Job } from "../db/models";
 import { runMigrations } from "../db/migrate";
 import { closeDb, getSql } from "../db/connection";
 import { registerAllChannels, startChannels, stopChannels, getStarted } from "../channels";
@@ -149,6 +150,44 @@ function killAllDaemons(knownPid?: number | null): number {
   return toKill.size;
 }
 
+// ---------------------------------------------------------------------------
+// System jobs — auto-installed on daemon startup
+// ---------------------------------------------------------------------------
+
+/**
+ * Ensure system jobs exist. Uses create-if-not-exists semantics so user
+ * customizations (via `nia job update/disable`) are preserved across restarts.
+ * Currently manages: memory-promoter.
+ */
+async function bootstrapSystemJobs(): Promise<void> {
+  const here = dirname(fileURLToPath(import.meta.url));
+
+  const systemJobs = [
+    {
+      name: "memory-promoter",
+      schedule: "0 3 * * *",
+      scheduleType: "cron" as const,
+      always: true,
+      stateless: true,
+      promptPath: pathResolve(here, "../../defaults/memory-promoter.md"),
+    },
+  ];
+
+  for (const j of systemJobs) {
+    const existing = await Job.get(j.name);
+    if (existing) continue;
+
+    if (!existsSync(j.promptPath)) {
+      log.warn({ job: j.name, promptPath: j.promptPath }, "system job prompt missing, skipping bootstrap");
+      continue;
+    }
+
+    const prompt = readFileSync(j.promptPath, "utf8");
+    await Job.create(j.name, j.schedule, prompt, j.always, j.scheduleType, undefined, undefined, j.stateless);
+    log.info({ job: j.name, schedule: j.schedule }, "bootstrapped system job");
+  }
+}
+
 export async function runDaemon(): Promise<void> {
   // Ensure we never pass nested-session env vars to SDK subprocesses,
   // regardless of how the daemon was launched (nia start, nia run, etc.)
@@ -210,6 +249,24 @@ export async function runDaemon(): Promise<void> {
     log.warn({ err }, "failed to ensure watches dir");
   }
 
+  // Ensure staging.md exists — used by the memory consolidator to stage
+  // candidate memories before the nightly promoter reviews them. Existing
+  // installs that pre-date two-stage memory get a seed file on next start.
+  try {
+    const stagingPath = `${getPaths().selfDir}/staging.md`;
+    if (!existsSync(stagingPath)) {
+      const here = dirname(fileURLToPath(import.meta.url));
+      const seed = pathResolve(here, "../../defaults/self/staging.md");
+      if (existsSync(seed)) {
+        mkdirSync(getPaths().selfDir, { recursive: true });
+        writeFileSync(stagingPath, readFileSync(seed, "utf8"));
+        log.info({ stagingPath }, "seeded staging.md from defaults");
+      }
+    }
+  } catch (err) {
+    log.warn({ err }, "failed to ensure staging.md");
+  }
+
   // Startup recovery
   try {
     await runMigrations();
@@ -217,6 +274,14 @@ export async function runDaemon(): Promise<void> {
     log.info("cleared stale active engines from previous run");
   } catch (err) {
     log.warn({ err }, "startup recovery: postgres unavailable, skipping");
+  }
+
+  // Seed system jobs (create-if-not-exists). Currently: memory-promoter.
+  // Users can disable or customize these via `nia job disable/update`.
+  try {
+    await bootstrapSystemJobs();
+  } catch (err) {
+    log.warn({ err }, "failed to bootstrap system jobs");
   }
 
   // Clear stale "running" job states

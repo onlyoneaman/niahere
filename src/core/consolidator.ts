@@ -1,20 +1,27 @@
 /**
- * Memory consolidator — "hippocampal replay" for Nia.
+ * Memory consolidator — stage 1 of a two-stage memory architecture.
  *
- * After a chat session goes idle or a job completes, this module reviews
- * what happened and saves memories worth keeping.
+ * After a chat session goes idle, this module reflects on the transcript
+ * and writes CANDIDATE memories to ~/.niahere/self/staging.md. It never
+ * writes directly to memory.md or rules.md — the nightly memory-promoter
+ * job handles promotion once candidates are reinforced (count >= 2) and
+ * pass durability review.
  *
- * This decouples memory formation from task execution: during a conversation,
- * the agent focuses on the task. Afterward, a background pass extracts what's
- * worth remembering — just like the brain consolidates memories during sleep.
+ * Architecture:
+ *   chat idle → consolidator → staging.md (candidate log, TTL 14d)
+ *                                    ↓  nightly promoter (3am)
+ *                                    ↓  - count >= 2 required
+ *                                    ↓  - durability review
+ *                              memory.md / rules.md
+ *
+ * Jobs do NOT flow through this path — job-local learnings live in each
+ * job's state.md (see runner.ts:buildWorkingMemory). Routing job output
+ * into global persona memory caused layer violations (transient incidents
+ * promoted to durable facts).
  *
  * The consolidator uses the same agent loop as cron jobs — full Nia system
- * prompt, full tool access, same runner. It's just a specialized job.
- *
- * Research basis:
- * - LangChain: "background" memory formation avoids latency + competing optimization pressures
- * - Mem0: LLM-driven extraction with ADD/UPDATE/NOOP decisions against existing memories
- * - Cognitive science: hippocampal replay consolidates experiences after the fact, not during
+ * prompt, full tool access. The write-path restriction is enforced by the
+ * prompt (the agent is told to only edit staging.md), not by tool sandboxing.
  */
 
 import { Message } from "../db/models";
@@ -40,57 +47,99 @@ function shouldSkip(room: string): boolean {
 function formatTranscript(messages: SessionMessage[]): string {
   const recent = messages.slice(-MAX_TRANSCRIPT_MESSAGES);
   const skipped = messages.length - recent.length;
-  const prefix =
-    skipped > 0 ? `[...${skipped} earlier messages omitted]\n\n` : "";
+  const prefix = skipped > 0 ? `[...${skipped} earlier messages omitted]\n\n` : "";
 
-  return (
-    prefix +
-    recent
-      .map((m) => `[${m.sender}] (${m.createdAt}): ${m.content.slice(0, 2000)}`)
-      .join("\n\n")
-  );
+  return prefix + recent.map((m) => `[${m.sender}] (${m.createdAt}): ${m.content.slice(0, 2000)}`).join("\n\n");
 }
 
-/** Build the extraction prompt from a conversation transcript. */
+/** Build the consolidation prompt from a conversation transcript. */
 function buildConsolidationPrompt(transcript: string, source: string): string {
+  const today = new Date().toISOString().slice(0, 10);
   return `Job: memory-consolidation (triggered by ${source})
 
-You just finished a session. It has gone idle.
-Your task: review the transcript below and save anything worth keeping for future sessions.
+A chat session has gone idle. Your task is to reflect on it and update
+the memory staging log — NOT the durable memory files.
+
+## Context
+
+Nia uses a two-stage memory architecture. You are stage 1.
+
+- Stage 1 (you): append candidates to \`~/.niahere/self/staging.md\`. Never
+  write to \`memory.md\` or \`rules.md\` directly.
+- Stage 2: the nightly \`memory-promoter\` job reviews candidates with
+  \`count >= 2\` and promotes qualifying ones to durable memory. Entries with
+  \`count < 2\` expire after 14 days.
+
+Your persona includes guidance to "save proactively" — that guidance applies
+to LIVE chat, where you act on immediate user instruction. In THIS
+consolidation pass, your default action is to do nothing. You only act when
+you can point to a specific user turn that taught you something durable.
 
 ## Transcript
+
 ${transcript}
 
-## Instructions
-1. First, read your existing memories (read_memory tool) and rules (read rules.md) to avoid duplicates
-2. Review the transcript for things worth persisting. Use the RIGHT tool for each:
+## Step 1 — Read existing state
 
-   **Use add_memory for FACTS** (nouns — things that are true):
-   - People: names, roles, orgs, relationships
-   - Decisions: what was decided or agreed on
-   - Technical facts: system details, API quirks, config gotchas
-   - Patterns: recurring issues, user behaviors, workflow tendencies
-   - Events: travel, deadlines, incidents, milestones with dates
+Read these files in full before doing anything else. You need to know what
+already exists so you can dedupe and reinforce rather than duplicate.
 
-   **Use add_rule for INSTRUCTIONS** (verbs — how to behave):
-   - User corrected your tone, format, or approach
-   - User said "from now on" / "always" / "never" / "stop doing X"
-   - User expressed a preference about how you communicate or work
+- \`~/.niahere/self/memory.md\` — durable facts already saved
+- \`~/.niahere/self/rules.md\` — behavioral rules already in effect
+- \`~/.niahere/self/staging.md\` — candidates already staged (including the
+  file's header, which documents the staging format)
 
-3. Skip anything already in existing memories or rules (no duplicates)
-4. Skip small talk, greetings, conversational filler
-5. Skip transient state ("currently working on X")
-6. Quality over quantity — saving nothing is fine if the conversation was trivial
-7. If existing memories are outdated based on new info, note what should be updated
+## Step 2 — Reflect
 
-Do NOT message the user about this. Save silently and report a brief summary of what you saved.`;
+Answer these questions silently. If the answer to all of them is "nothing",
+stop here and do not write anything.
+
+1. What did the user correct, clarify, or teach you in this session?
+2. What NEW fact about the user, their projects, or their systems do you
+   now know that you did not at session start?
+3. What decision was made that will constrain future work?
+
+Trivial small talk, greetings, task-execution chatter, and status updates
+are NOT answers. If you cannot quote a specific user turn that produced the
+learning, you are fishing — stop.
+
+## Step 3 — Update staging.md
+
+For each substantive answer:
+
+1. Check \`memory.md\` and \`rules.md\`. If the learning is already covered
+   there, do nothing — it is already durable.
+2. Check \`staging.md\`. If there is a near-match (same subject, same intent,
+   even if worded differently):
+   - Use the Edit tool to bump the count: \`[1×]\` → \`[2×]\`, \`[2×]\` → \`[3×]\`
+   - Update the \`last_seen\` date to \`${today}\`
+   - Do NOT append a new line
+3. If genuinely new AND durable AND fits one of the four types, append a
+   new line to staging.md using this exact format:
+
+   \`- [1×] [type] content :: ${today} → ${today}\`
+
+   Where \`type\` is exactly one of:
+   - \`persona\`    — facts about the user (role, habits, preferences)
+   - \`project\`    — active work decisions, architecture, stakeholders
+   - \`reference\`  — pointers to external systems (dashboards, repos)
+   - \`correction\` — behavioral preference for how Nia should work
+
+   If the learning does not fit one of these four types, do not stage it.
+
+## Hard constraints
+
+- Do NOT write to \`memory.md\` or \`rules.md\`. Only the promoter job can.
+- Do NOT use \`add_memory\` or \`add_rule\` MCP tools. Edit staging.md directly.
+- Do NOT message the user.
+- Default action is to do nothing. Most sessions have nothing to stage.
+
+Report a one-line summary of what you did: "staged N new / reinforced M /
+skipped (trivial session)". No preamble.`;
 }
 
 /** Run the consolidation agent loop. */
-async function runConsolidation(
-  transcript: string,
-  source: string,
-): Promise<void> {
+async function runConsolidation(transcript: string, source: string): Promise<void> {
   await runTask({
     name: "consolidator",
     prompt: buildConsolidationPrompt(transcript, source),
@@ -101,10 +150,7 @@ async function runConsolidation(
  * Consolidate a chat session's conversation into memories.
  * Called when a chat engine goes idle or is explicitly closed.
  */
-export async function consolidateSession(
-  sessionId: string,
-  room: string,
-): Promise<void> {
+export async function consolidateSession(sessionId: string, room: string): Promise<void> {
   if (shouldSkip(room)) return;
   if (inFlight.has(sessionId)) return;
 
@@ -117,10 +163,7 @@ export async function consolidateSession(
 
     inFlight.add(sessionId);
 
-    log.info(
-      { sessionId, room, messageCount: messages.length },
-      "consolidator: extracting memories from chat",
-    );
+    log.info({ sessionId, room, messageCount: messages.length }, "consolidator: extracting memories from chat");
 
     const transcript = formatTranscript(messages);
     await runConsolidation(transcript, `chat session idle — ${room}`);
@@ -140,30 +183,7 @@ export async function consolidateSession(
   }
 }
 
-/**
- * Consolidate a job run's output into memories.
- * Called after a job completes in the runner.
- */
-export async function consolidateJobRun(
-  jobName: string,
-  jobPrompt: string,
-  result: string,
-): Promise<void> {
-  // Skip if the job itself is the consolidator (prevent infinite loop)
-  if (jobName === "memory-consolidation") return;
-
-  const transcript = `[job-prompt]: ${jobPrompt}\n\n[job-result]: ${result}`;
-
-  // Skip trivial results
-  if (result.length < 50) return;
-
-  try {
-    log.info(
-      { jobName, resultChars: result.length },
-      "consolidator: extracting memories from job",
-    );
-    await runConsolidation(transcript, `job run — ${jobName}`);
-  } catch (err) {
-    log.error({ err, jobName }, "consolidator: job extraction failed");
-  }
-}
+// Job runs no longer flow through the global memory consolidator. Each job
+// maintains its own working memory in state.md (see buildWorkingMemory() in
+// runner.ts). This separation prevents transient job-local incidents from
+// being promoted to durable persona memory.

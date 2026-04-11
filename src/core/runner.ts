@@ -33,11 +33,7 @@ function resolveCodexPath(): string {
   return candidates.find((p) => existsSync(p)) || "codex";
 }
 
-async function runJobWithCodex(
-  fullPrompt: string,
-  cwd: string,
-  model: string,
-): Promise<RunnerOutput> {
+async function runJobWithCodex(fullPrompt: string, cwd: string, model: string): Promise<RunnerOutput> {
   const codexPath = resolveCodexPath();
   const args = [
     codexPath,
@@ -72,10 +68,7 @@ async function runJobWithCodex(
       if (event.type === "thread.started" && event.thread_id) {
         sessionId = event.thread_id;
       }
-      if (
-        event.type === "item.completed" &&
-        event.item?.type === "agent_message"
-      ) {
+      if (event.type === "item.completed" && event.item?.type === "agent_message") {
         agentText = event.item.text || "";
       }
     } catch {}
@@ -153,10 +146,7 @@ export async function runJobWithClaude(
 
         if (message.type === "stream_event") {
           const event = msg.event;
-          if (
-            event?.type === "content_block_start" &&
-            event.content_block?.type === "thinking"
-          ) {
+          if (event?.type === "content_block_start" && event.content_block?.type === "thinking") {
             accumulatedThinking = "";
             lastThinkingLine = "";
             onActivity("thinking...");
@@ -253,10 +243,7 @@ export async function runTask(opts: TaskOptions): Promise<RunnerOutput> {
     if (output.error) {
       log.error({ task: opts.name, error: output.error }, "task failed");
     } else {
-      log.info(
-        { task: opts.name, resultChars: output.agentText.length },
-        "task completed",
-      );
+      log.info({ task: opts.name, resultChars: output.agentText.length }, "task completed");
     }
     return output;
   } finally {
@@ -269,10 +256,7 @@ export async function runTask(opts: TaskOptions): Promise<RunnerOutput> {
 // ---------------------------------------------------------------------------
 
 /** Build the working memory block for a stateful job. Returns empty string for stateless jobs. */
-export function buildWorkingMemory(
-  jobName: string,
-  stateless?: boolean,
-): string {
+export function buildWorkingMemory(jobName: string, stateless?: boolean): string {
   if (stateless) return "";
 
   const jobDir = join(getPaths().jobsDir, jobName);
@@ -287,9 +271,7 @@ export function buildWorkingMemory(
     }
   }
 
-  const stateBlock = stateContent
-    ? `\n${stateContent}\n`
-    : "(first run — no prior state)";
+  const stateBlock = stateContent ? `\n${stateContent}\n` : "(first run — no prior state)";
 
   return `
 
@@ -307,10 +289,7 @@ Before finishing, update \`state.md\` with: what you did this run, what you noti
 // Public API
 // ---------------------------------------------------------------------------
 
-export async function runJob(
-  job: JobInput,
-  onActivity?: ActivityCallback,
-): Promise<JobResult> {
+export async function runJob(job: JobInput, onActivity?: ActivityCallback): Promise<JobResult> {
   const config = getConfig();
   const timestamp = new Date().toISOString();
   const startMs = performance.now();
@@ -354,13 +333,7 @@ export async function runJob(
       const fullPrompt = `${systemPrompt}\n\n---\n\n${jobPrompt}`;
       output = await runJobWithCodex(fullPrompt, cwd, resolvedModel);
     } else {
-      output = await runJobWithClaude(
-        systemPrompt,
-        jobPrompt,
-        cwd,
-        onActivity,
-        resolvedModel,
-      );
+      output = await runJobWithClaude(systemPrompt, jobPrompt, cwd, onActivity, resolvedModel);
     }
 
     const duration_ms = Math.round(performance.now() - startMs);
@@ -399,14 +372,11 @@ export async function runJob(
     };
     writeState(freshState);
 
-    // Memory consolidation — review what the job learned (fire-and-forget)
-    if (ok && result.result) {
-      import("./consolidator")
-        .then(({ consolidateJobRun }) => {
-          consolidateJobRun(job.name, jobPrompt, result.result).catch(() => {});
-        })
-        .catch(() => {});
-    }
+    // Job-local learnings live in state.md (injected into the next run's
+    // prompt), not in global self/memory.md. The global memory consolidator
+    // only processes chat sessions — routing job output through it created
+    // layer violations (transient incidents promoted to durable memory).
+    // See src/core/consolidator.ts and AGENTS.md memory architecture notes.
 
     return result;
   } catch (err) {
