@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.62] - 2026-04-11
+
 ### Changed
 
 - **Two-stage memory architecture** — replaced the direct-write memory consolidator with a staging pipeline. After a chat session goes idle, the consolidator now reflects on the transcript and appends candidate lines to a new `~/.niahere/self/staging.md` file (format: `- [count×] [type] content :: first_seen → last_seen`, types: `persona | project | reference | correction`). Reinforcement happens in-place — seeing a candidate again bumps `[1×] → [2×]`. A new auto-installed system job `memory-promoter` runs nightly at 3am, reaps entries older than 14 days with count<2, and promotes qualifying candidates (`count ≥ 2` + durability review) to `memory.md` or `rules.md`. This replaces the old single-pass consolidator that was producing low-precision, low-recall memories (saving transient incidents as durable facts while missing real patterns).
