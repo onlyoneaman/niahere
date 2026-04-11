@@ -10,9 +10,13 @@ This skill covers two areas: building UIs that look crafted (not generated), and
 
 ## Routing
 
-| When the task involves... | Load |
-|---------------------------|------|
-| Building frontend UIs, web pages, dashboards, components, CSS, layouts, responsive design, accessibility | [building.md](building.md) |
+| When the task involves...                                                                                                             | Load                         |
+| ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| Building frontend UIs, web pages, dashboards, components, CSS, layouts, responsive design, accessibility                              | [building.md](building.md)   |
 | Creating, reading, applying, evolving, or auditing DESIGN.md files; extracting design tokens; translating tokens to framework configs | [design-md.md](design-md.md) |
 
 **Both apply?** Load both. When a DESIGN.md exists in the project, its tokens override the general principles in building.md.
+
+## Companion Skill
+
+For concrete rule-level UI values (animation timings, easing curves, spring params, Laws of UX target sizes, typography features, shadow/radius math, prefetching patterns), also load the [userinterface-wiki](../userinterface-wiki/SKILL.md) skill. frontend-design sets direction; userinterface-wiki provides the 152 prioritized rules with code examples.

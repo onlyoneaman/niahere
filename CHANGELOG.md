@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`userinterface-wiki` skill** — imported the 152-rule UI/UX best-practices reference (animation timing, easing, springs, exit animations, CSS pseudo-elements, audio, morphing icons, container animation, Laws of UX, prefetching, typography, visual design). Wired it in as a companion reference from `frontend-design`, `code-review`, `qa`, and `cro` so reviewers and builders can cite specific rule IDs (e.g. `timing-under-300ms`, `ux-fitts-target-size`, `visual-concentric-radius`) instead of vague "feels off" feedback.
+
 ### Fixed
 
 - **`nia validate` rejected watches without inline behavior** — validator was still enforcing the old required-behavior rule after the dir-per-watch rework. Now accepts watches with no `behavior` field and labels them `[file (default)]` in the output.

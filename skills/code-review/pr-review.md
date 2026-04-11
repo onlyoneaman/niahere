@@ -12,6 +12,7 @@ Before looking at any code, read these files if they exist:
 - `CONTRIBUTING.md` — contribution guidelines
 
 From these, extract:
+
 - **Language & framework** (TypeScript/Bun, Python/Django, Rust, Go, etc.)
 - **Code style rules** (naming, imports, formatting)
 - **Testing expectations** (unit, integration, what framework)
@@ -62,30 +63,36 @@ Run these passes in order. Each pass focuses on one concern — don't mix them.
 Adapt to the project's language. Apply that language's conventions:
 
 **TypeScript/JavaScript:**
+
 - Proper typing (no unnecessary `any`, correct generics, discriminated unions)
 - Async/await over raw promises, proper error propagation
 - Immutability preferences, const over let
 - Node.js/Bun API usage (streams, buffers, path handling)
 
 **Python:**
+
 - PEP 8, Pythonic idioms (comprehensions, context managers, generators)
 - Type hints where the project uses them
 - Proper exception hierarchy, avoid bare `except:`
 - f-strings over `.format()` or `%`
 
 **Go:**
+
 - Error handling patterns (check errors, don't ignore)
 - Naming conventions (exported vs unexported, receiver names)
 - Goroutine safety, channel usage, context propagation
 - Avoid unnecessary interfaces
 
 **Rust:**
+
 - Ownership and borrowing correctness
 - Error handling (`Result`/`Option`, avoid `.unwrap()` in library code)
 - Clippy-clean idioms, iterator chains over manual loops
 - Lifetime annotations only when needed
 
 **Other languages:** Apply equivalent idiomatic standards. When unsure, check what the existing codebase does.
+
+**Frontend/UI diffs:** When the PR touches animations, CSS, components, icons, typography, or anything user-facing, also review against the rules in the [userinterface-wiki](../userinterface-wiki/SKILL.md) skill (e.g. `timing-under-300ms`, `easing-entrance-ease-out`, `ux-fitts-target-size`, `visual-concentric-radius`, `type-tabular-nums-for-data`). Cite specific rule IDs in findings so the author can look them up at `../userinterface-wiki/rules/<rule-id>.md`.
 
 ### Pass 4: Security
 
@@ -117,7 +124,7 @@ Adapt to the project's language. Apply that language's conventions:
 ### Pass 7: Documentation & Naming
 
 - Are names self-documenting? (variables, functions, types)
-- Complex logic has comments explaining *why*, not *what*
+- Complex logic has comments explaining _why_, not _what_
 - Public APIs have documentation
 - Misleading names or outdated comments
 - Breaking changes documented
@@ -130,24 +137,30 @@ Structure the review as:
 ## PR Review: <title or summary>
 
 ### Summary
+
 <1-2 sentences on what the PR does and overall assessment>
 
 ### Critical (must fix)
+
 - **[file:line]** Description of the issue
   - Why it matters
   - Suggested fix
 
 ### Important (should fix)
+
 - **[file:line]** Description
 
 ### Suggestions (nice to have)
+
 - **[file:line]** Description
 
 ### Positive
+
 - Call out good patterns, clean abstractions, solid test coverage
 ```
 
 **Severity guide:**
+
 - **Critical:** Bugs, security issues, data loss risks, broken functionality
 - **Important:** Design issues, missing tests, performance problems, convention violations
 - **Suggestions:** Style improvements, alternative approaches, minor cleanups
