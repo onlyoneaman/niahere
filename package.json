@@ -8,9 +8,10 @@
     "stop": "bun run src/cli/index.ts stop",
     "status": "bun run src/cli/index.ts status",
     "dev": "bun run src/cli/index.ts run",
-    "test": "tsc --noEmit && LOG_LEVEL=silent bun test --reporter=dots",
+    "test": "tsc --noEmit && bun run check:cycles && LOG_LEVEL=silent bun test --reporter=dots",
     "test:bun": "bun test",
     "typecheck": "tsc --noEmit",
+    "check:cycles": "madge --circular --extensions ts src/",
     "seed": "bun run src/db/seed.ts",
     "release": "npm version patch && npm publish && git push"
   },
@@ -58,6 +59,7 @@
   "devDependencies": {
     "@types/bun": "^1.3.10",
     "@types/js-yaml": "^4.0.9",
+    "madge": "^8.0.0",
     "typescript": "^5.9.3"
   }
 }

@@ -1,50 +1,10 @@
-import { CronExpressionParser } from "cron-parser";
-import { parseDuration } from "../utils/duration";
-import type { ScheduleType } from "../types";
 import { Job } from "../db/models";
 import { runJob } from "./runner";
 import { getConfig } from "../utils/config";
 import { log } from "../utils/log";
+import { computeInitialNextRun, computeNextRun } from "../utils/schedule";
 
-export function computeNextRun(
-  scheduleType: ScheduleType,
-  schedule: string,
-  timezone: string,
-  lastRunAt?: Date,
-): Date | null {
-  switch (scheduleType) {
-    case "cron": {
-      const expr = CronExpressionParser.parse(schedule, { tz: timezone });
-      return expr.next().toDate();
-    }
-    case "interval": {
-      const ms = parseDuration(schedule);
-      const base = lastRunAt || new Date();
-      return new Date(base.getTime() + ms);
-    }
-    case "once":
-      return null;
-  }
-}
-
-export function computeInitialNextRun(
-  scheduleType: ScheduleType,
-  schedule: string,
-  timezone: string,
-): Date {
-  switch (scheduleType) {
-    case "cron": {
-      const expr = CronExpressionParser.parse(schedule, { tz: timezone });
-      return expr.next().toDate();
-    }
-    case "interval": {
-      const ms = parseDuration(schedule);
-      return new Date(Date.now() + ms);
-    }
-    case "once":
-      return new Date(schedule);
-  }
-}
+export { computeInitialNextRun, computeNextRun };
 
 function isWithinActiveHours(): boolean {
   const config = getConfig();
@@ -96,13 +56,16 @@ async function tick(): Promise<void> {
     log.info({ job: job.name, type: job.scheduleType }, "scheduler: running job");
     runningJobs.add(job.name);
 
-    runJob(job).then((result) => {
-      log.info({ job: job.name, status: result.status, duration: result.duration_ms }, "scheduler: job completed");
-    }).catch((err) => {
-      log.error({ err, job: job.name }, "scheduler: job failed");
-    }).finally(() => {
-      runningJobs.delete(job.name);
-    });
+    runJob(job)
+      .then((result) => {
+        log.info({ job: job.name, status: result.status, duration: result.duration_ms }, "scheduler: job completed");
+      })
+      .catch((err) => {
+        log.error({ err, job: job.name }, "scheduler: job failed");
+      })
+      .finally(() => {
+        runningJobs.delete(job.name);
+      });
 
     let nextRun: Date | null = null;
     try {

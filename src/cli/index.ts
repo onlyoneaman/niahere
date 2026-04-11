@@ -1,17 +1,11 @@
 #!/usr/bin/env bun
 import { existsSync, mkdirSync } from "fs";
-import {
-  isRunning,
-  readPid,
-  runDaemon,
-  startDaemon,
-  stopDaemon,
-} from "../core/daemon";
+import { isRunning, readPid, runDaemon, startDaemon, stopDaemon } from "../core/daemon";
 import { getConfig } from "../utils/config";
 import { localTime } from "../utils/time";
 import { startRepl } from "../chat/repl";
 import { Message } from "../db/models";
-import { withDb } from "../db/connection";
+import { withDb } from "../db/with-db";
 import { getNiaHome, getPaths } from "../utils/paths";
 import { errMsg } from "../utils/errors";
 import { fail, ICON_PASS, ICON_WARN } from "../utils/cli";
@@ -35,12 +29,7 @@ try {
 const command = process.argv[2];
 
 // Ensure ~/.niahere/ exists for commands that need it
-if (
-  command &&
-  !["init", "help", "version", "-v", "--version", "-h", "--help"].includes(
-    command,
-  )
-) {
+if (command && !["init", "help", "version", "-v", "--version", "-h", "--help"].includes(command)) {
   mkdirSync(getNiaHome(), { recursive: true });
 }
 
@@ -56,8 +45,7 @@ async function awaitStartup(timeout = 60_000): Promise<void> {
   const expecting = new Set<string>();
   if (config.channels.enabled) {
     if (config.channels.telegram.bot_token) expecting.add("telegram");
-    if (config.channels.slack.bot_token && config.channels.slack.app_token)
-      expecting.add("slack");
+    if (config.channels.slack.bot_token && config.channels.slack.app_token) expecting.add("slack");
   }
   expecting.add("scheduler");
 
@@ -143,8 +131,7 @@ switch (command) {
   }
 
   case "restart": {
-    const { isServiceInstalled, restartService } =
-      await import("../commands/service");
+    const { isServiceInstalled, restartService } = await import("../commands/service");
     if (isServiceInstalled()) {
       // Service-aware: unload (stops KeepAlive respawn), kill, then reload
       await restartService();
@@ -153,9 +140,7 @@ switch (command) {
       startDaemon();
     }
     const restartPid = readPid();
-    console.log(
-      `nia restarting${restartPid ? ` (pid: ${restartPid})` : ""}...`,
-    );
+    console.log(`nia restarting${restartPid ? ` (pid: ${restartPid})` : ""}...`);
     await awaitStartup();
     console.log("nia restarted");
     break;
@@ -166,12 +151,7 @@ switch (command) {
     if (prompt) {
       const { createChatEngine } = await import("../chat/engine");
       const { getMcpServers } = await import("../mcp");
-      const {
-        DIM,
-        RESET: RST,
-        CLEAR_LINE,
-        SPINNER: FRAMES,
-      } = await import("../utils/cli");
+      const { DIM, RESET: RST, CLEAR_LINE, SPINNER: FRAMES } = await import("../utils/cli");
       let frame = 0;
       let statusText = "thinking";
       let spinTimer: ReturnType<typeof setInterval> | null = null;
@@ -179,9 +159,7 @@ switch (command) {
       let streaming = false;
 
       const renderSpinner = () => {
-        process.stderr.write(
-          `${CLEAR_LINE}${DIM}  ${FRAMES[frame]} ${statusText}${RST}`,
-        );
+        process.stderr.write(`${CLEAR_LINE}${DIM}  ${FRAMES[frame]} ${statusText}${RST}`);
         frame = (frame + 1) % FRAMES.length;
       };
 
@@ -232,8 +210,7 @@ switch (command) {
         }
 
         const costStr = costUsd > 0 ? `$${costUsd.toFixed(4)}` : "";
-        const turnsStr =
-          turns > 0 ? `${turns} turn${turns !== 1 ? "s" : ""}` : "";
+        const turnsStr = turns > 0 ? `${turns} turn${turns !== 1 ? "s" : ""}` : "";
         const meta = [costStr, turnsStr].filter(Boolean).join(" · ");
         if (meta) process.stderr.write(`\n${DIM}${meta}${RST}`);
         process.stdout.write("\n");
@@ -279,13 +256,8 @@ switch (command) {
             const time = localTime(new Date(m.createdAt));
             const prefix = m.sender === "user" ? "you" : m.sender;
             const roomTag = room ? "" : `[${m.room}] `;
-            const snippet =
-              m.content.length > 120
-                ? m.content.slice(0, 120) + "..."
-                : m.content;
-            console.log(
-              `  ${roomTag}${time}  ${prefix} > ${snippet.replace(/\n/g, " ")}`,
-            );
+            const snippet = m.content.length > 120 ? m.content.slice(0, 120) + "..." : m.content;
+            console.log(`  ${roomTag}${time}  ${prefix} > ${snippet.replace(/\n/g, " ")}`);
           }
         }
       });
@@ -302,14 +274,11 @@ switch (command) {
     const follow = logArgs.includes("-f") || logArgs.includes("--follow");
     // --channel <name> filters logs by channel/component via grep
     const chIdx = logArgs.indexOf("--channel");
-    const channelFilter =
-      chIdx !== -1 && logArgs[chIdx + 1] ? logArgs[chIdx + 1] : null;
+    const channelFilter = chIdx !== -1 && logArgs[chIdx + 1] ? logArgs[chIdx + 1] : null;
 
     if (channelFilter) {
       // Pipe through grep to filter by channel name in structured logs
-      const tailArgs = follow
-        ? ["tail", "-f", daemonLog]
-        : ["tail", "-200", daemonLog];
+      const tailArgs = follow ? ["tail", "-f", daemonLog] : ["tail", "-200", daemonLog];
       const tail = Bun.spawn(tailArgs, {
         stdio: ["ignore", "pipe", "inherit"],
       });
@@ -318,9 +287,7 @@ switch (command) {
       });
       await grep.exited;
     } else {
-      const args = follow
-        ? ["tail", "-f", daemonLog]
-        : ["tail", "-50", daemonLog];
+      const args = follow ? ["tail", "-f", daemonLog] : ["tail", "-50", daemonLog];
       const proc = Bun.spawn(args, { stdio: ["ignore", "inherit", "inherit"] });
       await proc.exited;
     }
@@ -341,8 +308,7 @@ switch (command) {
           ? ("pick" as const)
           : ("new" as const);
     const chIdx = chatArgs.indexOf("--channel");
-    const simChannel =
-      chIdx !== -1 && chatArgs[chIdx + 1] ? chatArgs[chIdx + 1] : undefined;
+    const simChannel = chIdx !== -1 && chatArgs[chIdx + 1] ? chatArgs[chIdx + 1] : undefined;
     await startRepl(mode, simChannel);
     break;
   }
@@ -360,9 +326,7 @@ switch (command) {
       skills = skills.filter((s) => s.source === filter);
     }
     if (skills.length === 0) {
-      console.log(
-        filter ? `No skills found in "${filter}".` : "No skills found.",
-      );
+      console.log(filter ? `No skills found in "${filter}".` : "No skills found.");
     } else {
       for (const s of skills) {
         const tag = filter ? "" : `  [${s.source}]`;
@@ -416,8 +380,7 @@ switch (command) {
       const parts = configKey.split(".");
       let val: unknown = raw;
       for (const p of parts) {
-        if (val && typeof val === "object")
-          val = (val as Record<string, unknown>)[p];
+        if (val && typeof val === "object") val = (val as Record<string, unknown>)[p];
         else {
           val = undefined;
           break;
@@ -455,9 +418,7 @@ switch (command) {
         process.kill(pid, "SIGHUP");
         console.log(`channels ${enabled ? "enabled" : "disabled"}`);
       } else {
-        console.log(
-          `channels ${enabled ? "enabled" : "disabled"} — start nia to apply`,
-        );
+        console.log(`channels ${enabled ? "enabled" : "disabled"} — start nia to apply`);
       }
     } else {
       console.log(`channels: ${getConfig().channels.enabled ? "on" : "off"}`);
@@ -472,21 +433,15 @@ switch (command) {
   }
 
   case "test": {
-    const verbose =
-      process.argv.includes("-v") || process.argv.includes("--verbose");
-    const extraArgs = process.argv
-      .slice(3)
-      .filter((a) => a !== "-v" && a !== "--verbose");
+    const verbose = process.argv.includes("-v") || process.argv.includes("--verbose");
+    const extraArgs = process.argv.slice(3).filter((a) => a !== "-v" && a !== "--verbose");
     const proc = Bun.spawn(["bun", "test", ...extraArgs], {
       stdio: ["ignore", "pipe", "pipe"],
       cwd: import.meta.dir + "/../..",
       env: { ...process.env, LOG_LEVEL: "silent" },
     });
 
-    const [stdout, stderr] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-    ]);
+    const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
     const exitCode = await proc.exited;
     const output = stdout + stderr;
 
@@ -556,8 +511,7 @@ switch (command) {
       console.log(`Updated: v${currentVersion} → v${newVersion}`);
       if (isRunning()) {
         console.log("Restarting daemon...");
-        const { isServiceInstalled, restartService } =
-          await import("../commands/service");
+        const { isServiceInstalled, restartService } = await import("../commands/service");
         if (isServiceInstalled()) {
           await restartService();
         } else {
@@ -622,11 +576,7 @@ System:
 
     console.log(HELP);
     // Unknown command → exit 1, help/no command → exit 0
-    const isHelp =
-      !command ||
-      command === "help" ||
-      command === "--help" ||
-      command === "-h";
+    const isHelp = !command || command === "help" || command === "--help" || command === "-h";
     if (!isHelp) console.error(`\nUnknown command: ${command}`);
     process.exit(isHelp ? 0 : 1);
   }

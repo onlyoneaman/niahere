@@ -372,12 +372,6 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
     };
     writeState(freshState);
 
-    // Job-local learnings live in state.md (injected into the next run's
-    // prompt), not in global self/memory.md. The global memory consolidator
-    // only processes chat sessions — routing job output through it created
-    // layer violations (transient incidents promoted to durable memory).
-    // See src/core/consolidator.ts and AGENTS.md memory architecture notes.
-
     return result;
   } catch (err) {
     const duration_ms = Math.round(performance.now() - startMs);

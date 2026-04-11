@@ -1,6 +1,8 @@
 import { getSql } from "../connection";
 import { CronExpressionParser } from "cron-parser";
 import { parseDuration } from "../../utils/duration";
+import { computeInitialNextRun } from "../../utils/schedule";
+import { getConfig } from "../../utils/config";
 import type { ScheduleType } from "../../types";
 
 /** Validate that a schedule string matches its declared type. Throws on mismatch. */
@@ -10,26 +12,20 @@ function validateSchedule(schedule: string, scheduleType: ScheduleType): void {
       try {
         CronExpressionParser.parse(schedule);
       } catch (err) {
-        throw new Error(
-          `Invalid cron expression "${schedule}": ${err instanceof Error ? err.message : err}`,
-        );
+        throw new Error(`Invalid cron expression "${schedule}": ${err instanceof Error ? err.message : err}`);
       }
       break;
     case "interval":
       try {
         parseDuration(schedule);
       } catch (err) {
-        throw new Error(
-          `Invalid interval "${schedule}": ${err instanceof Error ? err.message : err}`,
-        );
+        throw new Error(`Invalid interval "${schedule}": ${err instanceof Error ? err.message : err}`);
       }
       break;
     case "once": {
       const d = new Date(schedule);
       if (isNaN(d.getTime())) {
-        throw new Error(
-          `Invalid timestamp "${schedule}": expected ISO 8601 date`,
-        );
+        throw new Error(`Invalid timestamp "${schedule}": expected ISO 8601 date`);
       }
       break;
     }
@@ -89,9 +85,7 @@ export async function create(
   validateSchedule(schedule, scheduleType);
   const existing = await get(name);
   if (existing) {
-    throw new Error(
-      `Job "${name}" already exists. Use \`nia job remove ${name}\` first, or choose a different name.`,
-    );
+    throw new Error(`Job "${name}" already exists. Use \`nia job remove ${name}\` first, or choose a different name.`);
   }
   const sql = getSql();
   await sql`
@@ -141,15 +135,25 @@ export async function update(
   const model = fields.model !== undefined ? fields.model : existing.model;
   const stateless = fields.stateless ?? existing.stateless;
 
-  if (fields.schedule || fields.scheduleType) {
+  const scheduleChanged = fields.schedule !== undefined || fields.scheduleType !== undefined;
+  if (scheduleChanged) {
     validateSchedule(schedule, scheduleType);
   }
 
-  await sql`
-    UPDATE jobs
-    SET schedule = ${schedule}, schedule_type = ${scheduleType}, prompt = ${prompt}, enabled = ${enabled}, always = ${always}, agent = ${agent}, model = ${model}, stateless = ${stateless}, updated_at = NOW()
-    WHERE name = ${name}
-  `;
+  if (scheduleChanged) {
+    const nextRun = computeInitialNextRun(scheduleType, schedule, getConfig().timezone);
+    await sql`
+      UPDATE jobs
+      SET schedule = ${schedule}, schedule_type = ${scheduleType}, prompt = ${prompt}, enabled = ${enabled}, always = ${always}, agent = ${agent}, model = ${model}, stateless = ${stateless}, next_run_at = ${nextRun}, updated_at = NOW()
+      WHERE name = ${name}
+    `;
+  } else {
+    await sql`
+      UPDATE jobs
+      SET schedule = ${schedule}, schedule_type = ${scheduleType}, prompt = ${prompt}, enabled = ${enabled}, always = ${always}, agent = ${agent}, model = ${model}, stateless = ${stateless}, updated_at = NOW()
+      WHERE name = ${name}
+    `;
+  }
   await notifyChange();
   return true;
 }
@@ -179,10 +183,7 @@ export async function listDue(): Promise<Job[]> {
   return rows.map(toJob);
 }
 
-export async function markRun(
-  name: string,
-  nextRunAt: Date | null,
-): Promise<void> {
+export async function markRun(name: string, nextRunAt: Date | null): Promise<void> {
   const sql = getSql();
   if (nextRunAt) {
     await sql`UPDATE jobs SET last_run_at = NOW(), next_run_at = ${nextRunAt}, updated_at = NOW() WHERE name = ${name}`;

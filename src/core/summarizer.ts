@@ -68,9 +68,6 @@ Keep it concise — a handoff note, not a report. Output ONLY the summary text.`
     const output = await runTask({ name: "summarizer", prompt });
 
     if (output.error) {
-      // Throw so the finalizer's Promise.allSettled correctly sees this as
-      // a failure. Returning silently would let the finalizer mark the
-      // request 'done' even though no summary was written.
       throw new Error(`summarizer task failed: ${output.error}`);
     }
 
@@ -88,8 +85,6 @@ Keep it concise — a handoff note, not a report. Output ONLY the summary text.`
     }
   } catch (err) {
     log.error({ err, sessionId, room }, "summarizer: failed");
-    // Re-throw so the finalizer's Promise.allSettled sees this as rejected.
-    // See the matching comment in consolidator.ts consolidateSession().
     throw err;
   } finally {
     inFlight.delete(sessionId);

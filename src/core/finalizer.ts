@@ -78,13 +78,11 @@ async function processOne(sessionId: string, room: string, messageCount: number)
   const requestId = claimed[0].id;
 
   try {
-    // Run both tasks, tolerating partial failure. Inspect the results to
-    // determine the final status — `done` if both succeeded, `failed` if
-    // either rejected. Previously this marked `done` unconditionally, which
-    // silently hid consolidator/summarizer errors.
-    const results = await Promise.allSettled([consolidateSession(sessionId, room), summarizeSession(sessionId, room)]);
+    const [consolidateResult, summarizeResult] = await Promise.allSettled([
+      consolidateSession(sessionId, room),
+      summarizeSession(sessionId, room),
+    ]);
 
-    const [consolidateResult, summarizeResult] = results;
     const errors: string[] = [];
     if (consolidateResult.status === "rejected") {
       errors.push(`consolidate: ${formatRejection(consolidateResult.reason)}`);
@@ -107,16 +105,13 @@ async function processOne(sessionId: string, room: string, messageCount: number)
       log.error({ sessionId, room, messageCount, errors }, "finalizer: completed with task failures");
     }
   } catch (err) {
-    // This catch fires only on infrastructure errors (e.g. DB update failed)
-    // since Promise.allSettled itself never rejects. Still mark 'failed' so
-    // the request doesn't get stuck in 'processing' forever.
     await sql`
       UPDATE finalization_requests
       SET status = 'failed', updated_at = NOW()
       WHERE id = ${requestId}
     `.catch(() => {});
 
-    log.error({ err, sessionId, room }, "finalizer: processing failed (infrastructure)");
+    log.error({ err, sessionId, room }, "finalizer: processing failed");
   }
 }
 

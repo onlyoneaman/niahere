@@ -5,7 +5,7 @@ import { localTime } from "../utils/time";
 import { maskToken, safeDate, dateSortValue, formatTimeLine } from "../utils/format";
 import { Message, ActiveEngine, Job } from "../db/models";
 import type { ScheduleType, JobStateStatus, RoomStats } from "../types";
-import { withDb } from "../db/connection";
+import { withDb } from "../db/with-db";
 import { errMsg } from "../utils/errors";
 import { checkForUpdate } from "../utils/update";
 import { ICON_PASS, ICON_FAIL, ICON_RUNNING } from "../utils/cli";
@@ -56,7 +56,6 @@ function parseStatusArgs(argv: string[]): StatusOptions {
   return opts;
 }
 
-
 export async function statusCommand(argv: string[] = []): Promise<void> {
   const options = parseStatusArgs(argv);
   const now = new Date();
@@ -87,7 +86,9 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
         ? "not configured"
         : !config.channels.enabled
           ? "disabled"
-          : running ? "active" : "configured",
+          : running
+            ? "active"
+            : "configured",
       tokenSuffix: config.channels.telegram.bot_token ? maskToken(config.channels.telegram.bot_token) : null,
     },
     slack: {
@@ -98,7 +99,9 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
         : !config.channels.enabled
           ? "disabled"
           : running
-            ? config.channels.slack.app_token ? "active" : "configured (missing app token)"
+            ? config.channels.slack.app_token
+              ? "active"
+              : "configured (missing app token)"
             : "configured",
       tokenSuffix: config.channels.slack.bot_token ? maskToken(config.channels.slack.bot_token) : null,
     },
@@ -115,7 +118,7 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
 
     const jobsPayload: JobStatusLine[] = sortedJobs.map((job) => {
       const stateInfo = state[job.name];
-      const lastRun = stateInfo?.lastRun ? stateInfo.lastRun : job.lastRunAt ?? null;
+      const lastRun = stateInfo?.lastRun ? stateInfo.lastRun : (job.lastRunAt ?? null);
       return {
         name: job.name,
         schedule: job.schedule,
@@ -188,7 +191,7 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
       activeEngines: engineRows,
       rooms: roomRows,
       counts: {
-        jobs: (dbError ? fallbackJobs.length : jobsPayload.length),
+        jobs: dbError ? fallbackJobs.length : jobsPayload.length,
         activeEngines: engineRows.length,
         rooms: roomRows.length,
       },
@@ -250,15 +253,20 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
           safeDate(nextRun)!.getTime() <= now.getTime() &&
           !stateInfo;
 
-        const statusIcon = status === "ok" ? ICON_PASS : status === "error" ? ICON_FAIL : status === "running" ? ICON_RUNNING : "\u2217";
+        const statusIcon =
+          status === "ok" ? ICON_PASS : status === "error" ? ICON_FAIL : status === "running" ? ICON_RUNNING : "\u2217";
         const durationText = stateInfo?.duration_ms === undefined ? "n/a" : formatDuration(stateInfo.duration_ms);
         const nextText = nextRun ? formatTimeLine(nextRun, now) : "unknown";
         const lastText = lastRun ? formatTimeLine(lastRun, now) : "never";
         const staleText = stale ? "  ⚠ stale" : "";
 
         const agentTag = job.agent ? `  [${job.agent}]` : "";
-        console.log(`  ${job.enabled ? "\u25cf" : "\u25cb"} ${job.name.padEnd(20)} ${job.enabled ? "enabled" : "disabled"}${agentTag}`);
-        console.log(`      ${statusIcon} ${status}   last: ${lastText}   next: ${nextText}   duration: ${durationText}${staleText}`);
+        console.log(
+          `  ${job.enabled ? "\u25cf" : "\u25cb"} ${job.name.padEnd(20)} ${job.enabled ? "enabled" : "disabled"}${agentTag}`,
+        );
+        console.log(
+          `      ${statusIcon} ${status}   last: ${lastText}   next: ${nextText}   duration: ${durationText}${staleText}`,
+        );
       }
     } else {
       console.log("\nJobs: none");

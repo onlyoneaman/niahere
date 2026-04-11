@@ -2,7 +2,7 @@ import { existsSync, statSync } from "fs";
 import { join } from "path";
 import { getConfig, readRawConfig } from "../utils/config";
 import { getPaths } from "../utils/paths";
-import { isRunning, readPid } from "./daemon";
+import { isRunning, readPid } from "../utils/pid";
 import { errMsg } from "../utils/errors";
 import { localTime } from "../utils/time";
 import { withRetry } from "../utils/retry";
@@ -123,11 +123,7 @@ export async function runHealthChecks(): Promise<Check[]> {
           }),
         );
         const data = (await resp.json()) as { ok: boolean; error?: string };
-        results.push(
-          data.ok
-            ? "slack: connected"
-            : `slack: ${data.error || "auth failed"}`,
-        );
+        results.push(data.ok ? "slack: connected" : `slack: ${data.error || "auth failed"}`);
         if (!data.ok)
           checks.push({
             name: "slack",
@@ -159,10 +155,7 @@ export async function runHealthChecks(): Promise<Check[]> {
   // API keys
   const geminiKey = config.gemini_api_key;
   const rawConfig = readRawConfig();
-  const openaiKey =
-    typeof rawConfig.openai_api_key === "string"
-      ? rawConfig.openai_api_key
-      : null;
+  const openaiKey = typeof rawConfig.openai_api_key === "string" ? rawConfig.openai_api_key : null;
   const apiKeys: string[] = [];
   if (geminiKey) apiKeys.push("gemini");
   if (openaiKey) apiKeys.push("openai");
@@ -174,16 +167,11 @@ export async function runHealthChecks(): Promise<Check[]> {
 
   // Persona files
   const personaFiles = ["identity.md", "owner.md", "soul.md"];
-  const missing = personaFiles.filter(
-    (f) => !existsSync(join(paths.selfDir, f)),
-  );
+  const missing = personaFiles.filter((f) => !existsSync(join(paths.selfDir, f)));
   checks.push({
     name: "persona",
     status: missing.length === 0 ? "ok" : "warn",
-    detail:
-      missing.length === 0
-        ? "all files present"
-        : "missing: " + missing.join(", "),
+    detail: missing.length === 0 ? "all files present" : "missing: " + missing.join(", "),
   });
 
   // Daemon log

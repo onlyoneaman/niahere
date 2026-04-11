@@ -1,9 +1,10 @@
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "fs";
 import { dirname, resolve as pathResolve } from "path";
 import { fileURLToPath } from "url";
 import { getPaths } from "../utils/paths";
 import { getConfig, resetConfig } from "../utils/config";
 import { log } from "../utils/log";
+import { isRunning, readPid, removePid, writePid } from "../utils/pid";
 import { ActiveEngine, Job } from "../db/models";
 import { runMigrations } from "../db/migrate";
 import { closeDb, getSql } from "../db/connection";
@@ -15,45 +16,7 @@ import { createNiaMcpServer } from "../mcp/server";
 import { setMcpFactory } from "../mcp";
 import { processPending, cleanupOldRequests } from "./finalizer";
 
-export function writePid(pid: number): void {
-  const { pid: pidPath } = getPaths();
-  mkdirSync(dirname(pidPath), { recursive: true });
-  writeFileSync(pidPath, String(pid));
-}
-
-export function readPid(): number | null {
-  const { pid: pidPath } = getPaths();
-  if (!existsSync(pidPath)) return null;
-
-  try {
-    return parseInt(readFileSync(pidPath, "utf8").trim(), 10);
-  } catch {
-    return null;
-  }
-}
-
-export function removePid(): void {
-  const { pid: pidPath } = getPaths();
-  try {
-    unlinkSync(pidPath);
-  } catch {
-    // Already gone
-  }
-}
-
-export function isRunning(): boolean {
-  const pid = readPid();
-  if (pid === null) return false;
-
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    log.warn({ stalePid: pid }, "removing stale pid file (process not running)");
-    removePid();
-    return false;
-  }
-}
+export { isRunning, readPid, removePid, writePid };
 
 export function startDaemon(): number {
   const { daemonLog } = getPaths();
@@ -122,18 +85,7 @@ function waitForExit(timeoutMs: number): void {
   }
 }
 
-/**
- * Return PIDs of running daemon processes (excluding ourselves).
- *
- * Matches the actual daemon argv pattern — `bun <path>/src/cli/index.ts run`.
- * This is critical for the startup guard in runDaemon(): if this returns an
- * empty list while a live daemon is actually running, the guard falls through
- * to "take over from stale pid" and a second daemon starts, causing duplicate
- * scheduler ticks, double finalizer drains, and state corruption.
- *
- * The previous regex matched `src/cli\.ts run$` which never matched the real
- * entry path (`src/cli/index.ts`). See code-review 2026-04-11.
- */
+/** Return PIDs of running daemon processes (excluding ourselves). */
 export function findDaemonPids(): number[] {
   try {
     const result = Bun.spawnSync(["pgrep", "-f", "src/cli/index\\.ts run$"]);

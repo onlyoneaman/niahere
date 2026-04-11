@@ -1,27 +1,13 @@
 /**
- * Memory consolidator — stage 1 of a two-stage memory architecture.
+ * Memory consolidator — stage 1 of the two-stage memory pipeline.
  *
- * After a chat session goes idle, this module reflects on the transcript
- * and writes CANDIDATE memories to ~/.niahere/self/staging.md. It never
- * writes directly to memory.md or rules.md — the nightly memory-promoter
- * job handles promotion once candidates are reinforced (count >= 2) and
- * pass durability review.
+ * After a chat session goes idle, reflects on the transcript and appends
+ * CANDIDATE memories to ~/.niahere/self/staging.md. The nightly
+ * memory-promoter job handles promotion from staging to memory.md/rules.md.
+ * The write-path restriction is enforced by the consolidator prompt, not
+ * by tool sandboxing.
  *
- * Architecture:
- *   chat idle → consolidator → staging.md (candidate log, TTL 14d)
- *                                    ↓  nightly promoter (3am)
- *                                    ↓  - count >= 2 required
- *                                    ↓  - durability review
- *                              memory.md / rules.md
- *
- * Jobs do NOT flow through this path — job-local learnings live in each
- * job's state.md (see runner.ts:buildWorkingMemory). Routing job output
- * into global persona memory caused layer violations (transient incidents
- * promoted to durable facts).
- *
- * The consolidator uses the same agent loop as cron jobs — full Nia system
- * prompt, full tool access. The write-path restriction is enforced by the
- * prompt (the agent is told to only edit staging.md), not by tool sandboxing.
+ * See AGENTS.md > "Two-stage memory" for the full architecture.
  */
 
 import { Message } from "../db/models";
@@ -138,19 +124,13 @@ Report a one-line summary of what you did: "staged N new / reinforced M /
 skipped (trivial session)". No preamble.`;
 }
 
-/**
- * Run the consolidation agent loop.
- *
- * Throws if the agent task errored. runTask() doesn't throw — it returns
- * `{ error }` on failure — so we need to inspect the output and escalate.
- * Without this, consolidateSession() would record the session as processed
- * even when the agent never actually wrote anything to staging.md.
- */
 async function runConsolidation(transcript: string, source: string): Promise<void> {
   const output = await runTask({
     name: "consolidator",
     prompt: buildConsolidationPrompt(transcript, source),
   });
+  // runTask returns {error} on failure instead of throwing; escalate so
+  // consolidateSession doesn't mark the session processed on a failed run.
   if (output.error) {
     throw new Error(`consolidator task failed: ${output.error}`);
   }
@@ -188,16 +168,8 @@ export async function consolidateSession(sessionId: string, room: string): Promi
     }
   } catch (err) {
     log.error({ err, sessionId, room }, "consolidator: chat extraction failed");
-    // Re-throw so the finalizer's Promise.allSettled sees this as rejected
-    // and can mark the request 'failed' instead of 'done'. Swallowing here
-    // would silently lose the signal that extraction didn't actually run.
     throw err;
   } finally {
     inFlight.delete(sessionId);
   }
 }
-
-// Job runs no longer flow through the global memory consolidator. Each job
-// maintains its own working memory in state.md (see buildWorkingMemory() in
-// runner.ts). This separation prevents transient job-local incidents from
-// being promoted to durable persona memory.
