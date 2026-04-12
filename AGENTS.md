@@ -238,7 +238,7 @@ When making changes, keep these files in sync:
 - **AGENTS.md** — update when: adding/moving files, changing config schema, adding key patterns
 - **README.md** — update when: adding/changing CLI commands, features, setup steps
 - **Prompts** (`src/prompts/*.md`) — update when: changing channel behavior, formatting rules, security policies
-- **CHANGELOG.md** — add to `[Unreleased]` with every commit that adds a feature, fixes a bug, or changes behavior. Move items under new version header when releasing.
+- **CHANGELOG.md** — add to `[Unreleased]` with every commit that adds a feature, fixes a bug, or changes behavior. Move items under new version header when releasing. **Style: `- **Bold title** — one sentence explaining impact. Max two sentences.`** No implementation details, no file paths, no internal forensics — those belong in the commit message. If you need more than two sentences, you're writing docs, not a changelog entry.
 - **CLI help text** (`src/cli/index.ts` default case) — update when: adding/renaming subcommands
 - **Slack manifest** (`defaults/channels/slack-manifest.json`) — update when: adding Slack API features
 

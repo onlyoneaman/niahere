@@ -29,7 +29,7 @@
 
 ### Added
 
-- **`userinterface-wiki` skill** — imported the 152-rule UI/UX best-practices reference (animation timing, easing, springs, exit animations, CSS pseudo-elements, audio, morphing icons, container animation, Laws of UX, prefetching, typography, visual design). Wired it in as a companion reference from `frontend-design`, `code-review`, `qa`, and `cro` so reviewers and builders can cite specific rule IDs (e.g. `timing-under-300ms`, `ux-fitts-target-size`, `visual-concentric-radius`) instead of vague "feels off" feedback.
+- **`userinterface-wiki` skill** — 152-rule UI/UX best-practices reference covering animations, timing, easing, Laws of UX, typography, and visual design. Wired as a companion reference from `frontend-design`, `code-review`, `qa`, and `cro`.
 
 ### Fixed
 
@@ -39,18 +39,18 @@
 
 ### Added
 
-- **Dir-per-watch layout + optional behavior** — each Slack watch is now a self-contained directory at `~/.niahere/watches/<name>/` (matching the agents pattern). The `behavior` field in `channels.slack.watch` is now optional: omit it and the watch loads `watches/<name>/behavior.md` using the channel name from the config key. Set it to a single word to override the directory, or to prose for an inline behavior. Short behaviors still work inline. Missing files no longer break the watch — agent just runs without explicit behavior. Hot-reloads via mtime tracking of config.yaml AND any referenced behavior files. Auto-creates `watches/` dir on daemon startup and `nia init`.
+- **Dir-per-watch layout + optional behavior** — each Slack watch is now a directory at `~/.niahere/watches/<name>/`. The `behavior` field is optional: omit for file-backed default, single word for directory override, or inline prose. Hot-reloads via mtime tracking.
 
 ### Improved
 
-- **Unified session finalizer** — consolidated ad-hoc consolidation/summarization calls into a single DB-backed finalizer queue (`finalization_requests` table). REPL and CLI exits are now instant — the daemon processes post-session work reliably via `pg_notify`. Fixes `CONNECTION_ENDED` errors on `nia chat` exit.
+- **Unified session finalizer** — DB-backed finalization queue replaces ad-hoc consolidation calls. REPL/CLI exits are now instant; daemon picks up the work via `pg_notify`.
 
 ## [0.2.60] - 2026-04-09
 
 ### Improved
 
 - **CLAUDE.md prompt hardening** — added banned filler phrases list, web search guidelines with data freshness tiers (volatile/recent/stable), user-override-defaults principle, and tighter communication style rules (lead with answer, no hedging). Inspired by competitive prompt analysis.
-- **Skills consolidation** — merged 20+ standalone skills into router skills. Cold email + email sequence → `email`, AI SEO + SEO audit + llms.txt → `seo`, page/signup/onboarding CRO → `cro`, social content + marketing ideas + marketing psychology + launch strategy + competitor alternatives + pricing strategy → `marketing`, copy editing → `copywriting`, minimalist review → `plan-review`, pr-reviewer → `code-review`. Removed docx, pptx, and gh-stamp standalone skills. Slimmed down content-strategy, copywriting, frontend-design, customer-research, and agent-skill-creator. Net: ~12,400 lines removed across 59 files.
+- **Skills consolidation** — merged 20+ standalone skills into router skills (email, seo, cro, marketing, copywriting, plan-review, code-review). ~12,400 lines removed across 59 files.
 
 ## [0.2.59] - 2026-04-09
 
@@ -68,8 +68,8 @@
 
 ### Added
 
-- **Optimization loop skill** — the Karpathy Loop / autoresearch pattern as a reusable skill. Covers the full discipline: frozen contract + rubric, pairwise scoring with anti-bias controls, staged exploration strategy, workspace layout, results audit trail (JSONL), resumability, and scoring integrity rules. Domain-agnostic — works for code benchmarks, prompt quality, copy effectiveness, or any scorable target.
-- **Optimize skill** — orchestration layer for scheduling optimization runs. Handles proactive suggestions after immediate work, spec confirmation with user, job prompt composition, one-shot job scheduling, and result delivery. References optimization-loop for the loop discipline.
+- **Optimization loop skill** — Karpathy Loop / autoresearch pattern as a reusable skill. Frozen contract + rubric, pairwise scoring, staged exploration, JSONL audit trail. Domain-agnostic.
+- **Optimize skill** — orchestration layer for scheduling optimization runs against a measurable target.
 
 ### Tests
 
@@ -79,19 +79,19 @@
 
 ### Fixed
 
-- **Multi-turn user messages not persisted** — in live chat sessions, only the first user message was saved to the database. Subsequent messages in the same session were lost, corrupting history, search, summaries, and memory consolidation. Now saved in `send()` before pushing to the stream.
-- **Active-engine tracking broken for long tasks** — `list()` silently deleted entries older than 5 minutes via `clearStale()`, causing long-running chats and jobs to vanish from tracking and get terminated during shutdown. Removed mutation from `list()`.
-- **Consolidation/summarization one-shot forever** — a process-global `Set` permanently marked sessions as processed, preventing re-consolidation when sessions got new turns. Replaced with a bounded `Map` (sessionId → message count) that re-processes when new messages arrive. Capped at 500 entries to prevent memory leaks. Transient failures are now retried.
-- **DB tests hit real database** — `tests/db/` used the production database. Now auto-creates a `niahere_test` database and points all test config at it.
-- **Backup exposed DB credentials via `ps`** — `pg_dump` was called with the full postgres URL as a CLI arg. Now parses the URL and passes the password via `PGPASSWORD` env var.
-- **Case-sensitive skill/agent dedup** — skills and agents with differently-cased names (e.g., `Optimization-Loop` vs `optimization-loop`) could appear twice in the list. Dedup is now case-insensitive.
-- **False "telegram: unreachable" alerts** — health check fetches to Telegram and Slack now retry 3 times with Fibonacci backoff (1s, 1s, 2s) and a 5s timeout per attempt. Transient network blips (macOS sleep, DNS hiccups) no longer trigger the LLM recovery agent. Unreachable channels report `warn` instead of `fail`, reserving `fail` for real auth errors.
+- **Multi-turn user messages not persisted** — only the first message per session was saved. Now saved before pushing to the stream.
+- **Active-engine tracking broken for long tasks** — `list()` silently deleted entries older than 5 min. Long-running chats/jobs could vanish and get terminated.
+- **Consolidation one-shot forever** — sessions were permanently marked as processed, preventing re-consolidation on new turns. Now uses a bounded message-count map.
+- **DB tests hit production** — now auto-creates `niahere_test` database.
+- **Backup exposed DB credentials via `ps`** — now passes password via `PGPASSWORD` env var.
+- **Case-sensitive skill/agent dedup** — dedup is now case-insensitive.
+- **False "telegram: unreachable" alerts** — health checks now retry 3× with backoff. Transient network blips no longer trigger the LLM recovery agent.
 
 ## [0.2.57] - 2026-04-07
 
 ### Added
 
-- **Job working memory** — jobs are now stateful by default. Each job gets a persistent workspace at `~/.niahere/jobs/<name>/` with a `state.md` file that is automatically injected into the prompt on each run. The agent updates it at the end of each run with what it did, what it noticed, and what to focus on next. Jobs can opt out with `--stateless yes`. Supports CLI (`nia job add/update --stateless yes|no`) and MCP tools.
+- **Job working memory** — jobs are stateful by default. Each gets a persistent workspace at `~/.niahere/jobs/<name>/` with `state.md` injected into each run's prompt. Opt out with `--stateless yes`.
 
 ## [0.2.56] - 2026-04-07
 
@@ -101,7 +101,7 @@
 
 ### Fixed
 
-- **Slack image messages silently dropped** — messages with image/file attachments have `subtype: "file_share"` which was caught by a blanket `if (message.subtype) return` guard. The full image pipeline (download, resize, base64, vision) was already built but never reached. Now allows `file_share` through.
+- **Slack image messages silently dropped** — `file_share` subtype was caught by a blanket subtype guard. Image pipeline was built but never reached. Now allowed through.
 
 ## [0.2.55] - 2026-04-05
 
