@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Deterministic agent/skill scanning** — `scanAgents()` and `scanSkills()` now sort directory entries by name. `readdirSync` returns filesystem-order, which varies across machines and after file mutations — causing the system prompt fingerprint to shift and breaking Anthropic prompt cache on session start.
+
 ## [0.2.63] - 2026-04-12
 
 ### Fixed

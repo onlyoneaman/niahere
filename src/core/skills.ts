@@ -26,7 +26,8 @@ export function scanSkills(): SkillInfo[] {
   for (const { dir, source } of SKILL_DIRS) {
     if (!existsSync(dir)) continue;
 
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
       if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
 
       const skillFile = join(dir, entry.name, "SKILL.md");

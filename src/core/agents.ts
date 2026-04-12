@@ -34,7 +34,8 @@ export function scanAgents(): AgentInfo[] {
   for (const { dir, source } of getAgentDirs()) {
     if (!existsSync(dir)) continue;
 
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
       if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
 
       const agentFile = join(dir, entry.name, "AGENT.md");
