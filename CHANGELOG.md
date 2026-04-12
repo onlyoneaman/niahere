@@ -4,30 +4,28 @@
 
 ### Fixed
 
-- **Daemon process detection regex was never matching.** `findDaemonPids()` grepped for `src/cli\.ts run$` but the actual entry path is `src/cli/index.ts`, so the function always returned an empty list. The startup guard would then fall through to "take over from stale pid" and a second daemon could start while one was alive, risking duplicate scheduler ticks and double finalizer drains. Regex now matches the real argv.
-- **Finalizer marked requests `done` even when consolidator or summarizer failed.** A chain of silent swallows (`runTask` returned `{error}` instead of throwing, `runConsolidation`/`summarizeSession` ignored it, outer try/catches logged-and-returned, and `Promise.allSettled` in the finalizer never inspected results) meant any extraction failure was invisible and never retried. The full chain now propagates errors, and the finalizer marks `done` only if both tasks succeeded, otherwise `failed` with per-task error detail in the log.
-- **`Job.update` did not recompute `next_run_at` on schedule changes.** Updating a job's schedule left the old `next_run_at` in place and `recomputeAllNextRuns` skipped jobs that already had one set, so the scheduler kept firing at the old cadence. Now recomputes inline whenever `schedule` or `scheduleType` changes, covered by a new integration test.
-- **`add_memory` tool description contradicted the new two-stage memory flow.** The MCP tool description and its mirror in `environment.md` still said "proactively save personal facts... don't wait to be asked", which directly contradicted the new "When to save live" section added in the previous release. Both now describe `add_memory` as user-explicit only, with observational saves routed through the post-session consolidator.
+- **Daemon process detection regex** — was matching a non-existent path, so `findDaemonPids()` always returned empty. Could allow a second daemon to start. Fixed to match the real entry path.
+- **Finalizer silently marked `done` on task failure** — consolidator/summarizer errors were swallowed at multiple layers. The full chain now propagates errors; finalizer marks `failed` if either task rejects.
+- **`Job.update` didn't recompute `next_run_at` on schedule changes** — scheduler kept firing at the old cadence. Now recomputes inline when schedule or scheduleType changes.
+- **`add_memory` description contradicted two-stage memory flow** — MCP tool and env.md still said "proactively save, don't wait to be asked." Aligned both with the new user-explicit-only save policy.
 
 ### Added
 
-- **Race/concurrency tests for the finalizer.** `tests/core/finalizer.integration.test.ts` covers concurrent `finalizeSession()` dedupe, the `< 2 messages` gate, and the already-done-row skip path.
-- **Scheduler recompute integration tests.** Three new cases verify that schedule updates re-base `next_run_at`, non-schedule updates leave it unchanged, and cron→interval type switches recompute correctly.
-- **Import cycle detection.** Added `madge` as a dev dep and a `check:cycles` npm script wired into `bun run test`. 4 existing cycles were broken in this pass (daemon↔alive↔health, db/connection↔db/migrate, and two via the new `Job.update` dynamic import). Pure PID utilities moved to `src/utils/pid.ts`, pure schedule math to `src/utils/schedule.ts`, `withDb` composer to `src/db/with-db.ts`. Madge now reports 0 cycles and the test script fails on any regression.
-- **Direct deps.** `zod` and `@anthropic-ai/sdk` were being imported but only available transitively via `@anthropic-ai/claude-agent-sdk`. Declared as direct deps so transitive drops can't break the build.
+- **Integration tests for finalizer and scheduler** — concurrent dedupe, done-row skip, schedule-update recompute, cron→interval type switch.
+- **Import cycle detection** — broke all 4 existing cycles (extracted pid, schedule math, and withDb to leaf utilities). Added `check:cycles` via madge, wired into `bun run test`.
+- **Direct deps** — declared `zod` and `@anthropic-ai/sdk` which were only available transitively.
 
 ### Changed
 
-- **Environment system prompt updated for recent releases.** `src/prompts/environment.md` had drifted behind several shipped features: (1) the `update_job` and `add_job` bullets now mention the `model` override from 0.2.59; (2) the `channels.slack.watch` config reference now describes the dir-per-watch layout and the three forms of the optional `behavior` field from 0.2.61; (3) the Persona & Memory section now includes `staging.md` in the persona files list and has a new "How durable memories get made" subsection that describes the two-stage flow (live user-explicit saves vs background consolidation via staging → nightly promoter); (4) the old "When to save (be proactive)" section with two large affirmative tables (16 rows total) has been trimmed to a single 4-row "When to save live" table plus an explicit "let the consolidator handle it" paragraph. The live agent now has a narrower save bar on purpose — the background consolidator catches what the live pass skips, so aggressive proactive saving is no longer necessary.
-- Also fixed a markdown linter corruption in the `add_job` cron example (asterisks were getting escaped into italic markers).
+- **Environment system prompt updated** — added `model` to job tool descriptions (0.2.59), dir-per-watch to Slack watch reference (0.2.61), two-stage memory docs and trimmed "When to save" from 16-row proactive tables to a 4-row user-explicit table (0.2.62).
 
 ## [0.2.62] - 2026-04-11
 
 ### Changed
 
-- **Two-stage memory architecture** — replaced the direct-write memory consolidator with a staging pipeline. After a chat session goes idle, the consolidator now reflects on the transcript and appends candidate lines to a new `~/.niahere/self/staging.md` file (format: `- [count×] [type] content :: first_seen → last_seen`, types: `persona | project | reference | correction`). Reinforcement happens in-place — seeing a candidate again bumps `[1×] → [2×]`. A new auto-installed system job `memory-promoter` runs nightly at 3am, reaps entries older than 14 days with count<2, and promotes qualifying candidates (`count ≥ 2` + durability review) to `memory.md` or `rules.md`. This replaces the old single-pass consolidator that was producing low-precision, low-recall memories (saving transient incidents as durable facts while missing real patterns).
-- **Job runs no longer flow through the global memory consolidator.** `consolidateJobRun` has been removed. Job-local learnings stay in each job's `state.md` (via `buildWorkingMemory()`), which is the existing per-job working memory that already gets injected into the next run's prompt. Routing job output through global persona memory was a layer violation that caused transient job incidents to get promoted to durable facts.
-- **Consolidator prompt rewritten around reflection, not extraction.** The old prompt listed 5 fact categories and asked the agent to fish for matches. The new prompt asks three reflection questions ("what did the user correct / what new fact do you know / what decision was made") and defaults to doing nothing. It explicitly overrides the "save proactively" framing in `environment.md`, which is correct for live chat but was leaking into the consolidator and biasing it toward saving trivial observations.
+- **Two-stage memory architecture** — consolidator now writes candidates to `staging.md` instead of directly to `memory.md`. A nightly `memory-promoter` job (auto-installed) reviews candidates with count ≥ 2 and promotes qualifying ones. Candidates with count < 2 expire after 14 days. Replaces the single-pass consolidator that was producing low-precision memories.
+- **Job runs removed from global consolidator** — job-local learnings stay in each job's `state.md`. Routing job output through global persona memory was a layer violation.
+- **Consolidator prompt rewritten around reflection** — three reflection questions instead of category extraction. Defaults to doing nothing. Explicitly overrides the "save proactively" framing from `environment.md`.
 
 ### Added
 
