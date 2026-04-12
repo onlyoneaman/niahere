@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.63] - 2026-04-12
+
 ### Fixed
 
 - **Daemon process detection regex** — was matching a non-existent path, so `findDaemonPids()` always returned empty. Could allow a second daemon to start. Fixed to match the real entry path.
