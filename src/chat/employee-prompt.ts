@@ -1,7 +1,9 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { getEmployee, getEmployeeDir } from "../core/employees";
-import { getEnvironmentPrompt } from "../prompts";
+import { getEnvironmentPrompt, getModePrompt } from "../prompts";
+import { getSkillsSummary } from "../core/skills";
+import { getAgentsSummary } from "../core/agents";
 
 function loadFile(dir: string, name: string): string {
   const filePath = join(dir, name);
@@ -19,8 +21,17 @@ export function buildEmployeePrompt(name: string): string {
   // Core identity (the EMPLOYEE.md body)
   if (employee.body) parts.push(employee.body);
 
-  // Environment info
+  // Environment + mode + capabilities
   parts.push(getEnvironmentPrompt());
+
+  const modePrompt = getModePrompt("chat");
+  if (modePrompt) parts.push(modePrompt);
+
+  const skills = getSkillsSummary();
+  if (skills) parts.push(skills);
+
+  const agents = getAgentsSummary();
+  if (agents) parts.push(agents);
 
   // Employee metadata context
   parts.push(`## Your Profile
