@@ -15,6 +15,7 @@ import { sendCommand, telegramCommand, slackCommand } from "./channels";
 import { rulesCommand, memoryCommand } from "./self";
 import { watchCommand } from "./watch";
 import { agentCommand } from "./agent";
+import { employeeCommand } from "./employee";
 
 // Set LOG_LEVEL from config before anything else logs
 try {
@@ -309,12 +310,19 @@ switch (command) {
           : ("new" as const);
     const chIdx = chatArgs.indexOf("--channel");
     const simChannel = chIdx !== -1 && chatArgs[chIdx + 1] ? chatArgs[chIdx + 1] : undefined;
-    await startRepl(mode, simChannel);
+    const empIdx = chatArgs.indexOf("--employee");
+    const employeeName = empIdx !== -1 && chatArgs[empIdx + 1] ? chatArgs[empIdx + 1] : undefined;
+    await startRepl(mode, simChannel, employeeName);
     break;
   }
 
   case "agent": {
     await agentCommand();
+    break;
+  }
+
+  case "employee": {
+    await employeeCommand();
     break;
   }
 
@@ -557,6 +565,7 @@ Persona:
   rules [show|reset]              View or reset rules.md
   memory [show|reset]             View or reset memory.md
   agent <sub>                     List/show agents
+  employee <sub>                  Manage employees
   skills [source]                 List available skills
 
 Channels:

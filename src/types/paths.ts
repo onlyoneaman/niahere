@@ -11,4 +11,5 @@ export interface Paths {
   skillsDir: string;
   imagesDir: string;
   watchesDir: string;
+  employeesDir: string;
 }

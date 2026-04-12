@@ -6,6 +6,8 @@ import { join } from "path";
 import { homedir } from "os";
 import { randomUUID } from "crypto";
 import { buildSystemPrompt, getSessionContext } from "./identity";
+import { buildEmployeePrompt } from "./employee-prompt";
+import { getEmployee } from "../core/employees";
 import { getAgentDefinitions } from "../core/agents";
 import { Session, Message, ActiveEngine } from "../db/models";
 import type {
@@ -134,7 +136,18 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
     systemPrompt += "\n\n" + sessionContext;
   }
 
-  const cwd = homedir();
+  // Employee mode: override system prompt with employee identity
+  let cwd = homedir();
+  if (opts.employee) {
+    const empPrompt = buildEmployeePrompt(opts.employee);
+    if (empPrompt) {
+      systemPrompt = empPrompt;
+    }
+    const emp = getEmployee(opts.employee);
+    if (emp?.repo && existsSync(emp.repo)) {
+      cwd = emp.repo;
+    }
+  }
 
   let sessionId: string | null = null;
   if (typeof resume === "string") {

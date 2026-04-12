@@ -17,7 +17,11 @@ export interface SendCallbacks {
 export interface ChatEngine {
   sessionId: string | null;
   room: string;
-  send(userMessage: string, callbacks?: SendCallbacks, attachments?: import("./attachment").Attachment[]): Promise<SendResult>;
+  send(
+    userMessage: string,
+    callbacks?: SendCallbacks,
+    attachments?: import("./attachment").Attachment[],
+  ): Promise<SendResult>;
   close(): void;
 }
 
@@ -27,4 +31,5 @@ export interface EngineOptions {
   /** true = resume latest session, or pass a specific session ID */
   resume: boolean | string;
   mcpServers?: Record<string, unknown>;
+  employee?: string;
 }

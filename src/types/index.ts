@@ -9,3 +9,4 @@ export type { Config, ChannelsConfig, TelegramConfig, SlackConfig } from "./conf
 export type { Paths } from "./paths";
 export type { SaveMessageParams, RoomStats, RecentMessage, SearchResult, SessionMessage } from "./message";
 export type { AgentInfo } from "./agent";
+export type { EmployeeInfo } from "./employee";
