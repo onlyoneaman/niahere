@@ -9,6 +9,7 @@ import { getChannel } from "../channels/registry";
 import { log } from "../utils/log";
 import { classifyMime } from "../utils/attachment";
 import { scanAgents } from "../core/agents";
+import { listEmployeesForMcp } from "../core/employees";
 
 export async function listJobs(): Promise<string> {
   const jobs = await Job.list();
@@ -412,4 +413,8 @@ export function listAgents(): string {
     null,
     2,
   );
+}
+
+export function listEmployees(): string {
+  return listEmployeesForMcp();
 }

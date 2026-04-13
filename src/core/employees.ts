@@ -71,6 +71,30 @@ export function getEmployeeDir(name: string): string {
   return join(getEmployeesDir(), name);
 }
 
+export function getEmployeesSummary(): string {
+  const employees = scanEmployees();
+  if (employees.length === 0) return "";
+  const lines = employees.map((e) => `- @${e.name}: ${e.role} — ${e.project || "(no project)"} [${e.status}]`);
+  return `Available employees:\n${lines.join("\n")}`;
+}
+
+export function listEmployeesForMcp(): string {
+  const employees = scanEmployees();
+  if (employees.length === 0) return "No employees found.";
+  return JSON.stringify(
+    employees.map((e) => ({
+      name: e.name,
+      role: e.role,
+      project: e.project,
+      repo: e.repo,
+      status: e.status,
+      model: e.model,
+    })),
+    null,
+    2,
+  );
+}
+
 /** Injected into employee prompt only when status=onboarding. */
 export const ONBOARDING_INSTRUCTIONS = `## Onboarding
 

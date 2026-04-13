@@ -180,7 +180,7 @@ export async function listEnabled(): Promise<Job[]> {
 export async function listDue(): Promise<Job[]> {
   const sql = getSql();
   const rows = await sql`
-    SELECT name, schedule, prompt, enabled, always, schedule_type, agent, model, stateless, next_run_at, last_run_at, created_at, updated_at
+    SELECT name, schedule, prompt, enabled, always, schedule_type, agent, employee, model, stateless, next_run_at, last_run_at, created_at, updated_at
     FROM jobs
     WHERE enabled = TRUE AND next_run_at <= NOW()
     ORDER BY next_run_at

@@ -261,8 +261,9 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
         const staleText = stale ? "  ⚠ stale" : "";
 
         const agentTag = job.agent ? `  [${job.agent}]` : "";
+        const empTag = job.employee ? `  [emp:${job.employee}]` : "";
         console.log(
-          `  ${job.enabled ? "\u25cf" : "\u25cb"} ${job.name.padEnd(20)} ${job.enabled ? "enabled" : "disabled"}${agentTag}`,
+          `  ${job.enabled ? "\u25cf" : "\u25cb"} ${job.name.padEnd(20)} ${job.enabled ? "enabled" : "disabled"}${agentTag}${empTag}`,
         );
         console.log(
           `      ${statusIcon} ${status}   last: ${lastText}   next: ${nextText}   duration: ${durationText}${staleText}`,

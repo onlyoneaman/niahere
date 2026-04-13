@@ -4,6 +4,7 @@ import { getPaths } from "../utils/paths";
 import { getEnvironmentPrompt, getModePrompt, getChannelPrompt } from "../prompts";
 import { getSkillsSummary } from "../core/skills";
 import { getAgentsSummary } from "../core/agents";
+import { getEmployeesSummary } from "../core/employees";
 import { Session } from "../db/models";
 import type { Mode } from "../types";
 
@@ -19,7 +20,10 @@ function loadFile(dir: string, name: string): string {
 export function loadIdentity(): string {
   const { selfDir } = getPaths();
   const files = ["identity.md", "owner.md", "soul.md", "rules.md", "memory.md"];
-  return files.map((f) => loadFile(selfDir, f)).filter(Boolean).join("\n\n");
+  return files
+    .map((f) => loadFile(selfDir, f))
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 export function buildSystemPrompt(mode: Mode = "chat", channel: string = "terminal"): string {
@@ -41,6 +45,9 @@ export function buildSystemPrompt(mode: Mode = "chat", channel: string = "termin
 
   const agents = getAgentsSummary();
   if (agents) parts.push(agents);
+
+  const employees = getEmployeesSummary();
+  if (employees) parts.push(employees);
 
   return parts.join("\n\n");
 }

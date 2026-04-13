@@ -311,6 +311,14 @@ export function createNiaMcpServer() {
           content: [{ type: "text" as const, text: handlers.listAgents() }],
         }),
       ),
+      tool(
+        "list_employees",
+        "List all employees with their role, project, status, and model. Employees are persistent co-founders/team members scoped to projects.",
+        {},
+        async () => ({
+          content: [{ type: "text" as const, text: handlers.listEmployees() }],
+        }),
+      ),
     ],
   });
 }
