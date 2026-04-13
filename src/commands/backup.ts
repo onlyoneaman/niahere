@@ -49,6 +49,7 @@ export async function createBackup(silent = false): Promise<string> {
   if (existsSync(join(home, "self"))) includes.push("self");
   if (existsSync(join(home, "agents"))) includes.push("agents");
   if (existsSync(join(home, "skills"))) includes.push("skills");
+  if (existsSync(join(home, "employees"))) includes.push("employees");
 
   // Database dump
   const config = getConfig();
@@ -65,10 +66,7 @@ export async function createBackup(silent = false): Promise<string> {
     if (url.port) pgArgs.push("-p", url.port);
     if (url.username) pgArgs.push("-U", decodeURIComponent(url.username));
     if (dbName) pgArgs.push("-d", dbName);
-    const pgEnv: Record<string, string> = { ...process.env } as Record<
-      string,
-      string
-    >;
+    const pgEnv: Record<string, string> = { ...process.env } as Record<string, string>;
     if (url.password) pgEnv.PGPASSWORD = decodeURIComponent(url.password);
     const sslmode = url.searchParams.get("sslmode");
     if (sslmode) pgEnv.PGSSLMODE = sslmode;
@@ -87,9 +85,7 @@ export async function createBackup(silent = false): Promise<string> {
       dbDumped = true;
     } else if (!silent) {
       const stderr = await new Response(pg.stderr).text();
-      console.log(
-        `  ⚠ db dump skipped: ${stderr.trim() || `exit ${exitCode}`}`,
-      );
+      console.log(`  ⚠ db dump skipped: ${stderr.trim() || `exit ${exitCode}`}`);
     }
   }
 
