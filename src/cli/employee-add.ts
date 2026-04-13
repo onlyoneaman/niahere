@@ -1,7 +1,8 @@
+import * as readline from "readline";
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { getEmployee, getEmployeeDir } from "../core/employees";
-import { fail } from "../utils/cli";
+import { fail, DIM, BOLD, RESET } from "../utils/cli";
 
 const DEFAULT_BODY = `You are {name}, an autonomous employee working for Aman.
 You are responsible for {project}.
@@ -41,37 +42,91 @@ During onboarding, you go through three phases:
 3. **Initial Plan** — Propose top 3-5 priorities. Save to onboarding/plan.md. Get user approval.
 After onboarding completes, your status changes to active.`;
 
+function ask(rl: readline.Interface, prompt: string): Promise<string> {
+  return new Promise((resolve) => {
+    rl.question(`${BOLD}${prompt}${RESET} `, (answer) => {
+      resolve(answer.trim());
+    });
+  });
+}
+
 export async function employeeAdd(): Promise<void> {
   const args = process.argv.slice(4);
-  const name = args[0];
-  if (!name || name.startsWith("--")) fail("Usage: nia employee add <name> --project <label> --repo <path>");
 
+  // Parse whatever flags were provided
   const flagValue = (flag: string): string | undefined => {
     const idx = args.indexOf(flag);
-    return idx !== -1 && args[idx + 1] ? args[idx + 1] : undefined;
+    return idx !== -1 && args[idx + 1] && !args[idx + 1].startsWith("--") ? args[idx + 1] : undefined;
   };
 
-  const project = flagValue("--project");
-  const repoArg = flagValue("--repo");
-  const role = flagValue("--role") || "Chief of Staff";
-  const model = flagValue("--model") || "opus";
-  const maxSubs = parseInt(flagValue("--max-sub-employees") || "3", 10);
+  // Positional name (first arg that doesn't start with --)
+  let name = args[0] && !args[0].startsWith("--") ? args[0] : undefined;
+  let project = flagValue("--project");
+  let repoArg = flagValue("--repo");
+  let role = flagValue("--role");
+  let model = flagValue("--model");
+  let maxSubs = flagValue("--max-sub-employees");
 
-  if (!project) fail("--project is required");
-  if (!repoArg) fail("--repo is required");
+  // If anything's missing, ask interactively
+  const needsPrompt = !name || !project || !repoArg;
 
-  const repo = resolve(repoArg);
+  if (needsPrompt) {
+    console.log(`\n${DIM}Setting up a new employee...${RESET}\n`);
+
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    try {
+      if (!name) {
+        name = await ask(rl, "Employee name:");
+        if (!name) fail("Name is required.");
+      }
+
+      if (getEmployee(name)) fail(`Employee "${name}" already exists.`);
+
+      if (!project) {
+        project = await ask(rl, "Project (e.g. aicodeusage.com):");
+        if (!project) fail("Project is required.");
+      }
+
+      if (!repoArg) {
+        repoArg = await ask(rl, "Repo path (e.g. /Users/aman/projects/aicodeusage):");
+        if (!repoArg) fail("Repo path is required.");
+      }
+
+      if (!role) {
+        const roleAnswer = await ask(rl, "Role (default: Chief of Staff):");
+        if (roleAnswer) role = roleAnswer;
+      }
+
+      if (!model) {
+        const modelAnswer = await ask(rl, "Model (default: opus):");
+        if (modelAnswer) model = modelAnswer;
+      }
+    } finally {
+      rl.close();
+    }
+  } else {
+    if (getEmployee(name!)) fail(`Employee "${name}" already exists.`);
+  }
+
+  role = role || "Chief of Staff";
+  model = model || "opus";
+  const maxSubEmployees = parseInt(maxSubs || "3", 10);
+
+  const repo = resolve(repoArg!);
   if (!existsSync(repo)) fail(`Repo path does not exist: ${repo}`);
 
-  if (getEmployee(name)) fail(`Employee "${name}" already exists.`);
-
-  const empDir = getEmployeeDir(name);
+  // Scaffold directory
+  const empDir = getEmployeeDir(name!);
   mkdirSync(empDir, { recursive: true });
   mkdirSync(`${empDir}/onboarding`, { recursive: true });
 
-  const body = DEFAULT_BODY.replace(/\{name\}/g, name)
-    .replace(/\{project\}/g, project)
-    .replace(/\{maxSubEmployees\}/g, String(maxSubs));
+  const body = DEFAULT_BODY.replace(/\{name\}/g, name!)
+    .replace(/\{project\}/g, project!)
+    .replace(/\{maxSubEmployees\}/g, String(maxSubEmployees));
 
   const frontmatter = [
     "---",
@@ -81,7 +136,7 @@ export async function employeeAdd(): Promise<void> {
     `role: ${role}`,
     `model: ${model}`,
     `status: onboarding`,
-    `maxSubEmployees: ${maxSubs}`,
+    `maxSubEmployees: ${maxSubEmployees}`,
     `created: ${new Date().toISOString().slice(0, 10)}`,
     "---",
   ].join("\n");
@@ -95,10 +150,10 @@ export async function employeeAdd(): Promise<void> {
   writeFileSync(`${empDir}/onboarding/discovery.md`, "");
   writeFileSync(`${empDir}/onboarding/plan.md`, "");
 
-  console.log(`Employee "${name}" created.`);
+  console.log(`\n${BOLD}${name}${RESET} created.`);
   console.log(`  Role:    ${role}`);
   console.log(`  Project: ${project}`);
   console.log(`  Repo:    ${repo}`);
   console.log(`  Model:   ${model}`);
-  console.log(`\nStart onboarding with: nia chat --employee ${name}`);
+  console.log(`\nStart onboarding: ${BOLD}nia chat --employee ${name}${RESET}`);
 }
