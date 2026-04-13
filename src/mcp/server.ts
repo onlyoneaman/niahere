@@ -23,6 +23,10 @@ export function createNiaMcpServer() {
             .string()
             .optional()
             .describe("Agent name to use for this job (loads agent's AGENT.md as system prompt)"),
+          employee: z
+            .string()
+            .optional()
+            .describe("Employee name to use for this job (loads employee identity, runs in employee's repo)"),
           stateless: z
             .boolean()
             .default(false)
@@ -38,7 +42,7 @@ export function createNiaMcpServer() {
       ),
       tool(
         "update_job",
-        "Update an existing job's schedule, prompt, always flag, agent, model, stateless, or schedule_type. Only pass fields you want to change.",
+        "Update an existing job's schedule, prompt, always flag, agent, employee, model, stateless, or schedule_type. Only pass fields you want to change.",
         {
           name: z.string().describe("Job name to update"),
           schedule: z
@@ -48,6 +52,7 @@ export function createNiaMcpServer() {
           prompt: z.string().optional().describe("New prompt"),
           always: z.boolean().optional().describe("If true, runs 24/7 ignoring active hours"),
           agent: z.string().nullable().optional().describe("Agent name (set null to remove agent)"),
+          employee: z.string().nullable().optional().describe("Employee name (set null to remove employee)"),
           model: z.string().nullable().optional().describe("Model override (set null to remove and use default)"),
           stateless: z
             .boolean()

@@ -8,8 +8,8 @@ import { randomUUID } from "crypto";
 import { buildSystemPrompt, getSessionContext } from "./identity";
 import { buildEmployeePrompt } from "./employee-prompt";
 import { getEmployee } from "../core/employees";
-import { getAgentDefinitions } from "../core/agents";
-import { Session, Message, ActiveEngine } from "../db/models";
+import { getAgentDefinitions, scanAgents } from "../core/agents";
+import { Session, Message, ActiveEngine, Job } from "../db/models";
 import type {
   Attachment,
   SendResult,
@@ -136,16 +136,34 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
     systemPrompt += "\n\n" + sessionContext;
   }
 
-  // Employee mode: override system prompt with employee identity
+  // Context overrides: employee > agent > job > default
   let cwd = homedir();
   if (opts.employee) {
     const empPrompt = buildEmployeePrompt(opts.employee);
-    if (empPrompt) {
-      systemPrompt = empPrompt;
-    }
+    if (empPrompt) systemPrompt = empPrompt;
     const emp = getEmployee(opts.employee);
-    if (emp?.repo && existsSync(emp.repo)) {
-      cwd = emp.repo;
+    if (emp?.repo && existsSync(emp.repo)) cwd = emp.repo;
+  } else if (opts.agent) {
+    const agents = scanAgents();
+    const agentDef = agents.find((a) => a.name === opts.agent);
+    if (agentDef) systemPrompt = agentDef.body;
+  } else if (opts.job) {
+    // Job chat: load job and use its context
+    const jobData = await Job.get(opts.job);
+    if (jobData) {
+      // If job has an employee, use employee prompt
+      if (jobData.employee) {
+        const empPrompt = buildEmployeePrompt(jobData.employee);
+        if (empPrompt) systemPrompt = empPrompt;
+        const emp = getEmployee(jobData.employee);
+        if (emp?.repo && existsSync(emp.repo)) cwd = emp.repo;
+      } else if (jobData.agent) {
+        // If job has an agent, use agent prompt
+        const agents = scanAgents();
+        const agentDef = agents.find((a) => a.name === jobData.agent);
+        if (agentDef) systemPrompt = agentDef.body;
+      }
+      systemPrompt += `\n\n## Job Context\nYou are chatting in the context of job "${jobData.name}" (schedule: ${jobData.schedule}).\n\nJob prompt:\n${jobData.prompt}`;
     }
   }
 

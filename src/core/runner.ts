@@ -8,6 +8,8 @@ import { appendAudit, readState, writeState } from "../utils/logger";
 import type { AuditEntry, JobState } from "../types";
 import { getConfig } from "../utils/config";
 import { buildSystemPrompt } from "../chat/identity";
+import { buildEmployeePrompt } from "../chat/employee-prompt";
+import { getEmployee } from "./employees";
 import { scanAgents } from "./agents";
 import { truncate, formatToolUse } from "../utils/format-activity";
 import { getMcpServers } from "../mcp";
@@ -300,13 +302,23 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
   writeState(state);
 
   try {
-    const cwd = homedir();
+    let cwd = homedir();
     let output: RunnerOutput;
 
-    // Resolve system prompt: use agent body if job references an agent, else default
+    // Resolve system prompt: employee > agent > default
     let systemPrompt: string;
     let agentModel: string | undefined;
-    if (job.agent) {
+    if (job.employee) {
+      const empPrompt = buildEmployeePrompt(job.employee);
+      if (empPrompt) {
+        systemPrompt = empPrompt;
+      } else {
+        systemPrompt = buildSystemPrompt("job");
+      }
+      const emp = getEmployee(job.employee);
+      if (emp?.model) agentModel = emp.model;
+      if (emp?.repo && existsSync(emp.repo)) cwd = emp.repo;
+    } else if (job.agent) {
       const agents = scanAgents();
       const agentDef = agents.find((a) => a.name === job.agent);
       if (agentDef) {

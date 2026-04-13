@@ -308,11 +308,18 @@ switch (command) {
         : chatArgs.includes("--resume") || chatArgs.includes("-r")
           ? ("pick" as const)
           : ("new" as const);
-    const chIdx = chatArgs.indexOf("--channel");
-    const simChannel = chIdx !== -1 && chatArgs[chIdx + 1] ? chatArgs[chIdx + 1] : undefined;
-    const empIdx = chatArgs.indexOf("--employee");
-    const employeeName = empIdx !== -1 && chatArgs[empIdx + 1] ? chatArgs[empIdx + 1] : undefined;
-    await startRepl(mode, simChannel, employeeName);
+    const flagVal = (flag: string) => {
+      const idx = chatArgs.indexOf(flag);
+      return idx !== -1 && chatArgs[idx + 1] ? chatArgs[idx + 1] : undefined;
+    };
+    const simChannel = flagVal("--channel");
+    const context = {
+      employee: flagVal("--employee"),
+      agent: flagVal("--agent"),
+      job: flagVal("--job"),
+    };
+    const hasContext = context.employee || context.agent || context.job;
+    await startRepl(mode, simChannel, hasContext ? context : undefined);
     break;
   }
 
@@ -553,7 +560,7 @@ Daemon:
   logs [-f] [--channel ch]        Daemon logs (filter by channel)
 
 Chat:
-  chat [-c] [-r] [--channel ch]   Interactive chat (new session by default)
+  chat [-c] [-r] [--employee|--agent|--job name]  Interactive chat
   run <prompt>                    One-shot execution
   history [room]                  Recent messages
   send [-c ch] <msg>              Send a message via channel

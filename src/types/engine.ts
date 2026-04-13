@@ -32,4 +32,6 @@ export interface EngineOptions {
   resume: boolean | string;
   mcpServers?: Record<string, unknown>;
   employee?: string;
+  agent?: string;
+  job?: string;
 }

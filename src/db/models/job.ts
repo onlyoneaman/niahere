@@ -40,6 +40,7 @@ export interface Job {
   always: boolean;
   scheduleType: ScheduleType;
   agent: string | null;
+  employee: string | null;
   model: string | null;
   stateless: boolean;
   nextRunAt: string | null;
@@ -57,6 +58,7 @@ function toJob(r: Record<string, any>): Job {
     always: r.always ?? false,
     scheduleType: r.schedule_type || "cron",
     agent: r.agent || null,
+    employee: r.employee || null,
     model: r.model || null,
     stateless: r.stateless ?? false,
     nextRunAt: r.next_run_at ? String(r.next_run_at) : null,
@@ -81,6 +83,7 @@ export async function create(
   agent?: string,
   stateless = false,
   model?: string,
+  employee?: string,
 ): Promise<void> {
   validateSchedule(schedule, scheduleType);
   const existing = await get(name);
@@ -89,8 +92,8 @@ export async function create(
   }
   const sql = getSql();
   await sql`
-    INSERT INTO jobs (name, schedule, prompt, always, schedule_type, next_run_at, agent, stateless, model)
-    VALUES (${name}, ${schedule}, ${prompt}, ${always}, ${scheduleType}, ${nextRunAt ?? null}, ${agent ?? null}, ${stateless}, ${model ?? null})
+    INSERT INTO jobs (name, schedule, prompt, always, schedule_type, next_run_at, agent, stateless, model, employee)
+    VALUES (${name}, ${schedule}, ${prompt}, ${always}, ${scheduleType}, ${nextRunAt ?? null}, ${agent ?? null}, ${stateless}, ${model ?? null}, ${employee ?? null})
   `;
   await notifyChange();
 }
@@ -98,14 +101,14 @@ export async function create(
 export async function list(): Promise<Job[]> {
   const sql = getSql();
   const rows =
-    await sql`SELECT name, schedule, prompt, enabled, always, schedule_type, agent, model, stateless, next_run_at, last_run_at, created_at, updated_at FROM jobs ORDER BY name`;
+    await sql`SELECT name, schedule, prompt, enabled, always, schedule_type, agent, employee, model, stateless, next_run_at, last_run_at, created_at, updated_at FROM jobs ORDER BY name`;
   return rows.map(toJob);
 }
 
 export async function get(name: string): Promise<Job | null> {
   const sql = getSql();
   const rows =
-    await sql`SELECT name, schedule, prompt, enabled, always, schedule_type, agent, model, stateless, next_run_at, last_run_at, created_at, updated_at FROM jobs WHERE name = ${name}`;
+    await sql`SELECT name, schedule, prompt, enabled, always, schedule_type, agent, employee, model, stateless, next_run_at, last_run_at, created_at, updated_at FROM jobs WHERE name = ${name}`;
   return rows.length > 0 ? toJob(rows[0]) : null;
 }
 
@@ -117,6 +120,7 @@ export async function update(
     enabled: boolean;
     always: boolean;
     agent: string | null;
+    employee: string | null;
     model: string | null;
     stateless: boolean;
     scheduleType: ScheduleType;
@@ -132,6 +136,7 @@ export async function update(
   const enabled = fields.enabled ?? existing.enabled;
   const always = fields.always ?? existing.always;
   const agent = fields.agent !== undefined ? fields.agent : existing.agent;
+  const employee = fields.employee !== undefined ? fields.employee : existing.employee;
   const model = fields.model !== undefined ? fields.model : existing.model;
   const stateless = fields.stateless ?? existing.stateless;
 
@@ -144,13 +149,13 @@ export async function update(
     const nextRun = computeInitialNextRun(scheduleType, schedule, getConfig().timezone);
     await sql`
       UPDATE jobs
-      SET schedule = ${schedule}, schedule_type = ${scheduleType}, prompt = ${prompt}, enabled = ${enabled}, always = ${always}, agent = ${agent}, model = ${model}, stateless = ${stateless}, next_run_at = ${nextRun}, updated_at = NOW()
+      SET schedule = ${schedule}, schedule_type = ${scheduleType}, prompt = ${prompt}, enabled = ${enabled}, always = ${always}, agent = ${agent}, employee = ${employee}, model = ${model}, stateless = ${stateless}, next_run_at = ${nextRun}, updated_at = NOW()
       WHERE name = ${name}
     `;
   } else {
     await sql`
       UPDATE jobs
-      SET schedule = ${schedule}, schedule_type = ${scheduleType}, prompt = ${prompt}, enabled = ${enabled}, always = ${always}, agent = ${agent}, model = ${model}, stateless = ${stateless}, updated_at = NOW()
+      SET schedule = ${schedule}, schedule_type = ${scheduleType}, prompt = ${prompt}, enabled = ${enabled}, always = ${always}, agent = ${agent}, employee = ${employee}, model = ${model}, stateless = ${stateless}, updated_at = NOW()
       WHERE name = ${name}
     `;
   }
@@ -168,7 +173,7 @@ export async function remove(name: string): Promise<boolean> {
 export async function listEnabled(): Promise<Job[]> {
   const sql = getSql();
   const rows =
-    await sql`SELECT name, schedule, prompt, enabled, always, schedule_type, agent, model, stateless, next_run_at, last_run_at, created_at, updated_at FROM jobs WHERE enabled = TRUE ORDER BY name`;
+    await sql`SELECT name, schedule, prompt, enabled, always, schedule_type, agent, employee, model, stateless, next_run_at, last_run_at, created_at, updated_at FROM jobs WHERE enabled = TRUE ORDER BY name`;
   return rows.map(toJob);
 }
 
