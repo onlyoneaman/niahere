@@ -524,15 +524,17 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
       });
     },
 
-    close() {
+    async close() {
       // Enqueue finalization — processed by daemon or inline if we are the daemon
       if (sessionId && messageCount > 0 && !pending) {
-        finalizeSession(sessionId, room).catch((err) => {
+        try {
+          await finalizeSession(sessionId, room);
+        } catch (err) {
           log.error({ err, room }, "finalization enqueue failed during close");
-        });
+        }
       }
       teardown();
-      ActiveEngine.unregister(room).catch(() => {});
+      await ActiveEngine.unregister(room).catch(() => {});
     },
   };
 }

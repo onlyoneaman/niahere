@@ -22,7 +22,7 @@ export interface ChatEngine {
     callbacks?: SendCallbacks,
     attachments?: import("./attachment").Attachment[],
   ): Promise<SendResult>;
-  close(): void;
+  close(): Promise<void>;
 }
 
 export interface EngineOptions {

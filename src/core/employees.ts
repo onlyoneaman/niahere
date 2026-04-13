@@ -39,6 +39,7 @@ export function scanEmployees(): EmployeeInfo[] {
 
     employees.push({
       name,
+      dirName: entry.name,
       project: typeof meta.project === "string" ? meta.project : "",
       repo: typeof meta.repo === "string" ? meta.repo : "",
       role: typeof meta.role === "string" ? meta.role : "Employee",
@@ -63,6 +64,10 @@ export function getEmployee(name: string): EmployeeInfo | undefined {
 }
 
 export function getEmployeeDir(name: string): string {
+  // Look up actual directory — name in frontmatter may differ from dir name
+  const emp = scanEmployees().find((e) => e.name.toLowerCase() === name.toLowerCase());
+  if (emp) return join(getEmployeesDir(), emp.dirName);
+  // Fallback for new employees being created (not yet on disk)
   return join(getEmployeesDir(), name);
 }
 
@@ -72,7 +77,7 @@ export const ONBOARDING_INSTRUCTIONS = `## Onboarding
 You are in onboarding status. Be proactive — don't wait for the user to drive.
 
 ### Steps
-1. **Identity** — If your name is a placeholder (starts with "new-employee"), suggest a real name and ask the user to confirm. Update your EMPLOYEE.md name field. Rename your directory to match.
+1. **Identity** — If your name is a placeholder (starts with "new-employee"), suggest a real name and ask the user to confirm. Update the name field in your EMPLOYEE.md frontmatter. Do NOT rename the directory — the system resolves it from frontmatter.
 2. **Fill in gaps** — Check your EMPLOYEE.md. If project, repo, or role are empty/placeholder, ask the user and update the file yourself.
 3. **Brief** — Ask the user about the project: goals, what's working, what's not, their vision. Save to onboarding/brief.md.
 4. **Self-Discovery** — Explore the repo autonomously. Read code, README, recent commits, deployment config. Save findings to onboarding/discovery.md. Report back to user for corrections.

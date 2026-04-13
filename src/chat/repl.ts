@@ -249,9 +249,9 @@ export async function startRepl(
     rl.prompt();
   });
 
-  rl.on("close", () => {
+  rl.on("close", async () => {
     console.log(`\n${DIM}bye${RESET}`);
-    engine.close();
+    await engine.close();
     closeDb()
       .catch(() => {})
       .finally(() => process.exit(0));

@@ -216,7 +216,7 @@ switch (command) {
         if (meta) process.stderr.write(`\n${DIM}${meta}${RST}`);
         process.stdout.write("\n");
 
-        engine.close();
+        await engine.close();
       });
       process.exit(0);
     } else {

@@ -1,5 +1,6 @@
 export interface EmployeeInfo {
   name: string;
+  dirName: string;
   project: string;
   repo: string;
   role: string;
