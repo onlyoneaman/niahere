@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { getEmployee, getEmployeeDir } from "../core/employees";
+import { ONBOARDING_INSTRUCTIONS } from "../core/employees";
 import { getEnvironmentPrompt, getModePrompt } from "../prompts";
 import { getSkillsSummary } from "../core/skills";
 import { getAgentsSummary } from "../core/agents";
@@ -32,6 +33,11 @@ export function buildEmployeePrompt(name: string): string {
 
   const agents = getAgentsSummary();
   if (agents) parts.push(agents);
+
+  // Onboarding instructions (only when status=onboarding)
+  if (employee.status === "onboarding") {
+    parts.push(ONBOARDING_INSTRUCTIONS);
+  }
 
   // Employee metadata context
   parts.push(`## Your Profile

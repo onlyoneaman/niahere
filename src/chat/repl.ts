@@ -103,10 +103,11 @@ async function pickSession(): Promise<string | null> {
 
 export type ChatMode = "continue" | "new" | "pick";
 
-interface ReplContext {
+export interface ReplContext {
   employee?: string;
   agent?: string;
   job?: string;
+  initialMessage?: string;
 }
 
 export async function startRepl(
@@ -167,22 +168,7 @@ export async function startRepl(
     prompt: `${BOLD}>${RESET} `,
   });
 
-  rl.prompt();
-
-  rl.on("line", async (line: string) => {
-    const input = line.trim();
-
-    if (!input) {
-      rl.prompt();
-      return;
-    }
-
-    const exitCommands = ["/exit", "/quit", ".exit", ".quit", "exit", "quit"];
-    if (exitCommands.includes(input.toLowerCase())) {
-      rl.close();
-      return;
-    }
-
+  async function sendAndDisplay(input: string): Promise<void> {
     const status = new StatusLine();
     status.start("thinking");
 
@@ -192,7 +178,6 @@ export async function startRepl(
     try {
       const { result, costUsd, turns } = await engine.send(input, {
         onStream(textSoFar) {
-          // Stream response text as it arrives
           if (!responseStarted) {
             status.stop();
             process.stdout.write("\n");
@@ -211,12 +196,10 @@ export async function startRepl(
         },
       });
 
-      // If streaming didn't fire (e.g. tool-only turns), print the result
       if (!responseStarted && result.trim()) {
         status.stop();
         process.stdout.write(`\n${result.trim()}`);
       } else if (responseStarted) {
-        // Print any remaining text that wasn't streamed
         const remaining = result.slice(streamedLength);
         if (remaining.trim()) {
           process.stdout.write(remaining);
@@ -225,7 +208,6 @@ export async function startRepl(
         status.stop();
       }
 
-      // Cost line
       const costStr = costUsd > 0 ? `$${costUsd.toFixed(4)}` : "";
       const turnsStr = turns > 0 ? `${turns} turn${turns !== 1 ? "s" : ""}` : "";
       const meta = [costStr, turnsStr].filter(Boolean).join(" · ");
@@ -239,6 +221,30 @@ export async function startRepl(
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`\n${DIM}error:${RESET} ${msg}\n`);
     }
+  }
+
+  // Auto-send initial message if provided (e.g. onboarding kickoff)
+  if (context?.initialMessage) {
+    await sendAndDisplay(context.initialMessage);
+  }
+
+  rl.prompt();
+
+  rl.on("line", async (line: string) => {
+    const input = line.trim();
+
+    if (!input) {
+      rl.prompt();
+      return;
+    }
+
+    const exitCommands = ["/exit", "/quit", ".exit", ".quit", "exit", "quit"];
+    if (exitCommands.includes(input.toLowerCase())) {
+      rl.close();
+      return;
+    }
+
+    await sendAndDisplay(input);
 
     rl.prompt();
   });

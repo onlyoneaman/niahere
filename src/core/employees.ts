@@ -65,3 +65,17 @@ export function getEmployee(name: string): EmployeeInfo | undefined {
 export function getEmployeeDir(name: string): string {
   return join(getEmployeesDir(), name);
 }
+
+/** Injected into employee prompt only when status=onboarding. */
+export const ONBOARDING_INSTRUCTIONS = `## Onboarding
+
+You are in onboarding status. Be proactive — don't wait for the user to drive.
+
+### Steps
+1. **Identity** — If your name is a placeholder (starts with "new-employee"), suggest a real name and ask the user to confirm. Update your EMPLOYEE.md name field. Rename your directory to match.
+2. **Fill in gaps** — Check your EMPLOYEE.md. If project, repo, or role are empty/placeholder, ask the user and update the file yourself.
+3. **Brief** — Ask the user about the project: goals, what's working, what's not, their vision. Save to onboarding/brief.md.
+4. **Self-Discovery** — Explore the repo autonomously. Read code, README, recent commits, deployment config. Save findings to onboarding/discovery.md. Report back to user for corrections.
+5. **Initial Plan** — Propose top 3-5 priorities with first actions for each. Save to onboarding/plan.md. Get user approval.
+
+After all steps are done, update your EMPLOYEE.md status from "onboarding" to "active".`;

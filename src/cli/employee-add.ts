@@ -4,7 +4,8 @@ import { getEmployee, getEmployeeDir } from "../core/employees";
 import { fail, BOLD, RESET } from "../utils/cli";
 import { startRepl } from "../chat/repl";
 
-const DEFAULT_BODY = `You are {name}, an autonomous employee working for Aman.
+// Permanent identity — stays in EMPLOYEE.md after onboarding
+const CORE_BODY = `You are {name}, an autonomous employee working for Aman.
 {projectLine}
 You operate independently but seek approval before externally visible actions.
 
@@ -33,17 +34,7 @@ You have persistent state files in your employee directory. Read and update them
 - **goals.md** — your current goals and success criteria
 - **memory.md** — what you've learned, decided, observed across sessions
 - **decisions.md** — decision log (mark as [pending], [approved], or [rejected])
-- **org.md** — sub-employees and agents you've created
-
-## Onboarding
-You are in onboarding status. Walk the user through setup conversationally:
-
-1. **Fill in gaps** — Check your EMPLOYEE.md. If project, repo, or role are missing or placeholder, ask the user and update the file yourself.
-2. **Brief** — Ask the user about the project, goals, what's working, what's not. Save to onboarding/brief.md.
-3. **Self-Discovery** — Explore the repo autonomously. Save findings to onboarding/discovery.md.
-4. **Initial Plan** — Propose top 3-5 priorities. Save to onboarding/plan.md. Get user approval.
-
-After onboarding completes, update your EMPLOYEE.md status from "onboarding" to "active".`;
+- **org.md** — sub-employees and agents you've created`;
 
 export async function employeeAdd(): Promise<void> {
   const args = process.argv.slice(4);
@@ -53,8 +44,8 @@ export async function employeeAdd(): Promise<void> {
     return idx !== -1 && args[idx + 1] && !args[idx + 1].startsWith("--") ? args[idx + 1] : undefined;
   };
 
-  // Name is optional — generate a placeholder if not provided
-  const name = (args[0] && !args[0].startsWith("--") ? args[0] : undefined) || `employee-${Date.now()}`;
+  const nameArg = args[0] && !args[0].startsWith("--") ? args[0] : undefined;
+  const name = nameArg || `new-employee-${Math.random().toString(36).slice(2, 6)}`;
   const project = flagValue("--project") || "";
   const repoArg = flagValue("--repo") || "";
   const role = flagValue("--role") || "Chief of Staff";
@@ -71,12 +62,10 @@ export async function employeeAdd(): Promise<void> {
   mkdirSync(empDir, { recursive: true });
   mkdirSync(`${empDir}/onboarding`, { recursive: true });
 
-  const projectLine = project
-    ? `You are responsible for ${project}.`
-    : "Your project has not been set yet — ask the user what you'll be working on and update your EMPLOYEE.md.";
+  const projectLine = project ? `You are responsible for ${project}.` : "";
 
-  const body = DEFAULT_BODY.replace(/\{name\}/g, name)
-    .replace(/\{projectLine\}/g, projectLine)
+  const body = CORE_BODY.replace(/\{name\}/g, name)
+    .replace(/\{projectLine\}\n/g, projectLine ? `${projectLine}\n` : "")
     .replace(/\{maxSubEmployees\}/g, String(maxSubs));
 
   const frontmatter = [
@@ -101,8 +90,26 @@ export async function employeeAdd(): Promise<void> {
   writeFileSync(`${empDir}/onboarding/discovery.md`, "");
   writeFileSync(`${empDir}/onboarding/plan.md`, "");
 
-  console.log(`\n${BOLD}${name}${RESET} created — starting onboarding chat...\n`);
+  // Build a context-aware kickoff message so the agent starts proactively
+  const provided: string[] = [];
+  const missing: string[] = [];
 
-  // Drop straight into chat
-  await startRepl("new", undefined, { employee: name });
+  if (nameArg) provided.push(`name: ${nameArg}`);
+  else missing.push("name (placeholder assigned — suggest a real one)");
+
+  if (project) provided.push(`project: ${project}`);
+  else missing.push("project");
+
+  if (repo) provided.push(`repo: ${repo}`);
+  else missing.push("repo path");
+
+  const initialMessage = [
+    "New employee created. Start onboarding.",
+    provided.length > 0 ? `Provided: ${provided.join(", ")}.` : "Nothing provided yet.",
+    missing.length > 0 ? `Missing: ${missing.join(", ")}.` : "All basics provided — proceed to brief.",
+  ].join(" ");
+
+  console.log(`\n${BOLD}${name}${RESET} created — starting onboarding...\n`);
+
+  await startRepl("new", undefined, { employee: name, initialMessage });
 }
