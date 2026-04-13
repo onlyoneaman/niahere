@@ -1,11 +1,11 @@
-import * as readline from "readline";
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { getEmployee, getEmployeeDir } from "../core/employees";
-import { fail, DIM, BOLD, RESET } from "../utils/cli";
+import { fail, BOLD, RESET } from "../utils/cli";
+import { startRepl } from "../chat/repl";
 
 const DEFAULT_BODY = `You are {name}, an autonomous employee working for Aman.
-You are responsible for {project}.
+{projectLine}
 You operate independently but seek approval before externally visible actions.
 
 ## Your Authority
@@ -36,107 +36,58 @@ You have persistent state files in your employee directory. Read and update them
 - **org.md** — sub-employees and agents you've created
 
 ## Onboarding
-During onboarding, you go through three phases:
-1. **Brief** — Ask the user about the project, goals, what's working, what's not. Save to onboarding/brief.md.
-2. **Self-Discovery** — Explore the repo autonomously. Save findings to onboarding/discovery.md.
-3. **Initial Plan** — Propose top 3-5 priorities. Save to onboarding/plan.md. Get user approval.
-After onboarding completes, your status changes to active.`;
+You are in onboarding status. Walk the user through setup conversationally:
 
-function ask(rl: readline.Interface, prompt: string): Promise<string> {
-  return new Promise((resolve) => {
-    rl.question(`${BOLD}${prompt}${RESET} `, (answer) => {
-      resolve(answer.trim());
-    });
-  });
-}
+1. **Fill in gaps** — Check your EMPLOYEE.md. If project, repo, or role are missing or placeholder, ask the user and update the file yourself.
+2. **Brief** — Ask the user about the project, goals, what's working, what's not. Save to onboarding/brief.md.
+3. **Self-Discovery** — Explore the repo autonomously. Save findings to onboarding/discovery.md.
+4. **Initial Plan** — Propose top 3-5 priorities. Save to onboarding/plan.md. Get user approval.
+
+After onboarding completes, update your EMPLOYEE.md status from "onboarding" to "active".`;
 
 export async function employeeAdd(): Promise<void> {
   const args = process.argv.slice(4);
 
-  // Parse whatever flags were provided
   const flagValue = (flag: string): string | undefined => {
     const idx = args.indexOf(flag);
     return idx !== -1 && args[idx + 1] && !args[idx + 1].startsWith("--") ? args[idx + 1] : undefined;
   };
 
-  // Positional name (first arg that doesn't start with --)
-  let name = args[0] && !args[0].startsWith("--") ? args[0] : undefined;
-  let project = flagValue("--project");
-  let repoArg = flagValue("--repo");
-  let role = flagValue("--role");
-  let model = flagValue("--model");
-  let maxSubs = flagValue("--max-sub-employees");
+  // Name is optional — generate a placeholder if not provided
+  const name = (args[0] && !args[0].startsWith("--") ? args[0] : undefined) || `employee-${Date.now()}`;
+  const project = flagValue("--project") || "";
+  const repoArg = flagValue("--repo") || "";
+  const role = flagValue("--role") || "Chief of Staff";
+  const model = flagValue("--model") || "opus";
+  const maxSubs = parseInt(flagValue("--max-sub-employees") || "3", 10);
 
-  // If anything's missing, ask interactively
-  const needsPrompt = !name || !project || !repoArg;
+  if (getEmployee(name)) fail(`Employee "${name}" already exists.`);
 
-  if (needsPrompt) {
-    console.log(`\n${DIM}Setting up a new employee...${RESET}\n`);
-
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
-    try {
-      if (!name) {
-        name = await ask(rl, "Employee name:");
-        if (!name) fail("Name is required.");
-      }
-
-      if (getEmployee(name)) fail(`Employee "${name}" already exists.`);
-
-      if (!project) {
-        project = await ask(rl, "Project (e.g. aicodeusage.com):");
-        if (!project) fail("Project is required.");
-      }
-
-      if (!repoArg) {
-        repoArg = await ask(rl, "Repo path (e.g. /Users/aman/projects/aicodeusage):");
-        if (!repoArg) fail("Repo path is required.");
-      }
-
-      if (!role) {
-        const roleAnswer = await ask(rl, "Role (default: Chief of Staff):");
-        if (roleAnswer) role = roleAnswer;
-      }
-
-      if (!model) {
-        const modelAnswer = await ask(rl, "Model (default: opus):");
-        if (modelAnswer) model = modelAnswer;
-      }
-    } finally {
-      rl.close();
-    }
-  } else {
-    if (getEmployee(name!)) fail(`Employee "${name}" already exists.`);
-  }
-
-  role = role || "Chief of Staff";
-  model = model || "opus";
-  const maxSubEmployees = parseInt(maxSubs || "3", 10);
-
-  const repo = resolve(repoArg!);
-  if (!existsSync(repo)) fail(`Repo path does not exist: ${repo}`);
+  const repo = repoArg ? resolve(repoArg) : "";
+  if (repo && !existsSync(repo)) fail(`Repo path does not exist: ${repo}`);
 
   // Scaffold directory
-  const empDir = getEmployeeDir(name!);
+  const empDir = getEmployeeDir(name);
   mkdirSync(empDir, { recursive: true });
   mkdirSync(`${empDir}/onboarding`, { recursive: true });
 
-  const body = DEFAULT_BODY.replace(/\{name\}/g, name!)
-    .replace(/\{project\}/g, project!)
-    .replace(/\{maxSubEmployees\}/g, String(maxSubEmployees));
+  const projectLine = project
+    ? `You are responsible for ${project}.`
+    : "Your project has not been set yet — ask the user what you'll be working on and update your EMPLOYEE.md.";
+
+  const body = DEFAULT_BODY.replace(/\{name\}/g, name)
+    .replace(/\{projectLine\}/g, projectLine)
+    .replace(/\{maxSubEmployees\}/g, String(maxSubs));
 
   const frontmatter = [
     "---",
     `name: ${name}`,
-    `project: ${project}`,
-    `repo: ${repo}`,
+    `project: "${project}"`,
+    `repo: "${repo}"`,
     `role: ${role}`,
     `model: ${model}`,
     `status: onboarding`,
-    `maxSubEmployees: ${maxSubEmployees}`,
+    `maxSubEmployees: ${maxSubs}`,
     `created: ${new Date().toISOString().slice(0, 10)}`,
     "---",
   ].join("\n");
@@ -150,10 +101,8 @@ export async function employeeAdd(): Promise<void> {
   writeFileSync(`${empDir}/onboarding/discovery.md`, "");
   writeFileSync(`${empDir}/onboarding/plan.md`, "");
 
-  console.log(`\n${BOLD}${name}${RESET} created.`);
-  console.log(`  Role:    ${role}`);
-  console.log(`  Project: ${project}`);
-  console.log(`  Repo:    ${repo}`);
-  console.log(`  Model:   ${model}`);
-  console.log(`\nStart onboarding: ${BOLD}nia chat --employee ${name}${RESET}`);
+  console.log(`\n${BOLD}${name}${RESET} created — starting onboarding chat...\n`);
+
+  // Drop straight into chat
+  await startRepl("new", undefined, { employee: name });
 }
