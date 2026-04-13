@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Employee system** — first-class persistent entities that live inside Nia. Each employee has identity, memory, goals, an approval queue, and can be scoped to a specific project repo. Employees go through an onboarding flow (brief → self-discovery → plan) and operate autonomously within guardrails. CLI: `nia employee add|list|show|pause|resume|remove|approvals`.
+- **Unified chat context** — `nia chat` now accepts `--agent`, `--employee`, or `--job` to set the session persona. Each context gets its own session room for separate history.
+- **Employee on jobs** — jobs support `--employee` alongside `--agent`. Employee identity takes precedence over agent when both are set. MCP tools (`add_job`, `update_job`) also accept the `employee` parameter.
+- **DB migration 015** — adds `employee` column to jobs table.
+
 ### Fixed
 
 - **Deterministic agent/skill scanning** — `scanAgents()` and `scanSkills()` now sort directory entries by name. `readdirSync` returns filesystem-order, which varies across machines and after file mutations — causing the system prompt fingerprint to shift and breaking Anthropic prompt cache on session start.
