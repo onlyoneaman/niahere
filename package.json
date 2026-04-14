@@ -1,6 +1,6 @@
 {
   "name": "niahere",
-  "version": "0.2.66",
+  "version": "0.2.67",
   "description": "A personal AI assistant daemon — chat, scheduled jobs, persona system, extensible via skills.",
   "type": "module",
   "scripts": {

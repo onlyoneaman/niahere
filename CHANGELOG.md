@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.67] - 2026-04-15
+
+### Fixed
+
+- **Watch behavior in system prompt** — watch channel behavior was prepended to the user message (weak, overridable). Now injected into the system prompt as a dedicated "Watch Mode" section.
+- **Consistent context across all prompt modes** — agent prompts (chat + jobs) were losing environment, skills, agents, and employees when the agent body replaced the system prompt. All modes now get full context via `buildContextSuffix()`.
+- **Employee job mode** — employee prompts on jobs used mode-chat instead of mode-job. `buildEmployeePrompt` now accepts a mode parameter.
+
 ## [0.2.66] - 2026-04-14
 
 ### Added
