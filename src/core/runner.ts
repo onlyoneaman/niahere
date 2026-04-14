@@ -7,7 +7,7 @@ import type { JobInput, JobResult } from "../types";
 import { appendAudit, readState, writeState } from "../utils/logger";
 import type { AuditEntry, JobState } from "../types";
 import { getConfig } from "../utils/config";
-import { buildSystemPrompt } from "../chat/identity";
+import { buildSystemPrompt, buildContextSuffix } from "../chat/identity";
 import { buildEmployeePrompt } from "../chat/employee-prompt";
 import { getEmployee } from "./employees";
 import { scanAgents } from "./agents";
@@ -309,7 +309,7 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
     let systemPrompt: string;
     let agentModel: string | undefined;
     if (job.employee) {
-      const empPrompt = buildEmployeePrompt(job.employee);
+      const empPrompt = buildEmployeePrompt(job.employee, "job");
       if (empPrompt) {
         systemPrompt = empPrompt;
       } else {
@@ -322,7 +322,7 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
       const agents = scanAgents();
       const agentDef = agents.find((a) => a.name === job.agent);
       if (agentDef) {
-        systemPrompt = agentDef.body;
+        systemPrompt = agentDef.body + "\n\n" + buildContextSuffix("job");
         agentModel = agentDef.model;
       } else {
         systemPrompt = buildSystemPrompt("job");

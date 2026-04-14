@@ -5,7 +5,7 @@ import { existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { randomUUID } from "crypto";
-import { buildSystemPrompt, getSessionContext } from "./identity";
+import { buildSystemPrompt, buildContextSuffix, getSessionContext } from "./identity";
 import { buildEmployeePrompt } from "./employee-prompt";
 import { getEmployee } from "../core/employees";
 import { getAgentDefinitions, scanAgents } from "../core/agents";
@@ -146,7 +146,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
   } else if (opts.agent) {
     const agents = scanAgents();
     const agentDef = agents.find((a) => a.name === opts.agent);
-    if (agentDef) systemPrompt = agentDef.body;
+    if (agentDef) systemPrompt = agentDef.body + "\n\n" + buildContextSuffix("chat");
   } else if (opts.job) {
     // Job chat: load job and use its context
     const jobData = await Job.get(opts.job);
@@ -158,10 +158,10 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
         const emp = getEmployee(jobData.employee);
         if (emp?.repo && existsSync(emp.repo)) cwd = emp.repo;
       } else if (jobData.agent) {
-        // If job has an agent, use agent prompt
+        // If job has an agent, use agent prompt + context
         const agents = scanAgents();
         const agentDef = agents.find((a) => a.name === jobData.agent);
-        if (agentDef) systemPrompt = agentDef.body;
+        if (agentDef) systemPrompt = agentDef.body + "\n\n" + buildContextSuffix("chat");
       }
       systemPrompt += `\n\n## Job Context\nYou are chatting in the context of job "${jobData.name}" (schedule: ${jobData.schedule}).\n\nJob prompt:\n${jobData.prompt}`;
     }

@@ -12,7 +12,7 @@ function loadFile(dir: string, name: string): string {
   return readFileSync(filePath, "utf8").trim();
 }
 
-export function buildEmployeePrompt(name: string): string {
+export function buildEmployeePrompt(name: string, mode: "chat" | "job" = "chat"): string {
   const employee = getEmployee(name);
   if (!employee) return "";
 
@@ -25,7 +25,7 @@ export function buildEmployeePrompt(name: string): string {
   // Environment + mode + capabilities
   parts.push(getEnvironmentPrompt());
 
-  const modePrompt = getModePrompt("chat");
+  const modePrompt = getModePrompt(mode);
   if (modePrompt) parts.push(modePrompt);
 
   const skills = getSkillsSummary();

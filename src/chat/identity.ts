@@ -53,6 +53,30 @@ export function buildSystemPrompt(mode: Mode = "chat", channel: string = "termin
 }
 
 /**
+ * Build the context suffix (env + mode + skills + agents + employees) that should
+ * be appended to any custom system prompt (agent body, watch behavior, etc).
+ * Does NOT include Nia's identity — that's the caller's responsibility.
+ */
+export function buildContextSuffix(mode: Mode = "chat"): string {
+  const parts: string[] = [];
+  parts.push(getEnvironmentPrompt());
+
+  const modePrompt = getModePrompt(mode);
+  if (modePrompt) parts.push(modePrompt);
+
+  const skills = getSkillsSummary();
+  if (skills) parts.push(skills);
+
+  const agents = getAgentsSummary();
+  if (agents) parts.push(agents);
+
+  const employees = getEmployeesSummary();
+  if (employees) parts.push(employees);
+
+  return parts.join("\n\n");
+}
+
+/**
  * Load recent session summaries for a room and format as a context block.
  * Returns empty string if no summaries are available.
  */
