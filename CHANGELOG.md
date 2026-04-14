@@ -1,17 +1,24 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.64] - 2026-04-14
 
 ### Added
 
-- **Employee system** — first-class persistent entities that live inside Nia. Each employee has identity, memory, goals, an approval queue, and can be scoped to a specific project repo. Employees go through an onboarding flow (brief → self-discovery → plan) and operate autonomously within guardrails. CLI: `nia employee add|list|show|pause|resume|remove|approvals`.
-- **Unified chat context** — `nia chat` now accepts `--agent`, `--employee`, or `--job` to set the session persona. Each context gets its own session room for separate history.
-- **Employee on jobs** — jobs support `--employee` alongside `--agent`. Employee identity takes precedence over agent when both are set. MCP tools (`add_job`, `update_job`) also accept the `employee` parameter.
+- **Employee system** — first-class persistent entities that live inside Nia. Employees are co-founders scoped to a project repo, with identity, memory, goals, approval queue, and onboarding flow (brief → self-discovery → plan). CLI: `nia employee add|list|show|pause|resume|remove|approvals`.
+- **Unified chat context** — `nia chat` accepts `--agent`, `--employee`, or `--job` to set the session persona. Each context gets its own session room.
+- **Employee chat shortcut** — `nia employee kira` opens chat directly, same as `nia chat --employee kira`.
+- **Employee on jobs** — jobs support `--employee` alongside `--agent`. Employee identity takes precedence. MCP tools (`add_job`, `update_job`) accept `employee` parameter.
+- **Agent-driven onboarding** — `nia employee add` with zero args scaffolds and drops into chat. The employee asks for missing info (name, project, repo) conversationally. Suggests real names for placeholders.
+- **Employee MCP tool** — `list_employees` for employee discovery. Employees also appear in Nia's system prompt summary.
+- **Employee in backups** — `~/.niahere/employees/` now included in `nia backup`.
 - **DB migration 015** — adds `employee` column to jobs table.
 
 ### Fixed
 
-- **Deterministic agent/skill scanning** — `scanAgents()` and `scanSkills()` now sort directory entries by name. `readdirSync` returns filesystem-order, which varies across machines and after file mutations — causing the system prompt fingerprint to shift and breaking Anthropic prompt cache on session start.
+- **Deterministic agent/skill scanning** — `scanAgents()` and `scanSkills()` now sort directory entries by name. Prevents prompt cache invalidation from filesystem-order variance.
+- **`engine.close()` race condition** — finalization now awaits before DB connection closes. Fixes `CONNECTION_ENDED` errors on exit.
+- **`listDue()` missing employee column** — scheduled jobs with employees would silently run without employee identity.
+- **Employee dir rename safety** — `getEmployeeDir()` resolves via frontmatter scan, not path assumption. Agent updates name in frontmatter only, directory stays stable.
 
 ## [0.2.63] - 2026-04-12
 
