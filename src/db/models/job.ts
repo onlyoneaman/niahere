@@ -3,7 +3,7 @@ import { CronExpressionParser } from "cron-parser";
 import { parseDuration } from "../../utils/duration";
 import { computeInitialNextRun } from "../../utils/schedule";
 import { getConfig } from "../../utils/config";
-import type { ScheduleType } from "../../types";
+import type { ScheduleType, JobLifecycle } from "../../types";
 
 /** Validate that a schedule string matches its declared type. Throws on mismatch. */
 function validateSchedule(schedule: string, scheduleType: ScheduleType): void {
@@ -36,7 +36,7 @@ export interface Job {
   name: string;
   schedule: string;
   prompt: string;
-  enabled: boolean;
+  status: JobLifecycle;
   always: boolean;
   scheduleType: ScheduleType;
   agent: string | null;
@@ -49,12 +49,23 @@ export interface Job {
   updatedAt: string;
 }
 
+const COLS =
+  "name, schedule, prompt, status, always, schedule_type, agent, employee, model, stateless, next_run_at, last_run_at, created_at, updated_at";
+
 function toJob(r: Record<string, any>): Job {
+  // Support both old (enabled boolean) and new (status text) schema
+  let status: JobLifecycle;
+  if (typeof r.status === "string" && ["active", "disabled", "archived"].includes(r.status)) {
+    status = r.status as JobLifecycle;
+  } else {
+    status = r.enabled ? "active" : "disabled";
+  }
+
   return {
     name: r.name,
     schedule: r.schedule,
     prompt: r.prompt,
-    enabled: r.enabled,
+    status,
     always: r.always ?? false,
     scheduleType: r.schedule_type || "cron",
     agent: r.agent || null,
@@ -92,23 +103,21 @@ export async function create(
   }
   const sql = getSql();
   await sql`
-    INSERT INTO jobs (name, schedule, prompt, always, schedule_type, next_run_at, agent, stateless, model, employee)
-    VALUES (${name}, ${schedule}, ${prompt}, ${always}, ${scheduleType}, ${nextRunAt ?? null}, ${agent ?? null}, ${stateless}, ${model ?? null}, ${employee ?? null})
+    INSERT INTO jobs (name, schedule, prompt, always, schedule_type, next_run_at, agent, stateless, model, employee, status)
+    VALUES (${name}, ${schedule}, ${prompt}, ${always}, ${scheduleType}, ${nextRunAt ?? null}, ${agent ?? null}, ${stateless}, ${model ?? null}, ${employee ?? null}, 'active')
   `;
   await notifyChange();
 }
 
 export async function list(): Promise<Job[]> {
   const sql = getSql();
-  const rows =
-    await sql`SELECT name, schedule, prompt, enabled, always, schedule_type, agent, employee, model, stateless, next_run_at, last_run_at, created_at, updated_at FROM jobs ORDER BY name`;
+  const rows = await sql`SELECT ${sql.unsafe(COLS)} FROM jobs ORDER BY name`;
   return rows.map(toJob);
 }
 
 export async function get(name: string): Promise<Job | null> {
   const sql = getSql();
-  const rows =
-    await sql`SELECT name, schedule, prompt, enabled, always, schedule_type, agent, employee, model, stateless, next_run_at, last_run_at, created_at, updated_at FROM jobs WHERE name = ${name}`;
+  const rows = await sql`SELECT ${sql.unsafe(COLS)} FROM jobs WHERE name = ${name}`;
   return rows.length > 0 ? toJob(rows[0]) : null;
 }
 
@@ -117,7 +126,7 @@ export async function update(
   fields: Partial<{
     schedule: string;
     prompt: string;
-    enabled: boolean;
+    status: JobLifecycle;
     always: boolean;
     agent: string | null;
     employee: string | null;
@@ -133,7 +142,7 @@ export async function update(
   const schedule = fields.schedule ?? existing.schedule;
   const scheduleType = fields.scheduleType ?? existing.scheduleType;
   const prompt = fields.prompt ?? existing.prompt;
-  const enabled = fields.enabled ?? existing.enabled;
+  const status = fields.status ?? existing.status;
   const always = fields.always ?? existing.always;
   const agent = fields.agent !== undefined ? fields.agent : existing.agent;
   const employee = fields.employee !== undefined ? fields.employee : existing.employee;
@@ -149,13 +158,13 @@ export async function update(
     const nextRun = computeInitialNextRun(scheduleType, schedule, getConfig().timezone);
     await sql`
       UPDATE jobs
-      SET schedule = ${schedule}, schedule_type = ${scheduleType}, prompt = ${prompt}, enabled = ${enabled}, always = ${always}, agent = ${agent}, employee = ${employee}, model = ${model}, stateless = ${stateless}, next_run_at = ${nextRun}, updated_at = NOW()
+      SET schedule = ${schedule}, schedule_type = ${scheduleType}, prompt = ${prompt}, status = ${status}, always = ${always}, agent = ${agent}, employee = ${employee}, model = ${model}, stateless = ${stateless}, next_run_at = ${nextRun}, updated_at = NOW()
       WHERE name = ${name}
     `;
   } else {
     await sql`
       UPDATE jobs
-      SET schedule = ${schedule}, schedule_type = ${scheduleType}, prompt = ${prompt}, enabled = ${enabled}, always = ${always}, agent = ${agent}, employee = ${employee}, model = ${model}, stateless = ${stateless}, updated_at = NOW()
+      SET schedule = ${schedule}, schedule_type = ${scheduleType}, prompt = ${prompt}, status = ${status}, always = ${always}, agent = ${agent}, employee = ${employee}, model = ${model}, stateless = ${stateless}, updated_at = NOW()
       WHERE name = ${name}
     `;
   }
@@ -172,17 +181,16 @@ export async function remove(name: string): Promise<boolean> {
 
 export async function listEnabled(): Promise<Job[]> {
   const sql = getSql();
-  const rows =
-    await sql`SELECT name, schedule, prompt, enabled, always, schedule_type, agent, employee, model, stateless, next_run_at, last_run_at, created_at, updated_at FROM jobs WHERE enabled = TRUE ORDER BY name`;
+  const rows = await sql`SELECT ${sql.unsafe(COLS)} FROM jobs WHERE status = 'active' ORDER BY name`;
   return rows.map(toJob);
 }
 
 export async function listDue(): Promise<Job[]> {
   const sql = getSql();
   const rows = await sql`
-    SELECT name, schedule, prompt, enabled, always, schedule_type, agent, employee, model, stateless, next_run_at, last_run_at, created_at, updated_at
+    SELECT ${sql.unsafe(COLS)}
     FROM jobs
-    WHERE enabled = TRUE AND next_run_at <= NOW()
+    WHERE status = 'active' AND next_run_at <= NOW()
     ORDER BY next_run_at
   `;
   return rows.map(toJob);
@@ -193,7 +201,7 @@ export async function markRun(name: string, nextRunAt: Date | null): Promise<voi
   if (nextRunAt) {
     await sql`UPDATE jobs SET last_run_at = NOW(), next_run_at = ${nextRunAt}, updated_at = NOW() WHERE name = ${name}`;
   } else {
-    await sql`UPDATE jobs SET last_run_at = NOW(), enabled = FALSE, updated_at = NOW() WHERE name = ${name}`;
+    await sql`UPDATE jobs SET last_run_at = NOW(), status = 'disabled', updated_at = NOW() WHERE name = ${name}`;
   }
   await notifyChange();
 }

@@ -96,7 +96,7 @@ export async function removeJob(name: string): Promise<string> {
 }
 
 export async function enableJob(name: string): Promise<string> {
-  const updated = await Job.update(name, { enabled: true });
+  const updated = await Job.update(name, { status: "active" });
   if (!updated) return `Job "${name}" not found.`;
 
   const job = await Job.get(name);
@@ -110,8 +110,18 @@ export async function enableJob(name: string): Promise<string> {
 }
 
 export async function disableJob(name: string): Promise<string> {
-  const updated = await Job.update(name, { enabled: false });
+  const updated = await Job.update(name, { status: "disabled" });
   return updated ? `Job "${name}" disabled.` : `Job "${name}" not found.`;
+}
+
+export async function archiveJob(name: string): Promise<string> {
+  const updated = await Job.update(name, { status: "archived" });
+  return updated ? `Job "${name}" archived.` : `Job "${name}" not found.`;
+}
+
+export async function unarchiveJob(name: string): Promise<string> {
+  const updated = await Job.update(name, { status: "disabled" });
+  return updated ? `Job "${name}" unarchived (disabled). Enable with enable_job.` : `Job "${name}" not found.`;
 }
 
 export async function runJobNow(name: string): Promise<string> {

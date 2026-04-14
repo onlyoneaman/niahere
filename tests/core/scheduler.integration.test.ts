@@ -37,7 +37,7 @@ describe("scheduler: one-shot jobs", () => {
     const job = await Job.get(name);
     expect(job).not.toBeNull();
     expect(job!.scheduleType).toBe("once");
-    expect(job!.enabled).toBe(true);
+    expect(job!.status).toBe("active");
   });
 
   test("markRun with null nextRunAt disables the job", async () => {
@@ -47,7 +47,7 @@ describe("scheduler: one-shot jobs", () => {
     // Simulate what scheduler does for once jobs: markRun with null
     await Job.markRun(name, null);
     const job = await Job.get(name);
-    expect(job!.enabled).toBe(false);
+    expect(job!.status).toBe("disabled");
     expect(job!.lastRunAt).not.toBeNull();
   });
 });
@@ -65,10 +65,10 @@ describe("scheduler: invalid schedule handling", () => {
     const name = `${PREFIX}-bad-sched`;
     // Create with a valid schedule, then corrupt it
     await Job.create(name, "*/5 * * * *", "test");
-    await Job.update(name, { enabled: false });
+    await Job.update(name, { status: "disabled" });
 
     const job = await Job.get(name);
-    expect(job!.enabled).toBe(false);
+    expect(job!.status).toBe("disabled");
   });
 });
 
@@ -146,7 +146,7 @@ describe("scheduler: concurrent job guard (listDue)", () => {
     await Job.create(futureName, "*/5 * * * *", "future job", false, "cron", new Date(Date.now() + 600_000));
     // Disabled job (due but disabled)
     await Job.create(disabledName, "*/5 * * * *", "disabled job", false, "cron", new Date(Date.now() - 60_000));
-    await Job.update(disabledName, { enabled: false });
+    await Job.update(disabledName, { status: "disabled" });
 
     const due = await Job.listDue();
     const dueNames = due.map((j) => j.name);

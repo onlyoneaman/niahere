@@ -20,7 +20,7 @@ type StatusOptions = {
 type JobStatusLine = {
   name: string;
   schedule: string;
-  enabled: boolean;
+  jobStatus: string;
   always: boolean;
   scheduleType: ScheduleType;
   agent: string | null;
@@ -111,7 +111,7 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
   if (options.json) {
     const sortedJobs = [...jobs].sort(
       (a, b) =>
-        Number(b.enabled) - Number(a.enabled) ||
+        (b.status === "active" ? 1 : 0) - (a.status === "active" ? 1 : 0) ||
         dateSortValue(a.nextRunAt) - dateSortValue(b.nextRunAt) ||
         a.name.localeCompare(b.name),
     );
@@ -122,7 +122,7 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
       return {
         name: job.name,
         schedule: job.schedule,
-        enabled: job.enabled,
+        jobStatus: job.status,
         always: job.always,
         scheduleType: job.scheduleType,
         agent: job.agent,
@@ -144,7 +144,7 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
             return {
               name,
               schedule: "unavailable",
-              enabled: false,
+              jobStatus: "disabled",
               always: false,
               scheduleType: "cron",
               agent: null,
@@ -232,13 +232,15 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
       console.log("\nJobs:");
       const sortedJobs = [...jobs].sort(
         (a, b) =>
-          Number(b.enabled) - Number(a.enabled) ||
+          (b.status === "active" ? 1 : 0) - (a.status === "active" ? 1 : 0) ||
           dateSortValue(a.nextRunAt) - dateSortValue(b.nextRunAt) ||
           a.name.localeCompare(b.name),
       );
 
       // Hide completed one-shot jobs
-      const visibleJobs = sortedJobs.filter((j) => !(j.scheduleType === "once" && !j.enabled && j.lastRunAt));
+      const visibleJobs = sortedJobs.filter(
+        (j) => j.status !== "archived" && !(j.scheduleType === "once" && j.status !== "active" && j.lastRunAt),
+      );
 
       for (const job of visibleJobs) {
         const stateInfo = state[job.name];
@@ -246,7 +248,7 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
         const lastRun = stateInfo?.lastRun ?? job.lastRunAt ?? null;
         const nextRun = job.nextRunAt ?? null;
         const stale =
-          job.enabled &&
+          job.status === "active" &&
           status !== "running" &&
           nextRun !== null &&
           safeDate(nextRun) !== null &&
@@ -263,7 +265,7 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
         const agentTag = job.agent ? `  [${job.agent}]` : "";
         const empTag = job.employee ? `  [emp:${job.employee}]` : "";
         console.log(
-          `  ${job.enabled ? "\u25cf" : "\u25cb"} ${job.name.padEnd(20)} ${job.enabled ? "enabled" : "disabled"}${agentTag}${empTag}`,
+          `  ${job.status === "active" ? "\u25cf" : "\u25cb"} ${job.name.padEnd(20)} ${job.status}${agentTag}${empTag}`,
         );
         console.log(
           `      ${statusIcon} ${status}   last: ${lastText}   next: ${nextText}   duration: ${durationText}${staleText}`,

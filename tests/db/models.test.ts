@@ -278,7 +278,7 @@ describe("Job model", () => {
     expect(job!.name).toBe(TEST_JOB);
     expect(job!.schedule).toBe("*/5 * * * *");
     expect(job!.prompt).toBe("do something");
-    expect(job!.enabled).toBe(true);
+    expect(job!.status).toBe("active");
   });
 
   test("create with agent and get", async () => {
@@ -344,13 +344,13 @@ describe("Job model", () => {
 
   test("update changes fields", async () => {
     const updated = await Job.update(TEST_JOB, {
-      enabled: false,
+      status: "disabled",
       prompt: "updated prompt",
     });
     expect(updated).toBe(true);
 
     const job = await Job.get(TEST_JOB);
-    expect(job!.enabled).toBe(false);
+    expect(job!.status).toBe("disabled");
     expect(job!.prompt).toBe("updated prompt");
   });
 
@@ -369,7 +369,7 @@ describe("Job model", () => {
   });
 
   test("update returns false for nonexistent job", async () => {
-    const updated = await Job.update("nonexistent-job", { enabled: true });
+    const updated = await Job.update("nonexistent-job", { status: "active" });
     expect(updated).toBe(false);
   });
 });

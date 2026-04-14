@@ -39,6 +39,8 @@ Commands:
   remove <name>                 Delete a job
   enable <name>                 Enable a job
   disable <name>                Disable a job
+  archive <name>                Archive a job (out of sight)
+  unarchive <name>              Unarchive back to disabled
   run <name>                    Run a job once
   log [name]                    Show recent run history`;
 
@@ -46,7 +48,7 @@ async function pickJob(prompt = "Pick a job"): Promise<string> {
   let jobs: {
     name: string;
     schedule: string;
-    enabled: boolean;
+    status: string;
     prompt: string;
   }[] = [];
   try {
@@ -68,7 +70,7 @@ async function pickJob(prompt = "Pick a job"): Promise<string> {
   try {
     const items = jobs.map((j) => ({
       name: j.name,
-      label: `${j.enabled ? "●" : "○"} ${j.name}  ${j.schedule}`,
+      label: `${j.status === "active" ? "●" : "○"} ${j.name}  ${j.schedule}`,
     }));
     const name = await pickFromList(rl, items, prompt);
     if (!name) fail("Invalid selection.");
@@ -94,12 +96,20 @@ export async function jobCommand(): Promise<void> {
           if (jobs.length === 0) {
             console.log("No jobs configured. Use `nia job add` or `nia job import`.");
           } else {
-            for (const job of jobs) {
+            const visible = jobs.filter((j) => j.status !== "archived");
+            const archived = jobs.filter((j) => j.status === "archived");
+            for (const job of visible) {
+              const icon = job.status === "active" ? "●" : "○";
               const tag = job.always ? "  always" : "";
               const type = job.scheduleType !== "cron" ? ` (${job.scheduleType})` : "";
               const agentTag = job.agent ? `  [${job.agent}]` : "";
               const empTag = job.employee ? `  [emp:${job.employee}]` : "";
-              console.log(`  ${job.enabled ? "●" : "○"} ${job.name}  ${job.schedule}${type}${tag}${agentTag}${empTag}`);
+              console.log(`  ${icon} ${job.name}  ${job.schedule}${type}${tag}${agentTag}${empTag}`);
+            }
+            if (archived.length > 0) {
+              console.log(
+                `\n  ${archived.length} archived job${archived.length > 1 ? "s" : ""} (nia job list --all to show)`,
+              );
             }
           }
         });
@@ -178,15 +188,23 @@ export async function jobCommand(): Promise<void> {
     }
 
     case "enable":
-    case "disable": {
+    case "disable":
+    case "archive":
+    case "unarchive": {
       const name = process.argv[4];
       if (!name) fail(`Usage: nia job ${subcommand} <name>`);
-      const enabled = subcommand === "enable";
+      const statusMap: Record<string, string> = {
+        enable: "active",
+        disable: "disabled",
+        archive: "archived",
+        unarchive: "disabled",
+      };
+      const newStatus = statusMap[subcommand] as "active" | "disabled" | "archived";
 
       try {
         await withDb(async () => {
-          const updated = await Job.update(name, { enabled });
-          console.log(updated ? `Job "${name}" ${subcommand}d.` : `Job not found: ${name}`);
+          const updated = await Job.update(name, { status: newStatus });
+          console.log(updated ? `Job "${name}" → ${newStatus}.` : `Job not found: ${name}`);
         });
       } catch (err) {
         fail(`Failed: ${errMsg(err)}`);
@@ -280,9 +298,10 @@ export async function jobCommand(): Promise<void> {
           const job = await Job.get(name);
           if (!job) fail(`Job not found: ${name}`);
 
-          console.log(`  ${job.enabled ? "●" : "○"} ${job.name}`);
+          const icon = job.status === "active" ? "●" : job.status === "archived" ? "◌" : "○";
+          console.log(`  ${icon} ${job.name}`);
           console.log(`  schedule: ${job.schedule} (${job.scheduleType})`);
-          console.log(`  enabled:  ${job.enabled}`);
+          console.log(`  status:   ${job.status}`);
           console.log(`  always:   ${job.always}`);
           if (job.agent) console.log(`  agent:    ${job.agent}`);
           if (job.employee) console.log(`  employee: ${job.employee}`);
@@ -333,7 +352,8 @@ export async function jobCommand(): Promise<void> {
             ? `${info.status} (${localTime(new Date(info.lastRun))}, ${formatDuration(info.duration_ms)})`
             : "never run";
           const tag = job.always ? " always" : "";
-          console.log(`  ${job.enabled ? "●" : "○"} ${job.name}  [${job.schedule}]${tag}  ${status}`);
+          const icon = job.status === "active" ? "●" : job.status === "archived" ? "◌" : "○";
+          console.log(`  ${icon} ${job.name}  [${job.schedule}]${tag}  ${status}`);
           if (info?.error) console.log(`    error: ${info.error}`);
         });
       } catch (err) {

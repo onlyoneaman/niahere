@@ -107,6 +107,22 @@ export function createNiaMcpServer() {
         }),
       ),
       tool(
+        "archive_job",
+        "Archive a job (out of sight, won't run). Use unarchive_job to bring it back.",
+        { name: z.string().describe("Job name to archive") },
+        async (args) => ({
+          content: [{ type: "text" as const, text: await handlers.archiveJob(args.name) }],
+        }),
+      ),
+      tool(
+        "unarchive_job",
+        "Unarchive a job back to disabled state. Use enable_job after to start running it.",
+        { name: z.string().describe("Job name to unarchive") },
+        async (args) => ({
+          content: [{ type: "text" as const, text: await handlers.unarchiveJob(args.name) }],
+        }),
+      ),
+      tool(
         "run_job",
         "Trigger a job to run immediately on the next scheduler tick",
         { name: z.string().describe("Job name to run now") },

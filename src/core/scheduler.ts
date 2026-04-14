@@ -72,7 +72,7 @@ async function tick(): Promise<void> {
       nextRun = computeNextRun(job.scheduleType, job.schedule, config.timezone, new Date());
     } catch (err) {
       log.error({ err, job: job.name, schedule: job.schedule }, "scheduler: invalid schedule, disabling job");
-      await Job.update(job.name, { enabled: false }).catch(() => {});
+      await Job.update(job.name, { status: "disabled" }).catch(() => {});
       continue;
     }
     await Job.markRun(job.name, nextRun).catch((err) => {
@@ -81,7 +81,7 @@ async function tick(): Promise<void> {
 
     // Auto-disable one-shot jobs after execution
     if (job.scheduleType === "once") {
-      await Job.update(job.name, { enabled: false }).catch(() => {});
+      await Job.update(job.name, { status: "disabled" }).catch(() => {});
       log.info({ job: job.name }, "scheduler: one-shot job completed, auto-disabled");
     }
   }
