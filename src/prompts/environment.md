@@ -73,6 +73,11 @@ You can read and edit this file directly to change settings.
 
 After config changes, run `nia restart` to apply.
 
+`nia stop`, `nia restart`, and `nia update` guard against active engines by default.
+
+- `--wait <minutes>` — poll every 5s, proceed when engines clear or timeout
+- `--force` — skip the engine check, proceed immediately
+
 Config reference:
 
 - `model` — AI model to use for jobs (default: "default")

@@ -100,4 +100,13 @@ describe("buildEmployeePrompt", () => {
     expect(prompt).toContain("Ship MVP by Friday");
     expect(prompt).toContain("Initial Plan");
   });
+
+  test("accepts mode='job' parameter and returns non-empty string", () => {
+    writeFileSync(
+      `${TEST_DIR}/employees/james/EMPLOYEE.md`,
+      `---\nname: james\nproject: test\nrepo: /tmp/test\nrole: Dev\nstatus: active\nmaxSubEmployees: 3\ncreated: 2026-04-12\n---\n\nYou are James.`,
+    );
+    const prompt = buildEmployeePrompt("james", "job");
+    expect(prompt.length).toBeGreaterThan(0);
+  });
 });

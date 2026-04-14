@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "fs";
-import { loadIdentity, buildSystemPrompt } from "../../src/chat/identity";
+import { loadIdentity, buildSystemPrompt, buildContextSuffix } from "../../src/chat/identity";
 import { resetConfig } from "../../src/utils/config";
 
 const TEST_DIR = "/tmp/test-nia-identity";
@@ -143,5 +143,21 @@ describe("buildSystemPrompt", () => {
 
     const prompt = buildSystemPrompt();
     expect(prompt).toContain("stamp: keep it short");
+  });
+});
+
+describe("buildContextSuffix", () => {
+  test("returns a non-empty string", () => {
+    const result = buildContextSuffix();
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  test("does not contain identity content", () => {
+    writeFileSync(`${TEST_DIR}/self/identity.md`, "UNIQUE_IDENTITY_MARKER_XYZ123");
+    writeFileSync(`${TEST_DIR}/self/soul.md`, "UNIQUE_SOUL_MARKER_ABC456");
+
+    const suffix = buildContextSuffix();
+    expect(suffix).not.toContain("UNIQUE_IDENTITY_MARKER_XYZ123");
+    expect(suffix).not.toContain("UNIQUE_SOUL_MARKER_ABC456");
   });
 });
