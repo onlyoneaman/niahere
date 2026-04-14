@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.65] - 2026-04-14
+
+### Fixed
+
+- **Consolidator staging criteria too strict** — two-stage memory pipeline was effectively dead. Most sessions are task execution, which was explicitly excluded. Relaxed criteria to include corrections during tasks, architecture learned while debugging, workflow patterns, and explicit "remember this" requests.
+
 ## [0.2.64] - 2026-04-14
 
 ### Added
