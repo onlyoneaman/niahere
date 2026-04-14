@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.2.66] - 2026-04-14
+
+### Added
+
+- **Job status lifecycle** — jobs now have `status: active | disabled | archived` replacing the `enabled` boolean. Archived jobs are hidden from `nia job list` and `nia status`. CLI: `nia job archive/unarchive`. MCP: `archive_job`, `unarchive_job`.
+- **Engine guard on stop/restart/update** — refuses to stop, restart, or update while active engines are running. `--wait <minutes>` polls until clear, `--force` skips the check.
+- **Employee chat shortcut** — `nia employee <name>` opens chat directly.
+- **Employee tests** — 12 new tests covering getEmployeeDir, getEmployeesSummary, listEmployeesForMcp, dirName, onboarding instructions injection, status-conditional prompt, state file loading, archived job status.
+
+### Fixed
+
+- **Consolidator staging criteria too strict** — two-stage memory pipeline was effectively dead. Relaxed to include corrections during tasks, architecture learned while debugging, workflow patterns, and explicit "remember this" requests.
+
+### Changed
+
+- **environment.md** — added employees section, archive/unarchive/list_employees MCP tools, employee param on jobs, job status documentation.
+- **AGENTS.md** — added employee system section with directory structure, lifecycle, CLI, chat and job integration.
+
 ## [0.2.65] - 2026-04-14
 
 ### Fixed
