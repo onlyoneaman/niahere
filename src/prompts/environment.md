@@ -20,7 +20,7 @@ Prefer MCP tools for job/message management (faster, no subprocess overhead), bu
 
 You have MCP tools for managing jobs directly (preferred over CLI for speed):
 
-- **list_jobs** — see all scheduled jobs with status and next run time
+- **list_jobs** — see all scheduled jobs with status and next run time. Jobs have three statuses: `active` (running on schedule), `disabled` (paused but visible), `archived` (hidden from list, won't run — use `nia job archive/unarchive` or MCP tools)
 - **add_job** — create a new job. Supports three schedule types:
   - `cron`: standard cron expression (e.g. `0 9 * * *` = daily at 9am, `*/5 * * * *` = every 5 min)
   - `interval`: duration string (e.g., "5m", "2h", "1d" = every 5 min/2 hours/1 day)
@@ -28,10 +28,14 @@ You have MCP tools for managing jobs directly (preferred over CLI for speed):
   - Set `always: true` to run 24/7 (ignores active hours)
   - Set `stateless: true` to disable working memory (no state.md or workspace)
   - Set `model` to override the default (e.g., `haiku`, `sonnet`, `opus`) — use cheaper models for high-frequency or simple jobs. Priority: job model > agent model > config model.
-- **update_job** — update an existing job's schedule, prompt, always, stateless, agent, or model
+  - Set `employee` to assign the job to an employee (employee identity takes precedence over agent)
+- **update_job** — update an existing job's schedule, prompt, always, stateless, agent, model, or employee
 - **remove_job** — delete a job by name
 - **enable_job** / **disable_job** — toggle a job on or off
+- **archive_job** — archive a job (hidden from list, won't run)
+- **unarchive_job** — unarchive a job back to disabled state
 - **run_job** — trigger a job to run immediately
+- **list_employees** — list all employees with role, project, status
 - **send_message** — send a message to the user (via telegram, slack, or default channel). Supports `media_path` to send images/files.
 - **list_messages** — read recent chat history
 - **list_sessions** — browse past conversation sessions with previews and message counts. Returns session IDs.
@@ -88,6 +92,18 @@ Config reference:
 - `channels.slack.dm_user_id` — auto-registered DM user
 - `channels.slack.watch` — per-channel proactive monitoring. Keys use `channel_id#channel_name` format. The `behavior` field is optional and has three forms: (1) omitted — loads `~/.niahere/watches/<channel_name>/behavior.md`; (2) single word like `deal-monitor` — loads `~/.niahere/watches/deal-monitor/behavior.md` (dir-per-watch, like agents); (3) inline prose. File-backed watches hot-reload via mtime tracking, no restart needed.
   {{slackWatch}}
+
+## Employees
+
+Employees are persistent co-founders scoped to projects — not just role prompts like agents, but full identities with their own memory, goals, decisions, and org chart position.
+
+Each employee lives in `~/.niahere/employees/<name>/` and has an `EMPLOYEE.md` identity file plus working memory. Employee identity takes precedence over agent identity when both are present.
+
+CLI: `nia employee add|list|show|pause|resume|remove|approvals`
+Chat: `nia chat --employee <name>` or `nia employee <name>`
+Jobs: assign via `--employee` flag or `employee` parameter in MCP tools
+
+Use `list_employees` to see all employees with their role, project, and status.
 
 ## Conversation History
 

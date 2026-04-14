@@ -50,15 +50,12 @@ describe("Session model", () => {
     const id = `test-touch-${Date.now()}`;
     await Session.create(id, TEST_ROOM);
 
-    const [before] =
-      await sql`SELECT updated_at FROM sessions WHERE id = ${id}`;
+    const [before] = await sql`SELECT updated_at FROM sessions WHERE id = ${id}`;
     await new Promise((r) => setTimeout(r, 10));
     await Session.touch(id);
     const [after] = await sql`SELECT updated_at FROM sessions WHERE id = ${id}`;
 
-    expect(new Date(after.updated_at).getTime()).toBeGreaterThan(
-      new Date(before.updated_at).getTime(),
-    );
+    expect(new Date(after.updated_at).getTime()).toBeGreaterThan(new Date(before.updated_at).getTime());
   });
 });
 
@@ -283,15 +280,7 @@ describe("Job model", () => {
 
   test("create with agent and get", async () => {
     const name = TEST_JOB + "-agent";
-    await Job.create(
-      name,
-      "*/5 * * * *",
-      "do something",
-      false,
-      "cron",
-      undefined,
-      "marketer",
-    );
+    await Job.create(name, "*/5 * * * *", "do something", false, "cron", undefined, "marketer");
     const job = await Job.get(name);
     expect(job).not.toBeNull();
     expect(job!.agent).toBe("marketer");
@@ -304,16 +293,7 @@ describe("Job model", () => {
 
   test("create with stateless flag", async () => {
     const name = TEST_JOB + "-stateless";
-    await Job.create(
-      name,
-      "*/5 * * * *",
-      "fire and forget",
-      false,
-      "cron",
-      undefined,
-      undefined,
-      true,
-    );
+    await Job.create(name, "*/5 * * * *", "fire and forget", false, "cron", undefined, undefined, true);
     const job = await Job.get(name);
     expect(job).not.toBeNull();
     expect(job!.stateless).toBe(true);
@@ -371,5 +351,52 @@ describe("Job model", () => {
   test("update returns false for nonexistent job", async () => {
     const updated = await Job.update("nonexistent-job", { status: "active" });
     expect(updated).toBe(false);
+  });
+});
+
+describe("Job status lifecycle", () => {
+  const LIFECYCLE_JOB = `test-lifecycle-${Date.now()}`;
+
+  afterAll(async () => {
+    const sql = getSql();
+    await sql`DELETE FROM jobs WHERE name LIKE ${LIFECYCLE_JOB + "%"}`;
+  });
+
+  test("update can set status to archived", async () => {
+    const name = LIFECYCLE_JOB + "-archive";
+    await Job.create(name, "*/5 * * * *", "archive me");
+    const updated = await Job.update(name, { status: "archived" });
+    expect(updated).toBe(true);
+
+    const job = await Job.get(name);
+    expect(job!.status).toBe("archived");
+  });
+
+  test("listEnabled excludes archived jobs", async () => {
+    const name = LIFECYCLE_JOB + "-enabled";
+    await Job.create(name, "*/5 * * * *", "should be excluded");
+    await Job.update(name, { status: "archived" });
+
+    const enabled = await Job.listEnabled();
+    const found = enabled.find((j) => j.name === name);
+    expect(found).toBeUndefined();
+  });
+
+  test("listDue excludes archived jobs", async () => {
+    const sql = getSql();
+    const name = LIFECYCLE_JOB + "-due";
+    await Job.create(name, "*/5 * * * *", "should not be due");
+    // Set next_run_at to the past so it would be due
+    await sql`UPDATE jobs SET next_run_at = NOW() - INTERVAL '1 hour' WHERE name = ${name}`;
+    // Verify it shows as due when active
+    let due = await Job.listDue();
+    let found = due.find((j) => j.name === name);
+    expect(found).toBeDefined();
+
+    // Archive it — should no longer appear in listDue
+    await Job.update(name, { status: "archived" });
+    due = await Job.listDue();
+    found = due.find((j) => j.name === name);
+    expect(found).toBeUndefined();
   });
 });

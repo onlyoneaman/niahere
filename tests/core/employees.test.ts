@@ -1,6 +1,12 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "fs";
-import { scanEmployees, getEmployee } from "../../src/core/employees";
+import {
+  scanEmployees,
+  getEmployee,
+  getEmployeeDir,
+  getEmployeesSummary,
+  listEmployeesForMcp,
+} from "../../src/core/employees";
 import { resetConfig } from "../../src/utils/config";
 
 const TEST_DIR = "/tmp/test-nia-employees";
@@ -66,5 +72,65 @@ describe("getEmployee", () => {
   test("returns undefined for unknown employee", () => {
     const emp = getEmployee("nobody");
     expect(emp).toBeUndefined();
+  });
+});
+
+describe("getEmployeeDir", () => {
+  test("returns correct path based on frontmatter name", () => {
+    mkdirSync(`${TEST_DIR}/employees/j-dir`, { recursive: true });
+    writeFileSync(
+      `${TEST_DIR}/employees/j-dir/EMPLOYEE.md`,
+      `---\nname: james\nproject: test\nrepo: /tmp/test\nrole: Dev\nstatus: active\nmaxSubEmployees: 3\ncreated: 2026-04-12\n---\n\nBody.`,
+    );
+    const dir = getEmployeeDir("james");
+    expect(dir).toBe(`${TEST_DIR}/employees/j-dir`);
+  });
+});
+
+describe("getEmployeesSummary", () => {
+  test("returns formatted summary string with name, role, project, status", () => {
+    writeFileSync(
+      `${TEST_DIR}/employees/james/EMPLOYEE.md`,
+      `---\nname: james\nproject: aicodeusage.com\nrepo: /tmp/test\nrole: Chief of Staff\nstatus: active\nmaxSubEmployees: 3\ncreated: 2026-04-12\n---\n\nBody.`,
+    );
+    const summary = getEmployeesSummary();
+    expect(summary).toContain("@james");
+    expect(summary).toContain("Chief of Staff");
+    expect(summary).toContain("aicodeusage.com");
+    expect(summary).toContain("active");
+    expect(summary).toContain("Available employees:");
+  });
+});
+
+describe("listEmployeesForMcp", () => {
+  test("returns JSON string with employee details", () => {
+    writeFileSync(
+      `${TEST_DIR}/employees/james/EMPLOYEE.md`,
+      `---\nname: james\nproject: aicodeusage.com\nrepo: /tmp/test\nrole: Chief of Staff\nmodel: opus\nstatus: active\nmaxSubEmployees: 3\ncreated: 2026-04-12\n---\n\nBody.`,
+    );
+    const json = listEmployeesForMcp();
+    const parsed = JSON.parse(json);
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].name).toBe("james");
+    expect(parsed[0].role).toBe("Chief of Staff");
+    expect(parsed[0].project).toBe("aicodeusage.com");
+    expect(parsed[0].repo).toBe("/tmp/test");
+    expect(parsed[0].status).toBe("active");
+    expect(parsed[0].model).toBe("opus");
+  });
+});
+
+describe("scanEmployees dirName", () => {
+  test("populates dirName field with directory name", () => {
+    mkdirSync(`${TEST_DIR}/employees/j-dir`, { recursive: true });
+    writeFileSync(
+      `${TEST_DIR}/employees/j-dir/EMPLOYEE.md`,
+      `---\nname: james\nproject: test\nrepo: /tmp/test\nrole: Dev\nstatus: active\nmaxSubEmployees: 3\ncreated: 2026-04-12\n---\n\nBody.`,
+    );
+    const employees = niaEmployees();
+    const emp = employees.find((e) => e.name === "james");
+    expect(emp).toBeDefined();
+    expect(emp!.dirName).toBe("j-dir");
   });
 });

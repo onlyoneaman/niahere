@@ -49,4 +49,55 @@ describe("buildEmployeePrompt", () => {
     const prompt = buildEmployeePrompt("nobody");
     expect(prompt).toBe("");
   });
+
+  test("includes onboarding instructions when status=onboarding", () => {
+    writeFileSync(
+      `${TEST_DIR}/employees/james/EMPLOYEE.md`,
+      `---\nname: james\nproject: test\nrepo: /tmp/test\nrole: Dev\nstatus: onboarding\nmaxSubEmployees: 3\ncreated: 2026-04-12\n---\n\nYou are James.`,
+    );
+    const prompt = buildEmployeePrompt("james");
+    expect(prompt).toContain("You are in onboarding status");
+  });
+
+  test("does NOT include onboarding instructions when status=active", () => {
+    writeFileSync(
+      `${TEST_DIR}/employees/james/EMPLOYEE.md`,
+      `---\nname: james\nproject: test\nrepo: /tmp/test\nrole: Dev\nstatus: active\nmaxSubEmployees: 3\ncreated: 2026-04-12\n---\n\nYou are James.`,
+    );
+    const prompt = buildEmployeePrompt("james");
+    expect(prompt).not.toContain("You are in onboarding status");
+  });
+
+  test("includes decisions.md content", () => {
+    writeFileSync(
+      `${TEST_DIR}/employees/james/EMPLOYEE.md`,
+      `---\nname: james\nproject: test\nrepo: /tmp/test\nrole: Dev\nstatus: active\nmaxSubEmployees: 3\ncreated: 2026-04-12\n---\n\nYou are James.`,
+    );
+    writeFileSync(`${TEST_DIR}/employees/james/decisions.md`, "# Decisions\n- Chose React over Vue");
+    const prompt = buildEmployeePrompt("james");
+    expect(prompt).toContain("Chose React over Vue");
+    expect(prompt).toContain("Decision Log");
+  });
+
+  test("includes org.md content", () => {
+    writeFileSync(
+      `${TEST_DIR}/employees/james/EMPLOYEE.md`,
+      `---\nname: james\nproject: test\nrepo: /tmp/test\nrole: Dev\nstatus: active\nmaxSubEmployees: 3\ncreated: 2026-04-12\n---\n\nYou are James.`,
+    );
+    writeFileSync(`${TEST_DIR}/employees/james/org.md`, "# Org\n- Reports to CEO");
+    const prompt = buildEmployeePrompt("james");
+    expect(prompt).toContain("Reports to CEO");
+    expect(prompt).toContain("Your Organization");
+  });
+
+  test("includes onboarding/plan.md content", () => {
+    writeFileSync(
+      `${TEST_DIR}/employees/james/EMPLOYEE.md`,
+      `---\nname: james\nproject: test\nrepo: /tmp/test\nrole: Dev\nstatus: active\nmaxSubEmployees: 3\ncreated: 2026-04-12\n---\n\nYou are James.`,
+    );
+    writeFileSync(`${TEST_DIR}/employees/james/onboarding/plan.md`, "# Plan\n- Ship MVP by Friday");
+    const prompt = buildEmployeePrompt("james");
+    expect(prompt).toContain("Ship MVP by Friday");
+    expect(prompt).toContain("Initial Plan");
+  });
 });

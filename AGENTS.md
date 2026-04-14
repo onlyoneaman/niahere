@@ -20,6 +20,7 @@ src/
     index.ts             # Entry point, command routing
     job.ts               # Job subcommands (list, show, status, add, update, run, log)
     agent.ts             # Agent subcommands (list, show)
+    employee.ts          # Employee subcommands (add, list, show, pause, resume, remove, approvals)
     channels.ts          # Channel CLI commands (send, telegram, slack)
     self.ts              # Persona commands (rules, memory)
     watch.ts             # Slack watch channel management
@@ -71,7 +72,7 @@ src/
     channel-telegram.md  # Telegram-specific rules
   types/                 # All type definitions (types, interfaces, enums only)
     index.ts             # Barrel export
-    enums.ts             # JobStatus, ScheduleType, Mode, AttachmentType, ChannelName
+    enums.ts             # JobStatus (active/disabled/archived), ScheduleType, Mode, AttachmentType, ChannelName
     config.ts            # Config, ChannelsConfig, TelegramConfig, SlackConfig
     paths.ts             # Paths interface
     attachment.ts        # Attachment interface
@@ -178,6 +179,7 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 
 - **Lazy DB:** `getSql()` creates connection on first use, `withDb()` wraps migrate+execute+close
 - **LISTEN/NOTIFY:** Job mutations call `pg_notify('nia_jobs')`, daemon listens and auto-reloads schedules
+- **Job status:** Jobs have three statuses: `active` (running on schedule), `disabled` (paused but visible), `archived` (hidden from list, won't run). CLI: `nia job archive/unarchive`. MCP: `archive_job`/`unarchive_job`. Unarchiving restores to `disabled`.
 - **Jobs vs crons:** Jobs respect `active_hours`, crons (`always: true`) run 24/7. Both use the same `jobs` table.
 - **Job execution:** Configurable via `runner` in config.yaml — `"claude"` (default, uses Claude Agent SDK `query()`) or `"codex"` (uses `codex exec --json`). Session ID stored in audit for inspection. `terminal_reason` tracks why a job ended (`completed`, `max_turns`, `aborted_tools`, etc.).
 - **Job working memory:** Jobs are stateful by default. Each job gets a workspace at `~/.niahere/jobs/<name>/` with `state.md` auto-injected into the prompt. Set `stateless: true` to disable. The agent updates `state.md` at the end of each run.
@@ -198,10 +200,52 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 - **Agents:** Role/domain specialists defined as `AGENT.md` files in `agents/` directories. Scanned from project `agents/`, `~/.niahere/agents/`, `~/.shared/agents/`. Passed to Claude Agent SDK as subagents via `query()` options — SDK handles routing and context isolation. Jobs can reference an agent via `agent` column — agent body becomes the systemPrompt. See [MULTI_AGENT_PHILOSOPHY.md](MULTI_AGENT_PHILOSOPHY.md).
 - **Skills:** Scanned from project `skills/`, `~/.niahere/skills/`, `~/.shared/skills/`, `~/.claude/skills/`, `~/.codex/skills/`. Dedup is case-insensitive (first found wins by scan order).
 - **Paths:** All from `getPaths()` → `getNiaHome()` (`NIA_HOME` env or `~/.niahere/`)
-- **One-shot jobs:** `once` schedule type auto-disables after execution, hidden from `nia status`
+- **One-shot jobs:** `once` schedule type auto-disables (sets status to `disabled`) after execution, hidden from `nia status`
 - **Dev mode:** `nia channels off` disables Telegram/Slack for local development
 - **DB setup:** `nia db setup` installs PostgreSQL (brew on macOS), creates database, runs migrations. Also offered during `nia init` if DB connection fails.
 - **npm install:** `bin/nia` shell wrapper checks for Bun, offers to install it, resolves package path via realpath for nvm/global installs
+
+## Employee System
+
+Employees are persistent co-founders scoped to projects — not just role prompts like agents, but full identities with their own memory, goals, decisions, and org chart position.
+
+### Directory Structure
+
+Each employee lives in `~/.niahere/employees/<name>/` with:
+
+- `EMPLOYEE.md` — identity file with YAML frontmatter (`name`, `project`, `repo`, `role`, `model`, `status`, `maxSubEmployees`) followed by freeform identity/personality
+- `memory.md` — employee-specific memory
+- `goals.md`, `decisions.md` — tracked per-employee
+- Org chart position (who reports to whom)
+
+### Lifecycle
+
+`onboarding` → `active` → `paused`
+
+- **onboarding** — initial setup, identity being defined
+- **active** — fully operational, can run jobs and chat
+- **paused** — temporarily inactive, retains all state
+
+### CLI
+
+```
+nia employee add          # Create a new employee
+nia employee list         # List all employees
+nia employee show <name>  # Show employee details
+nia employee pause <name> # Pause an employee
+nia employee resume <name># Resume a paused employee
+nia employee remove <name># Remove an employee
+nia employee approvals    # Manage pending approvals
+nia employee <name>       # Chat as employee (shorthand)
+```
+
+### Chat Integration
+
+Unified flags: `nia chat --employee <name>`, `nia chat --agent <name>`, `nia chat --job <name>`. Employee identity loads into the session and takes precedence over agent identity when both are present.
+
+### Job Integration
+
+Jobs can be assigned to employees via `--employee` on CLI or `employee` parameter in MCP tools (`add_job`, `update_job`). When a job has both an employee and an agent, the employee identity takes precedence.
 
 ## Architecture Docs
 
