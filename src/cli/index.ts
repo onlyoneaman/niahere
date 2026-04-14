@@ -16,6 +16,7 @@ import { rulesCommand, memoryCommand } from "./self";
 import { watchCommand } from "./watch";
 import { agentCommand } from "./agent";
 import { employeeCommand } from "./employee";
+import { guardActiveEngines, parseGuardFlags } from "../core/engine-guard";
 
 // Set LOG_LEVEL from config before anything else logs
 try {
@@ -112,7 +113,8 @@ switch (command) {
 
   case "stop": {
     if (!isRunning()) fail("nia is not running");
-    // Unregister service first to prevent KeepAlive from respawning after kill
+    const stopGuard = parseGuardFlags(process.argv.slice(3));
+    if (!(await guardActiveEngines("stop", stopGuard))) process.exit(1);
     const { unregisterService } = await import("../commands/service");
     await unregisterService();
     stopDaemon();
@@ -132,9 +134,10 @@ switch (command) {
   }
 
   case "restart": {
+    const restartGuard = parseGuardFlags(process.argv.slice(3));
+    if (!(await guardActiveEngines("restart", restartGuard))) process.exit(1);
     const { isServiceInstalled, restartService } = await import("../commands/service");
     if (isServiceInstalled()) {
-      // Service-aware: unload (stops KeepAlive respawn), kill, then reload
       await restartService();
     } else {
       stopDaemon();
@@ -494,8 +497,13 @@ switch (command) {
   }
 
   case "update": {
+    const updateGuard = parseGuardFlags(process.argv.slice(3));
     const { version: currentVersion } = await import("../../package.json");
     console.log(`Current: v${currentVersion}`);
+
+    // Check active engines before doing anything destructive
+    if (isRunning() && !(await guardActiveEngines("update", updateGuard))) process.exit(1);
+
     // Auto-backup before update
     try {
       const { createBackup } = await import("../commands/backup");
@@ -553,8 +561,9 @@ switch (command) {
 
 Daemon:
   start                           Start daemon + register service
-  stop                            Stop daemon + unregister service
-  restart                         Restart daemon
+  stop [--wait N] [--force]       Stop daemon (guards active engines)
+  restart [--wait N] [--force]    Restart daemon
+  update [--wait N] [--force]     Update to latest version
   status [--json --rooms N --all] Show daemon, jobs, channels
   health                          Check daemon, db, channels, config
   logs [-f] [--channel ch]        Daemon logs (filter by channel)
@@ -586,7 +595,6 @@ System:
   backup [list]                   Create or list backups
   validate                        Validate config.yaml
   db <sub>                        Database setup/status/migrate
-  update                          Update to latest version
   init                            Initial setup
   test [-v]                       Run tests`;
 
