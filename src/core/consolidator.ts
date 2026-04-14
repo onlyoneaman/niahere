@@ -58,8 +58,9 @@ Nia uses a two-stage memory architecture. You are stage 1.
 
 Your persona includes guidance to "save proactively" — that guidance applies
 to LIVE chat, where you act on immediate user instruction. In THIS
-consolidation pass, your default action is to do nothing. You only act when
-you can point to a specific user turn that taught you something durable.
+consolidation pass, be selective but not paralyzed. If you see a genuine
+learning, stage it. The promoter handles quality gating — your job is to
+not miss real signals, not to be maximally conservative.
 
 ## Transcript
 
@@ -81,13 +82,20 @@ Answer these questions silently. If the answer to all of them is "nothing",
 stop here and do not write anything.
 
 1. What did the user correct, clarify, or teach you in this session?
+   (Includes: "no, do it this way", "don't use X", "always check Y first")
 2. What NEW fact about the user, their projects, or their systems do you
    now know that you did not at session start?
+   (Includes: architecture decisions, workflow patterns, tool preferences,
+   team structure, external system details discovered during task execution)
 3. What decision was made that will constrain future work?
+   (Includes: "we're using X not Y", config changes, deployment patterns)
+4. What did the user explicitly ask to be remembered?
 
-Trivial small talk, greetings, task-execution chatter, and status updates
-are NOT answers. If you cannot quote a specific user turn that produced the
-learning, you are fishing — stop.
+Trivial small talk, greetings, and pure status updates are NOT answers.
+But corrections made DURING task execution ("no, check DynamoDB not S3"),
+architecture learned while debugging ("ah, this service talks to X via Y"),
+and workflow patterns revealed by how the user works — these ARE answers.
+The bar is: would a fresh Nia session benefit from knowing this?
 
 ## Step 3 — Update staging.md
 
@@ -118,7 +126,8 @@ For each substantive answer:
 - Do NOT write to \`memory.md\` or \`rules.md\`. Only the promoter job can.
 - Do NOT use \`add_memory\` or \`add_rule\` MCP tools. Edit staging.md directly.
 - Do NOT message the user.
-- Default action is to do nothing. Most sessions have nothing to stage.
+- If nothing qualifies, do nothing. But don't be so conservative that the
+  pipeline starves — if you're skipping every session, your bar is too high.
 
 Report a one-line summary of what you did: "staged N new / reinforced M /
 skipped (trivial session)". No preamble.`;
