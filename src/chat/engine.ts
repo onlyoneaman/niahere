@@ -167,6 +167,12 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
     }
   }
 
+  // Watch mode: inject behavior into system prompt
+  if (opts.watchBehavior) {
+    const { channel: watchChannel, behavior } = opts.watchBehavior;
+    systemPrompt += `\n\n## Watch Mode — #${watchChannel}\n\nYou are monitoring this Slack channel. Follow the behavior instructions below.\nRespond with [NO_REPLY] if no action is needed — do not explain why.\n\n${behavior}`;
+  }
+
   let sessionId: string | null = null;
   if (typeof resume === "string") {
     // Specific session ID provided

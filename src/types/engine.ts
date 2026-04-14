@@ -34,4 +34,6 @@ export interface EngineOptions {
   employee?: string;
   agent?: string;
   job?: string;
+  /** Watch channel behavior — injected into system prompt for watch-mode engines. */
+  watchBehavior?: { channel: string; behavior: string };
 }

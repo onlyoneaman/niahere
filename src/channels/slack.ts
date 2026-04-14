@@ -79,20 +79,26 @@ class SlackChannel implements Channel {
       return `slack-${key}-${index}`;
     }
 
-    async function getState(key: string): Promise<ChatState> {
+    async function getState(key: string, watchBehavior?: { channel: string; behavior: string }): Promise<ChatState> {
       let state = chats.get(key);
       if (!state) {
         const prefix = roomPrefix(key);
         const idx = await Session.getLatestRoomIndex(prefix);
         const room = roomName(key, idx);
-        const engine = await createChatEngine({ room, channel: "slack", resume: true, mcpServers: getMcpServers() });
+        const engine = await createChatEngine({
+          room,
+          channel: "slack",
+          resume: true,
+          mcpServers: getMcpServers(),
+          watchBehavior,
+        });
         state = { engine, roomIndex: idx, lock: Promise.resolve() };
         chats.set(key, state);
       }
       return state;
     }
 
-    async function restartChat(key: string): Promise<ChatState> {
+    async function restartChat(key: string, watchBehavior?: { channel: string; behavior: string }): Promise<ChatState> {
       const old = chats.get(key);
       if (old) old.engine.close();
 
@@ -106,7 +112,13 @@ class SlackChannel implements Channel {
       await Session.create(`placeholder-${room}`, room);
 
       log.info({ key, room }, "slack: creating chat engine");
-      const engine = await createChatEngine({ room, channel: "slack", resume: false, mcpServers: getMcpServers() });
+      const engine = await createChatEngine({
+        room,
+        channel: "slack",
+        resume: false,
+        mcpServers: getMcpServers(),
+        watchBehavior,
+      });
       const state: ChatState = { engine, roomIndex: newIdx, lock: Promise.resolve() };
       chats.set(key, state);
       log.info({ key, room, activeSessions: chats.size }, "slack: engine ready");
@@ -504,11 +516,10 @@ class SlackChannel implements Channel {
         }
       }
 
-      // Prepend watch behavior context for watched channels
-      if (watchConfig) {
-        const behaviorLine = watchConfig.behavior ? `Behavior: ${watchConfig.behavior}\n` : "";
-        text = `[Watch mode — #${watchConfig.name}]\n${behaviorLine}Respond with [NO_REPLY] if no action needed.\n\n${text}`;
-      }
+      // Build watch behavior for system prompt injection (if watched channel)
+      const watchBehavior = watchConfig?.behavior
+        ? { channel: watchConfig.name, behavior: watchConfig.behavior }
+        : undefined;
 
       log.info(
         {
@@ -524,7 +535,7 @@ class SlackChannel implements Channel {
 
       let state: ChatState;
       try {
-        state = await getState(key);
+        state = await getState(key, watchBehavior);
       } catch (err) {
         log.error({ err, key }, "slack: failed to create chat engine");
         return;
