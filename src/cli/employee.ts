@@ -126,10 +126,20 @@ export async function employeeCommand(): Promise<void> {
       break;
     }
 
-    default:
+    default: {
+      // If subcommand matches an employee name, start chat
+      if (subcommand) {
+        const emp = getEmployee(subcommand);
+        if (emp) {
+          const { startRepl } = await import("../chat/repl");
+          await startRepl("continue", undefined, { employee: emp.name });
+          break;
+        }
+      }
       if (subcommand) console.error(`Unknown subcommand: ${subcommand}`);
       console.log(HELP);
       process.exit(subcommand ? 1 : 0);
+    }
   }
 }
 
