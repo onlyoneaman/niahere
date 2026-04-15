@@ -22,9 +22,12 @@ import type {
 import { truncate, formatToolUse } from "../utils/format-activity";
 import { finalizeSession, cancelPending } from "../core/finalizer";
 import { log } from "../utils/log";
+import { isRetryableApiError, sleep } from "../utils/retry";
 
 const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const LONG_RUNNING_WARN = 30 * 60 * 1000; // 30 minutes
+const MAX_SEND_RETRIES = 2;
+const SEND_RETRY_DELAYS = [3_000, 8_000];
 
 interface SDKUserMessage {
   type: "user";
@@ -193,6 +196,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
   let longRunningWarned = false;
   let alive = false;
   let messageCount = 0;
+  let retryCount = 0;
 
   function clearIdleTimer() {
     if (idleTimer) {
@@ -427,6 +431,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
 
               await ActiveEngine.unregister(room);
               clearLongRunningTimer();
+              retryCount = 0;
               pending.resolve({
                 result: resultText,
                 costUsd,
@@ -437,12 +442,44 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
               resetIdleTimer();
             } else {
               const errors = msg.errors;
-              const errorText = `[error] ${errors?.join(", ") || "unknown error"}`;
-              await ActiveEngine.unregister(room);
-              clearLongRunningTimer();
-              pending.resolve({ result: errorText, costUsd: 0, turns: 0 });
-              pending = null;
-              resetIdleTimer();
+              const rawError = errors?.join(", ") || "unknown error";
+
+              // Retry on transient API errors (500, overloaded, rate-limit)
+              if (retryCount < MAX_SEND_RETRIES && isRetryableApiError(rawError)) {
+                const delay = SEND_RETRY_DELAYS[retryCount] ?? 8_000;
+                retryCount++;
+                log.warn(
+                  { room, attempt: retryCount, error: rawError, delayMs: delay },
+                  "retrying chat send after transient API error",
+                );
+                const retryPending = pending;
+                pending = null;
+                clearLongRunningTimer();
+
+                // Tear down current query and restart after delay
+                teardown();
+                await sleep(delay);
+                startQuery();
+
+                // Re-send: the user message is already saved in DB, so mark it saved
+                pending = {
+                  ...retryPending,
+                  userSaved: true,
+                  accumulatedText: "",
+                  accumulatedThinking: "",
+                  lastThinkingLine: "",
+                };
+                retryPending.onActivity?.("retrying after API error...");
+                stream!.push(retryPending.userMessage);
+              } else {
+                const errorText = `[error] ${rawError}`;
+                await ActiveEngine.unregister(room);
+                clearLongRunningTimer();
+                pending.resolve({ result: errorText, costUsd: 0, turns: 0 });
+                pending = null;
+                retryCount = 0;
+                resetIdleTimer();
+              }
             }
           }
         }

@@ -16,6 +16,7 @@ import { getMcpServers } from "../mcp";
 import { ActiveEngine } from "../db/models";
 import { getPaths } from "../utils/paths";
 import { log } from "../utils/log";
+import { isRetryableApiError, sleep } from "../utils/retry";
 
 export type ActivityCallback = (line: string) => void;
 
@@ -341,11 +342,24 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
     // Model priority: job.model > agent.model > config.model
     const resolvedModel = job.model || agentModel || config.model;
 
+    const MAX_API_RETRIES = 2;
+    const RETRY_DELAYS = [3_000, 8_000]; // 3s, then 8s
+
     if (config.runner === "codex") {
       const fullPrompt = `${systemPrompt}\n\n---\n\n${jobPrompt}`;
       output = await runJobWithCodex(fullPrompt, cwd, resolvedModel);
     } else {
       output = await runJobWithClaude(systemPrompt, jobPrompt, cwd, onActivity, resolvedModel);
+
+      for (let attempt = 0; attempt < MAX_API_RETRIES && output.error && isRetryableApiError(output.error); attempt++) {
+        const delay = RETRY_DELAYS[attempt] ?? 8_000;
+        log.warn(
+          { job: job.name, attempt: attempt + 1, error: output.error, delayMs: delay },
+          "retrying after transient API error",
+        );
+        await sleep(delay);
+        output = await runJobWithClaude(systemPrompt, jobPrompt, cwd, onActivity, resolvedModel);
+      }
     }
 
     const duration_ms = Math.round(performance.now() - startMs);
