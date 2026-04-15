@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.68] - 2026-04-15
+
+### Fixed
+
+- **Retry transient API errors** — daemon now retries up to 2× (3s + 8s backoff) on Claude API 500s, overloaded, and rate-limit errors. Applies to both scheduled jobs and live chat sessions. Previously a single 500 would surface as `[error] unknown error` with no recovery attempt.
+
 ## [0.2.67] - 2026-04-15
 
 ### Fixed
