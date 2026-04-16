@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`svg-animations` skill** — covers SVG fundamentals (viewBox, shape primitives, paths, gradients/masks/filters), CSS animations on SVG (stroke drawing, `d` property morphing), SMIL animations (`<animate>`, `<animateTransform>`, `<animateMotion>`, timing/easing), and ready-to-use recipes (loading spinner, checkmark, hamburger-to-X, gradient shift, breathing pulse, liquid wave). Adapted from [supermemoryai/skills](https://github.com/supermemoryai/skills/blob/main/svg-animations/SKILL.md).
+
 ### Changed
 
 - **soul.md — finishing over handing off** — added a 5th "Things You Care About" bullet making the quality bar explicit: "mostly done" and "table this for later" are failure modes, answer is the finished thing not a plan, no workarounds when the real fix is within reach, scope stays inside what was asked. Inspired by Garry Tan's "Boil the ocean" principle, adapted to Nia's voice and scoped to prevent drive-by expansion.
