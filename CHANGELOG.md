@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.69] - 2026-04-17
+
 ### Added
 
 - **`svg-animations` skill** — SVG fundamentals, CSS + SMIL animations, and common recipes (spinner, checkmark, morphing icons, waves). Adapted from [supermemoryai/skills](https://github.com/supermemoryai/skills/blob/main/svg-animations/SKILL.md).
@@ -9,6 +11,11 @@
 ### Changed
 
 - **soul.md — finishing over handing off** — new "Things You Care About" bullet: "mostly done" is a failure mode, no workarounds when the real fix is in reach, stay inside the given scope.
+
+### Fixed
+
+- **Slack attachment forwarding context** — inbound Slack files now include local path hints in model context so `send_message` with `media_path` can resend them, and DM messages now carry `[user:ID]` prefixes for consistent owner checks.
+- **Finalization enqueue dedupe under uniqueness constraints** — `finalizeSession` now uses conflict-safe inserts (`ON CONFLICT DO NOTHING`) so concurrent enqueue calls don't fail when a pending-row unique index is present.
 
 ## [0.2.68] - 2026-04-15
 
