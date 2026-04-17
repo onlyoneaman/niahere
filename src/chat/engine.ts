@@ -48,6 +48,24 @@ export function buildContentBlocks(text: string, attachments?: Attachment[]): Me
       }
   > = [];
 
+  const pathHints = attachments
+    .map((att, idx) => {
+      if (!att.sourcePath) return "";
+      const label = att.filename || `${att.type}-${idx + 1}`;
+      return `- ${idx + 1}. ${label} -> ${att.sourcePath}`;
+    })
+    .filter(Boolean);
+
+  if (pathHints.length > 0) {
+    blocks.push({
+      type: "text",
+      text:
+        "[Attachment local paths]\n" +
+        "If you need to resend/forward an attachment, call send_message with media_path set to one of these absolute paths.\n" +
+        pathHints.join("\n"),
+    });
+  }
+
   for (const att of attachments) {
     if (att.type === "image") {
       blocks.push({

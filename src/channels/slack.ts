@@ -264,7 +264,13 @@ class SlackChannel implements Channel {
     }
 
     function loadCached(entry: CachedFile): Attachment {
-      return { type: entry.type, data: readFileSync(entry.path), mimeType: entry.mimeType, filename: entry.filename };
+      return {
+        type: entry.type,
+        data: readFileSync(entry.path),
+        mimeType: entry.mimeType,
+        filename: entry.filename,
+        sourcePath: entry.path,
+      };
     }
 
     async function downloadSlackFile(url: string): Promise<Buffer> {
@@ -333,7 +339,7 @@ class SlackChannel implements Channel {
           const entry: CachedFile = { path: diskPath, type: attType, mimeType: finalMime, filename: file.name };
           fileIndex.set(file.url_private_download, entry);
 
-          attachments.push({ type: attType, data: finalData, mimeType: finalMime, filename: file.name });
+          attachments.push({ type: attType, data: finalData, mimeType: finalMime, filename: file.name, sourcePath: diskPath });
         } catch (err) {
           log.warn({ err, file: file.name }, "failed to download slack file");
         }
@@ -432,11 +438,6 @@ class SlackChannel implements Channel {
         text = text.replace(new RegExp(`<@${botUserId}>`, "g"), "").trim();
       }
 
-      // Prefix with user ID so the agent knows who's talking
-      if (!isDm && msg.user) {
-        text = `[user:${msg.user}] ${text}`;
-      }
-
       // Auto-register DM user for outbound messages
       if (isDm && !self.dmUserId && msg.user) {
         self.dmUserId = msg.user;
@@ -470,6 +471,11 @@ class SlackChannel implements Channel {
 
       if (!text && (!attachments || attachments.length === 0)) return;
       if (!text) text = attachments?.some((a) => a.type === "image") ? "What's in this image?" : "Here's a file.";
+
+      // Prefix with user ID so the agent can reliably enforce owner checks in both channels and DMs.
+      if (msg.user) {
+        text = `[user:${msg.user}] ${text}`;
+      }
 
       // When replying in a thread, fetch thread context so Nia can see the full conversation
       if (msg.thread_ts) {

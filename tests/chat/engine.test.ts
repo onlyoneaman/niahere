@@ -127,4 +127,41 @@ describe("buildContentBlocks", () => {
       expect(blocks[0].source.media_type).toBe(mime);
     }
   });
+
+  test("adds local path hints when attachment source paths are present", () => {
+    const attachment: Attachment = {
+      type: "image",
+      data: Buffer.from("img"),
+      mimeType: "image/png",
+      filename: "photo.png",
+      sourcePath: "/tmp/nia-attachment-photo.png",
+    };
+
+    const result = buildContentBlocks("forward this", [attachment]);
+    const blocks = result as any[];
+
+    expect(blocks).toHaveLength(3);
+    expect(blocks[0].type).toBe("text");
+    expect(blocks[0].text).toContain("[Attachment local paths]");
+    expect(blocks[0].text).toContain("/tmp/nia-attachment-photo.png");
+    expect(blocks[1].type).toBe("image");
+    expect(blocks[2].type).toBe("text");
+    expect(blocks[2].text).toBe("forward this");
+  });
+
+  test("does not add local path hints when source paths are absent", () => {
+    const attachment: Attachment = {
+      type: "image",
+      data: Buffer.from("img"),
+      mimeType: "image/png",
+      filename: "photo.png",
+    };
+
+    const result = buildContentBlocks("describe", [attachment]);
+    const blocks = result as any[];
+
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0].type).toBe("image");
+    expect(blocks[1].type).toBe("text");
+  });
 });

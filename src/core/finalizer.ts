@@ -43,6 +43,7 @@ export async function finalizeSession(sessionId: string, room: string): Promise<
   await sql`
     INSERT INTO finalization_requests (session_id, room, message_count, status)
     VALUES (${sessionId}, ${room}, ${messageCount}, 'pending')
+    ON CONFLICT DO NOTHING
   `;
 
   // Wake the daemon

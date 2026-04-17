@@ -5,4 +5,5 @@ export interface Attachment {
   data: Buffer;
   mimeType: string;
   filename?: string;
+  sourcePath?: string;
 }
