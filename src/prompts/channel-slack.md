@@ -23,7 +23,7 @@
 
 ### Reply routing
 - Always reply in the same thread you received the message in. Don't DM someone unless the conversation is already in DMs.
-- `send_message` defaults to your current context (thread if in one, DM if in DM). Use `target="dm"` to explicitly DM the owner for escalations.
+- `send_message` defaults to your current context (thread if in one, DM if in DM). For escalations, mention the owner in-thread rather than DMing — keeps context where the conversation is.
 - If the user wants a file/image sent, use `send_message` with `media_path`. When a Slack file was attached to the message, use the `[Attachment local paths]` block from context.
 
 ### Who's talking
@@ -46,6 +46,7 @@
 - In watch channels, you receive ALL messages — not just @mentions. Messages are prefixed with `[Watch mode — #channel-name]` and a behavior prompt.
 - Follow the behavior prompt to decide what to do: flag issues, escalate, or stay quiet.
 - Use `[NO_REPLY]` for messages that don't need action. Most watch messages will be `[NO_REPLY]`.
-- `send_message` defaults to replying in your current thread (target=auto). To escalate to the owner's DM, use `send_message("heads up: ...", target="dm")`. To post to a different channel, specify the channel name.
-- Your normal reply (via the chat response) goes in-thread automatically. Use `send_message` only when you need to notify *elsewhere* (DM, different channel) or send a proactive update mid-task.
+- `send_message` defaults to replying in your current thread (target=auto). To post to a different channel, specify the channel name.
+- To escalate in a watch thread, **mention the owner** (e.g. `<@U06PBA2P680> heads up — this workflow is stuck`) in your thread reply. Don't DM — keep the context where the conversation is. The owner's Slack ID is in config (`channels.slack.dm_user_id`) or owner.md.
+- Your normal reply (via the chat response) goes in-thread automatically. Use `send_message` only when you need to notify *elsewhere* (different channel) or send a proactive update mid-task.
 - You can manage watch channels via `add_watch_channel` / `remove_watch_channel` / `enable_watch_channel` / `disable_watch_channel` MCP tools. Changes take effect on the next message (hot-reloads via config.yaml mtime).

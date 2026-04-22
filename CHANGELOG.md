@@ -11,6 +11,10 @@
 - **Room index query collision** — `getLatestRoomIndex` and `getRecentSummaries` now use regex (`^prefix-\d+$`) instead of `LIKE` to prevent flat DM rooms from accidentally matching thread DM rooms. Regex metacharacters in room prefixes (e.g. `.` in Slack timestamps) are escaped.
 - **`send_message` thread routing** — `send_message` now defaults to replying in the current Slack thread when called from a watch/chat session (instead of always DMing). New `target` param: `auto` (default — thread if in one, else DM), `dm` (always DM), `thread` (explicit thread reply). Slack channel/thread context flows through `McpSourceContext`.
 
+### Changed
+
+- **Escalation style** — watch mode escalations now @mention the owner in-thread instead of sending a separate DM. Keeps context where the conversation is.
+
 ## [0.2.69] - 2026-04-17
 
 ### Added
