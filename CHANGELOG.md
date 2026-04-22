@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **DM context loss** — job/watch notifications sent via `send_message` are now saved to the DM session's DB room (previously silently skipped when `channel_id` was unset and only `dm_user_id` was configured). Auto-creates a backing session if none exists.
+- **DM thread awareness** — replying in a Slack DM thread to a bot message now creates a scoped session for that thread (with Slack thread context), instead of routing to the flat DM session that had no knowledge of the original message.
+- **Flat DM reply context** — top-level DM replies now see recent job/watch notifications prepended per-message, so the bot knows what it recently sent even without threading.
+- **MCP source attribution** — `send_message` calls from jobs now carry `source: "job:{name}"` metadata automatically via the MCP factory, not reliant on model behavior.
+- **Room index query collision** — `getLatestRoomIndex` and `getRecentSummaries` now use regex (`^prefix-\d+$`) instead of `LIKE` to prevent flat DM rooms from accidentally matching thread DM rooms. Regex metacharacters in room prefixes (e.g. `.` in Slack timestamps) are escaped.
+
 ## [0.2.69] - 2026-04-17
 
 ### Added

@@ -126,7 +126,7 @@ export async function startRepl(
 
   // Initialize MCP server factory if not already set (standalone chat mode)
   if (!getMcpServers()) {
-    setMcpFactory(() => ({ nia: createNiaMcpServer() }));
+    setMcpFactory((ctx) => ({ nia: createNiaMcpServer(ctx) }));
   }
 
   // Determine session to use

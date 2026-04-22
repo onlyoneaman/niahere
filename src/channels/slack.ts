@@ -446,7 +446,9 @@ class SlackChannel implements Channel {
       }
 
       // Build session key:
-      // - DMs: flat, one session per user → slack-dm-{userId}
+      // - DMs: flat by default, threaded if replying in a thread
+      //   - Flat: slack-dm-{userId}
+      //   - Threaded: slack-dm-{userId}-t{threadTs} (scoped to that thread)
       // - Channels: per-thread → slack-{channelName}-t{threadTs}
       //   - Top-level @mention starts a new thread (uses msg.ts as thread root)
       //   - Reply in thread continues that thread's session
@@ -454,8 +456,13 @@ class SlackChannel implements Channel {
       let replyThreadTs: string | undefined;
 
       if (isDm) {
-        key = `dm-${msg.user}`;
-        // DMs stay flat, no threading
+        if (msg.thread_ts) {
+          // Thread reply in DM — scoped session for this thread
+          key = `dm-${msg.user}-t${msg.thread_ts}`;
+          replyThreadTs = msg.thread_ts;
+        } else {
+          key = `dm-${msg.user}`;
+        }
       } else {
         const channelName = await resolveChannelName(app, msg.channel);
         const threadTs = msg.thread_ts || msg.ts; // existing thread or start new one
@@ -548,6 +555,25 @@ class SlackChannel implements Channel {
       }
 
       withLock(key, async () => {
+        // For flat DM messages (no thread), prepend recent notifications so
+        // the bot knows what jobs/watches recently sent to this user.
+        if (isDm && !msg.thread_ts) {
+          try {
+            const dmPrefix = `slack-dm-${msg.user}`;
+            const notifications = await Message.getRecentNotifications(dmPrefix);
+            if (notifications.length > 0) {
+              const lines = notifications.map((n) => {
+                const ago = relativeTime(new Date(n.createdAt), new Date());
+                const src = n.source ? ` via ${n.source}` : "";
+                return `- (${ago}${src}): ${n.content}`;
+              });
+              text = `[Recent notifications you sent to the user]\n${lines.join("\n")}\n\n[Current message]\n${text}`;
+            }
+          } catch (err) {
+            log.warn({ err }, "slack: failed to load recent notifications for DM context");
+          }
+        }
+
         // Add thinking reaction inside the lock so cleanup is guaranteed
         await client.reactions
           .add({ channel: msg.channel, timestamp: msg.ts, name: "thinking_face" })

@@ -12,7 +12,7 @@ import { buildEmployeePrompt } from "../chat/employee-prompt";
 import { getEmployee } from "./employees";
 import { scanAgents } from "./agents";
 import { truncate, formatToolUse } from "../utils/format-activity";
-import { getMcpServers } from "../mcp";
+import { getMcpServers, type McpSourceContext } from "../mcp";
 import { ActiveEngine } from "../db/models";
 import { getPaths } from "../utils/paths";
 import { log } from "../utils/log";
@@ -97,6 +97,7 @@ export async function runJobWithClaude(
   cwd: string,
   onActivity?: ActivityCallback,
   model?: string,
+  sourceCtx?: McpSourceContext,
 ): Promise<RunnerOutput> {
   const sessionId = randomUUID();
 
@@ -121,7 +122,7 @@ export async function runJobWithClaude(
     options.model = model;
   }
 
-  const mcpServers = getMcpServers();
+  const mcpServers = getMcpServers(sourceCtx);
   if (mcpServers) {
     options.mcpServers = mcpServers;
   }
@@ -345,11 +346,13 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
     const MAX_API_RETRIES = 2;
     const RETRY_DELAYS = [3_000, 8_000]; // 3s, then 8s
 
+    const jobSourceCtx: McpSourceContext = { jobName: job.name, channel: "system" };
+
     if (config.runner === "codex") {
       const fullPrompt = `${systemPrompt}\n\n---\n\n${jobPrompt}`;
       output = await runJobWithCodex(fullPrompt, cwd, resolvedModel);
     } else {
-      output = await runJobWithClaude(systemPrompt, jobPrompt, cwd, onActivity, resolvedModel);
+      output = await runJobWithClaude(systemPrompt, jobPrompt, cwd, onActivity, resolvedModel, jobSourceCtx);
 
       for (let attempt = 0; attempt < MAX_API_RETRIES && output.error && isRetryableApiError(output.error); attempt++) {
         const delay = RETRY_DELAYS[attempt] ?? 8_000;
@@ -358,7 +361,7 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
           "retrying after transient API error",
         );
         await sleep(delay);
-        output = await runJobWithClaude(systemPrompt, jobPrompt, cwd, onActivity, resolvedModel);
+        output = await runJobWithClaude(systemPrompt, jobPrompt, cwd, onActivity, resolvedModel, jobSourceCtx);
       }
     }
 

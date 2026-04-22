@@ -1,5 +1,10 @@
 import { getSql } from "../connection";
 
+/** Escape regex metacharacters so a literal string can be used in a PostgreSQL ~ pattern. */
+export function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export interface SessionSummary {
   id: string;
   room: string;
@@ -98,10 +103,11 @@ export async function getRecentSummaries(room: string, limit = 3): Promise<Array
   // Match summaries from sessions in the same channel (e.g. slack-dm-U...-*)
   // by extracting the room prefix (everything before the last -N index)
   const prefix = room.replace(/-\d+$/, "");
+  const pattern = `^${escapeRegex(prefix)}-\\d+$`;
   const rows = await sql`
     SELECT summary, updated_at
     FROM sessions
-    WHERE room LIKE ${prefix + "-%"}
+    WHERE room ~ ${pattern}
       AND summary IS NOT NULL
       AND id != ${""}
     ORDER BY updated_at DESC
@@ -167,9 +173,10 @@ export async function accumulateMetadata(id: string, resultMeta: Record<string, 
 
 export async function getLatestRoomIndex(prefix: string): Promise<number> {
   const sql = getSql();
+  const pattern = `^${escapeRegex(prefix)}-\\d+$`;
   const rows = await sql`
     SELECT room FROM sessions
-    WHERE room LIKE ${prefix + "-%"}
+    WHERE room ~ ${pattern}
     ORDER BY updated_at DESC
     LIMIT 1
   `;

@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, appendFileSync, existsSync } from "fs";
 import type { ScheduleType } from "../types";
 import { basename, join } from "path";
+import { randomUUID } from "crypto";
 import { Job, Message, Session } from "../db/models";
 import { computeInitialNextRun } from "../core/scheduler";
 import { getConfig, readRawConfig, updateRawConfig, writeRawConfig } from "../utils/config";
@@ -10,6 +11,7 @@ import { log } from "../utils/log";
 import { classifyMime } from "../utils/attachment";
 import { scanAgents } from "../core/agents";
 import { listEmployeesForMcp } from "../core/employees";
+import type { McpSourceContext } from "./index";
 
 export async function listJobs(): Promise<string> {
   const jobs = await Job.list();
@@ -219,17 +221,68 @@ async function sendMediaDirect(target: string, data: Buffer, mimeType: string, f
   throw new Error(`Channel "${target}" not configured`);
 }
 
-export async function sendMessage(text: string, channelName?: string, mediaPath?: string): Promise<string> {
+export async function sendMessage(text: string, channelName?: string, mediaPath?: string, sourceCtx?: McpSourceContext): Promise<string> {
   const config = getConfig();
   const target = channelName || config.channels.default;
 
   // Use started channel if available (daemon), otherwise call API directly (CLI)
   const channel = getChannel(target);
 
+  // Compute room prefix for DB storage BEFORE sending, so we can save a pending record first
+  let roomPrefix: string | undefined;
+  if (target === "telegram") {
+    const chatId = config.channels.telegram.chat_id;
+    if (chatId) roomPrefix = `tg-${chatId}`;
+  } else if (target === "slack") {
+    const channelId = config.channels.slack.channel_id;
+    const dmUserId = config.channels.slack.dm_user_id;
+    if (channelId) {
+      roomPrefix = `slack-${channelId}`;
+    } else if (dmUserId) {
+      roomPrefix = `slack-dm-${dmUserId}`;
+    }
+  }
+
+  // Save pending notification to DB before sending (avoids race with fast replies)
+  let messageId: number | undefined;
+  if (roomPrefix) {
+    try {
+      const idx = await Session.getLatestRoomIndex(roomPrefix);
+      const fullRoom = `${roomPrefix}-${idx}`;
+      let sessionId = await Session.getLatest(fullRoom);
+
+      // Auto-create a backing session if none exists (e.g. first proactive DM)
+      if (!sessionId) {
+        sessionId = randomUUID();
+        await Session.create(sessionId, fullRoom);
+      }
+
+      const content = mediaPath ? `${text} [media: ${basename(mediaPath)}]` : text;
+      const source = sourceCtx?.jobName ? `job:${sourceCtx.jobName}` : sourceCtx?.channel || undefined;
+      const metadata: Record<string, unknown> = { kind: "notification" };
+      if (source) metadata.source = source;
+
+      messageId = await Message.save({
+        sessionId,
+        room: fullRoom,
+        sender: "nia",
+        content,
+        isFromAgent: true,
+        deliveryStatus: "pending",
+        metadata,
+      });
+    } catch (err) {
+      log.warn({ err, target, roomPrefix }, "sendMessage: failed to save pending notification to DB");
+    }
+  }
+
   try {
     // Handle media attachment if provided
     if (mediaPath) {
-      if (!existsSync(mediaPath)) return `Failed to send: file not found: ${mediaPath}`;
+      if (!existsSync(mediaPath)) {
+        if (messageId) await Message.updateDeliveryStatus(messageId, "failed").catch(() => {});
+        return `Failed to send: file not found: ${mediaPath}`;
+      }
       const data = readFileSync(mediaPath);
       const mimeType = guessMime(mediaPath);
       const filename = basename(mediaPath);
@@ -256,36 +309,17 @@ export async function sendMessage(text: string, channelName?: string, mediaPath?
       }
     }
 
-    // Store in messages table (best-effort)
-    try {
-      let room: string | undefined;
-      if (target === "telegram") {
-        const chatId = config.channels.telegram.chat_id;
-        if (chatId) room = `tg-${chatId}`;
-      } else if (target === "slack") {
-        const channelId = config.channels.slack.channel_id;
-        if (channelId) room = `slack-${channelId}`;
-      }
-
-      if (room) {
-        const idx = await Session.getLatestRoomIndex(room);
-        const fullRoom = `${room}-${idx}`;
-        const sessionId = await Session.getLatest(fullRoom);
-        if (sessionId) {
-          const content = mediaPath ? `${text} [media: ${basename(mediaPath)}]` : text;
-          await Message.save({
-            sessionId,
-            room: fullRoom,
-            sender: "nia",
-            content,
-            isFromAgent: true,
-          });
-        }
-      }
-    } catch {}
+    // Mark as sent
+    if (messageId) {
+      await Message.updateDeliveryStatus(messageId, "sent").catch(() => {});
+    }
 
     return mediaPath ? "Message with media sent." : "Message sent.";
   } catch (err) {
+    // Mark as failed
+    if (messageId) {
+      await Message.updateDeliveryStatus(messageId, "failed").catch(() => {});
+    }
     const msg = err instanceof Error ? err.message : String(err);
     return `Failed to send: ${msg}`;
   }

@@ -263,7 +263,7 @@ export async function runDaemon(): Promise<void> {
   }
 
   // Initialize MCP server factory (each query gets its own Protocol instance)
-  setMcpFactory(() => ({ nia: createNiaMcpServer() }));
+  setMcpFactory((ctx) => ({ nia: createNiaMcpServer(ctx) }));
   log.info("MCP server factory initialized");
 
   // Register and start channels

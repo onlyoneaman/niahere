@@ -1,8 +1,9 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import * as handlers from "./tools";
+import type { McpSourceContext } from "./index";
 
-export function createNiaMcpServer() {
+export function createNiaMcpServer(sourceCtx?: McpSourceContext) {
   return createSdkMcpServer({
     name: "nia",
     version: "0.1.0",
@@ -150,7 +151,7 @@ export function createNiaMcpServer() {
           content: [
             {
               type: "text" as const,
-              text: await handlers.sendMessage(args.text, args.channel, args.media_path),
+              text: await handlers.sendMessage(args.text, args.channel, args.media_path, sourceCtx),
             },
           ],
         }),
