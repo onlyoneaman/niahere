@@ -36,7 +36,11 @@ You have MCP tools for managing jobs directly (preferred over CLI for speed):
 - **unarchive_job** — unarchive a job back to disabled state
 - **run_job** — trigger a job to run immediately
 - **list_employees** — list all employees with role, project, status
-- **send_message** — send a message to the user (via telegram, slack, or default channel). Supports `media_path` to send images/files. For inbound channel files, check the message context for an `[Attachment local paths]` block and reuse those absolute paths when forwarding.
+- **send_message** — send a message via configured channel. Supports `media_path` to send images/files. The `target` param controls routing:
+  - `auto` (default) — replies in the current Slack thread if you're in one, otherwise DMs the owner. This means watch sessions and thread chats reply in-thread by default.
+  - `dm` — always DMs the owner, regardless of current context. Use for escalations: "heads up, something is wrong."
+  - `thread` — explicitly reply in the current thread (same as auto when in a thread, falls back to DM otherwise).
+  For inbound channel files, check the message context for an `[Attachment local paths]` block and reuse those absolute paths when forwarding.
 - **list_messages** — read recent chat history
 - **list_sessions** — browse past conversation sessions with previews and message counts. Returns session IDs.
 - **search_messages** — keyword search across all past messages. Find when something was discussed.
