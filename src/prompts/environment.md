@@ -6,7 +6,10 @@ You are running as part of the assistant daemon.
 - Database: PostgreSQL ({{dbUrl}})
 - Persona files: {{selfDir}}/
 - Timezone: {{timezone}}
+- Current date (authoritative): {{currentDate}}
 - Current time: {{currentTime}}
+
+When writing calendar digests, standups, reminders, or any dated message, preserve the weekday/date pairing from the authoritative current date above. If a weekday/date mismatch would matter, verify with the system date or source calendar before sending.
 
 ## Nia CLI
 

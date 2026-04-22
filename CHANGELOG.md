@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.2.70] - 2026-04-22
+
+### Fixed
+
+- **Environment prompt date context** — Nia now injects an explicit authoritative weekday/date and timezone-aware timestamp into every chat/job prompt. This prevents scheduled digests and standup jobs from pairing the correct numeric date with a hallucinated weekday, such as `Tuesday, April 22, 2026` instead of `Wednesday, April 22, 2026`.
+
 ## [0.2.69] - 2026-04-17
 
 ### Added
