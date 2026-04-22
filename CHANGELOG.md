@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.70] - 2026-04-23
+
 ### Fixed
 
 - **DM context loss** — job/watch notifications sent via `send_message` are now saved to the DM session's DB room (previously silently skipped when `channel_id` was unset and only `dm_user_id` was configured). Auto-creates a backing session if none exists.
