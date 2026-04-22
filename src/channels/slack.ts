@@ -35,6 +35,14 @@ class SlackChannel implements Channel {
     if (result.ts) this.outboundTs.add(result.ts);
   }
 
+  async sendToThread(channelId: string, text: string, threadTs?: string): Promise<void> {
+    if (!this.app) throw new Error("Slack not started");
+    const opts: Record<string, unknown> = { channel: channelId, text };
+    if (threadTs) opts.thread_ts = threadTs;
+    const result = await this.app.client.chat.postMessage(opts as any);
+    if (result.ts) this.outboundTs.add(result.ts);
+  }
+
   async sendMedia(data: Buffer, mimeType: string, filename?: string): Promise<void> {
     if (!this.app) throw new Error("Slack not started");
     const target = this.defaultChannelId || this.dmUserId;
@@ -79,7 +87,12 @@ class SlackChannel implements Channel {
       return `slack-${key}-${index}`;
     }
 
-    async function getState(key: string, watchBehavior?: { channel: string; behavior: string }): Promise<ChatState> {
+    interface SlackContext {
+      slackChannelId?: string;
+      slackThreadTs?: string;
+    }
+
+    async function getState(key: string, watchBehavior?: { channel: string; behavior: string }, slackCtx?: SlackContext): Promise<ChatState> {
       let state = chats.get(key);
       if (!state) {
         const prefix = roomPrefix(key);
@@ -89,7 +102,7 @@ class SlackChannel implements Channel {
           room,
           channel: "slack",
           resume: true,
-          mcpServers: getMcpServers(),
+          mcpServers: getMcpServers({ channel: "slack", room, ...slackCtx }),
           watchBehavior,
         });
         state = { engine, roomIndex: idx, lock: Promise.resolve() };
@@ -98,7 +111,7 @@ class SlackChannel implements Channel {
       return state;
     }
 
-    async function restartChat(key: string, watchBehavior?: { channel: string; behavior: string }): Promise<ChatState> {
+    async function restartChat(key: string, watchBehavior?: { channel: string; behavior: string }, slackCtx?: SlackContext): Promise<ChatState> {
       const old = chats.get(key);
       if (old) old.engine.close();
 
@@ -116,7 +129,7 @@ class SlackChannel implements Channel {
         room,
         channel: "slack",
         resume: false,
-        mcpServers: getMcpServers(),
+        mcpServers: getMcpServers({ channel: "slack", room, ...slackCtx }),
         watchBehavior,
       });
       const state: ChatState = { engine, roomIndex: newIdx, lock: Promise.resolve() };
@@ -547,8 +560,12 @@ class SlackChannel implements Channel {
       );
 
       let state: ChatState;
+      const slackCtx: SlackContext = {
+        slackChannelId: msg.channel,
+        slackThreadTs: replyThreadTs,
+      };
       try {
-        state = await getState(key, watchBehavior);
+        state = await getState(key, watchBehavior, slackCtx);
       } catch (err) {
         log.error({ err, key }, "slack: failed to create chat engine");
         return;

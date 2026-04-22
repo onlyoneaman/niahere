@@ -6,6 +6,10 @@ export interface McpSourceContext {
   channel?: string;
   /** The room the calling engine is operating in */
   room?: string;
+  /** Slack channel ID where the current session lives (for thread replies) */
+  slackChannelId?: string;
+  /** Slack thread timestamp (for replying back to the current thread) */
+  slackThreadTs?: string;
 }
 
 /** Factory for per-query MCP servers — each query gets its own Protocol instance. */

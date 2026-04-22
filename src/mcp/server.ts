@@ -138,7 +138,7 @@ export function createNiaMcpServer(sourceCtx?: McpSourceContext) {
       ),
       tool(
         "send_message",
-        "Send a message to the user via configured channel (telegram, slack). Uses default_channel from config if not specified. Can also send a file/image by providing media_path.",
+        "Send a message via configured channel. By default sends to the current context (if in a Slack thread, replies there; otherwise DMs the owner). Use target='dm' to force a DM regardless of context, or target='thread' to explicitly reply in the current thread.",
         {
           text: z.string().describe("Message text to send"),
           channel: z.string().optional().describe("Channel name (telegram, slack). Omit to use default."),
@@ -146,12 +146,16 @@ export function createNiaMcpServer(sourceCtx?: McpSourceContext) {
             .string()
             .optional()
             .describe("Absolute path to a file to send as an attachment (image, document)"),
+          target: z
+            .enum(["auto", "dm", "thread"])
+            .default("auto")
+            .describe("Where to send: 'auto' (current context — thread if in one, else DM), 'dm' (always DM the owner), 'thread' (reply in current thread)"),
         },
         async (args) => ({
           content: [
             {
               type: "text" as const,
-              text: await handlers.sendMessage(args.text, args.channel, args.media_path, sourceCtx),
+              text: await handlers.sendMessage(args.text, args.channel, args.media_path, sourceCtx, args.target),
             },
           ],
         }),

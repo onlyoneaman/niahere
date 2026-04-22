@@ -9,6 +9,7 @@
 - **Flat DM reply context** — top-level DM replies now see recent job/watch notifications prepended per-message, so the bot knows what it recently sent even without threading.
 - **MCP source attribution** — `send_message` calls from jobs now carry `source: "job:{name}"` metadata automatically via the MCP factory, not reliant on model behavior.
 - **Room index query collision** — `getLatestRoomIndex` and `getRecentSummaries` now use regex (`^prefix-\d+$`) instead of `LIKE` to prevent flat DM rooms from accidentally matching thread DM rooms. Regex metacharacters in room prefixes (e.g. `.` in Slack timestamps) are escaped.
+- **`send_message` thread routing** — `send_message` now defaults to replying in the current Slack thread when called from a watch/chat session (instead of always DMing). New `target` param: `auto` (default — thread if in one, else DM), `dm` (always DM), `thread` (explicit thread reply). Slack channel/thread context flows through `McpSourceContext`.
 
 ## [0.2.69] - 2026-04-17
 

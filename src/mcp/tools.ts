@@ -221,25 +221,37 @@ async function sendMediaDirect(target: string, data: Buffer, mimeType: string, f
   throw new Error(`Channel "${target}" not configured`);
 }
 
-export async function sendMessage(text: string, channelName?: string, mediaPath?: string, sourceCtx?: McpSourceContext): Promise<string> {
+export async function sendMessage(text: string, channelName?: string, mediaPath?: string, sourceCtx?: McpSourceContext, target: "auto" | "dm" | "thread" = "auto"): Promise<string> {
   const config = getConfig();
-  const target = channelName || config.channels.default;
+  const channelTarget = channelName || config.channels.default;
 
   // Use started channel if available (daemon), otherwise call API directly (CLI)
-  const channel = getChannel(target);
+  const channel = getChannel(channelTarget);
 
-  // Compute room prefix for DB storage BEFORE sending, so we can save a pending record first
+  // Resolve send target: thread reply vs DM
+  // "auto" = if we have thread context, reply there; otherwise DM
+  // "dm" = always DM the owner
+  // "thread" = reply in current thread (falls back to DM if no thread context)
+  const hasThreadCtx = sourceCtx?.slackChannelId && sourceCtx?.slackThreadTs;
+  const useThread = (target === "auto" && hasThreadCtx) || (target === "thread" && hasThreadCtx);
+
+  // Compute room prefix for DB storage BEFORE sending
   let roomPrefix: string | undefined;
-  if (target === "telegram") {
+  if (channelTarget === "telegram") {
     const chatId = config.channels.telegram.chat_id;
     if (chatId) roomPrefix = `tg-${chatId}`;
-  } else if (target === "slack") {
-    const channelId = config.channels.slack.channel_id;
-    const dmUserId = config.channels.slack.dm_user_id;
-    if (channelId) {
-      roomPrefix = `slack-${channelId}`;
-    } else if (dmUserId) {
-      roomPrefix = `slack-dm-${dmUserId}`;
+  } else if (channelTarget === "slack") {
+    if (useThread && sourceCtx?.room) {
+      // Replying in-thread: use the source session's room prefix
+      roomPrefix = sourceCtx.room.replace(/-\d+$/, "");
+    } else {
+      const channelId = config.channels.slack.channel_id;
+      const dmUserId = config.channels.slack.dm_user_id;
+      if (channelId) {
+        roomPrefix = `slack-${channelId}`;
+      } else if (dmUserId) {
+        roomPrefix = `slack-dm-${dmUserId}`;
+      }
     }
   }
 
@@ -259,7 +271,7 @@ export async function sendMessage(text: string, channelName?: string, mediaPath?
 
       const content = mediaPath ? `${text} [media: ${basename(mediaPath)}]` : text;
       const source = sourceCtx?.jobName ? `job:${sourceCtx.jobName}` : sourceCtx?.channel || undefined;
-      const metadata: Record<string, unknown> = { kind: "notification" };
+      const metadata: Record<string, unknown> = { kind: useThread ? "thread_reply" : "notification" };
       if (source) metadata.source = source;
 
       messageId = await Message.save({
@@ -272,7 +284,7 @@ export async function sendMessage(text: string, channelName?: string, mediaPath?
         metadata,
       });
     } catch (err) {
-      log.warn({ err, target, roomPrefix }, "sendMessage: failed to save pending notification to DB");
+      log.warn({ err, channelTarget, roomPrefix }, "sendMessage: failed to save pending notification to DB");
     }
   }
 
@@ -290,22 +302,26 @@ export async function sendMessage(text: string, channelName?: string, mediaPath?
       if (channel?.sendMedia) {
         await channel.sendMedia(data, mimeType, filename);
       } else {
-        await sendMediaDirect(target, data, mimeType, filename);
+        await sendMediaDirect(channelTarget, data, mimeType, filename);
       }
 
       // Also send text if provided (as a separate message)
       if (text) {
-        if (channel?.sendMessage) {
+        if (useThread && channel?.sendToThread) {
+          await channel.sendToThread(sourceCtx!.slackChannelId!, text, sourceCtx!.slackThreadTs);
+        } else if (channel?.sendMessage) {
           await channel.sendMessage(text);
         } else {
-          await sendDirect(target, text);
+          await sendDirect(channelTarget, text);
         }
       }
     } else {
-      if (channel?.sendMessage) {
+      if (useThread && channel?.sendToThread) {
+        await channel.sendToThread(sourceCtx!.slackChannelId!, text, sourceCtx!.slackThreadTs);
+      } else if (channel?.sendMessage) {
         await channel.sendMessage(text);
       } else {
-        await sendDirect(target, text);
+        await sendDirect(channelTarget, text);
       }
     }
 
