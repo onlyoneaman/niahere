@@ -96,6 +96,8 @@ describe("getEnvironmentPrompt", () => {
   test("contains current timezone", () => {
     const prompt = getEnvironmentPrompt();
     expect(prompt).toContain("Timezone:");
+    expect(prompt).toContain("Current date (authoritative):");
+    expect(prompt).toContain("When writing calendar digests");
   });
 
   test("documents add_rule and add_memory tools", () => {

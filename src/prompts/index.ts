@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "fs";
 import { join, resolve } from "path";
 import { getPaths } from "../utils/paths";
 import { getConfig } from "../utils/config";
-import { localTime } from "../utils/time";
+import { formatPromptDate, formatPromptDateTime } from "../utils/time";
 import type { Mode } from "../types";
 
 const PROMPTS_DIR = resolve(import.meta.dir);
@@ -20,6 +20,7 @@ function interpolate(template: string, vars: Record<string, string>): string {
 export function getEnvironmentPrompt(): string {
   const paths = getPaths();
   const config = getConfig();
+  const now = new Date();
 
   // Build watch channel summary if Slack is configured with watch channels
   let slackWatch = "";
@@ -34,7 +35,8 @@ export function getEnvironmentPrompt(): string {
     dbUrl: config.database_url.replace(/\/\/.*@/, "//***@"),
     selfDir: paths.selfDir,
     timezone: config.timezone,
-    currentTime: localTime(),
+    currentDate: formatPromptDate(now, config.timezone),
+    currentTime: formatPromptDateTime(now, config.timezone),
     activeStart: config.activeHours.start,
     activeEnd: config.activeHours.end,
     model: config.model,
