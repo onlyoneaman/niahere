@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.2.73] - 2026-04-23
+
+### Fixed
+
+- **Standup weekday hallucination** — the daily-standup job prompt was telling the model to "get today's date" itself, causing it to compute (and hallucinate) the weekday despite the correct date being in the system prompt. Removed that step and updated the prompt to reference the authoritative date from the environment context instead.
+
 ## [0.2.71] - 2026-04-23
 
 ### Fixed
