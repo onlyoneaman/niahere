@@ -13,6 +13,7 @@ import { getEmployee } from "./employees";
 import { scanAgents } from "./agents";
 import { truncate, formatToolUse } from "../utils/format-activity";
 import { getMcpServers, type McpSourceContext } from "../mcp";
+import { formatPromptDate } from "../utils/time";
 import { ActiveEngine } from "../db/models";
 import { getPaths } from "../utils/paths";
 import { log } from "../utils/log";
@@ -333,9 +334,10 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
       systemPrompt = buildSystemPrompt("job");
     }
 
+    const authoritativeDate = formatPromptDate(new Date(), config.timezone);
     let jobPrompt = job.prompt
-      ? `Job: ${job.name} (schedule: ${job.schedule})\n\n${job.prompt}`
-      : `Job: ${job.name} (schedule: ${job.schedule})\n\nExecute your scheduled tasks.`;
+      ? `Job: ${job.name} (schedule: ${job.schedule})\nToday: ${authoritativeDate}\n\n${job.prompt}`
+      : `Job: ${job.name} (schedule: ${job.schedule})\nToday: ${authoritativeDate}\n\nExecute your scheduled tasks.`;
 
     // Working memory: give stateful jobs a persistent workspace
     jobPrompt += buildWorkingMemory(job.name, job.stateless);
