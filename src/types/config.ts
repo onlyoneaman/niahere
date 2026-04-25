@@ -19,7 +19,6 @@ export interface SlackWatchChannel {
 export interface SlackConfig {
   bot_token: string | null;
   app_token: string | null;
-  channel_id: string | null;
   dm_user_id: string | null;
   bot_user_id: string | null;
   bot_name: string | null;

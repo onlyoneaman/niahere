@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.2.74] - 2026-04-25
+
+### Fixed
+
+- **Slack token corruption** — `nia slack` used positional args (`nia slack <bot-token> <app-token> [channel-id]`), meaning any `nia slack <word>` would overwrite tokens in config.yaml. Now requires explicit `nia slack setup --bot-token=xoxb-... --app-token=xapp-...` with token format validation. Same fix applied to `nia telegram setup`.
+
+### Changed
+
+- **Removed `channel_id` from Slack config** — `nia send` now defaults to DM via `dm_user_id` instead of a configurable default channel. Old configs with `channel_id` are migrated automatically. Use `nia send --to <channel-id>` for channel posts.
+- **`nia send` supports channel and thread targeting** — new `--to <slack-channel-id>` and `--thread <ts>` flags for posting to specific channels or replying in threads from the CLI.
+
 ## [0.2.73] - 2026-04-23
 
 ### Fixed

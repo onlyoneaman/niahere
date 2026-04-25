@@ -100,7 +100,7 @@ async function notifyUser(message: string): Promise<void> {
   }
 
   const slToken = config.channels.slack.bot_token;
-  const slRecipient = config.channels.slack.dm_user_id || config.channels.slack.channel_id;
+  const slRecipient = config.channels.slack.dm_user_id;
   if (slToken && slRecipient) {
     try {
       const resp = await fetch("https://slack.com/api/chat.postMessage", {

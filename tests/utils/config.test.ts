@@ -159,4 +159,27 @@ describe("loadConfig", () => {
     const config = loadConfig();
     expect(config.channels.slack.watch).toBeNull();
   });
+
+  test("migrates legacy channel_id to dm_user_id", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, [
+      "channels:",
+      "  slack:",
+      "    bot_token: xoxb-test",
+      "    channel_id: U06PBA2P680",
+    ].join("\n"));
+    const config = loadConfig();
+    expect(config.channels.slack.dm_user_id).toBe("U06PBA2P680");
+  });
+
+  test("dm_user_id takes precedence over legacy channel_id", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, [
+      "channels:",
+      "  slack:",
+      "    bot_token: xoxb-test",
+      "    channel_id: C0A2F028R3N",
+      "    dm_user_id: U06PBA2P680",
+    ].join("\n"));
+    const config = loadConfig();
+    expect(config.channels.slack.dm_user_id).toBe("U06PBA2P680");
+  });
 });

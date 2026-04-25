@@ -23,7 +23,6 @@ const DEFAULTS: Config = {
     slack: {
       bot_token: null,
       app_token: null,
-      channel_id: null,
       dm_user_id: null,
       bot_user_id: null,
       bot_name: null,
@@ -124,9 +123,12 @@ export function loadConfig(): Config {
 
   const slAppToken = process.env.SLACK_APP_TOKEN || (typeof chSl.app_token === "string" ? chSl.app_token : null);
 
-  const slChannelId = process.env.SLACK_CHANNEL_ID || (typeof chSl.channel_id === "string" ? chSl.channel_id : null);
-
-  const slDmUserId = typeof chSl.dm_user_id === "string" ? chSl.dm_user_id : null;
+  // Legacy: channel_id was removed in favor of dm_user_id. Fall back to channel_id if dm_user_id is not set.
+  const legacyChannelId = process.env.SLACK_CHANNEL_ID || (typeof chSl.channel_id === "string" ? chSl.channel_id : null);
+  const slDmUserId =
+    process.env.SLACK_DM_USER_ID ||
+    (typeof chSl.dm_user_id === "string" ? chSl.dm_user_id : null) ||
+    legacyChannelId;
 
   const slBotUserId = typeof chSl.bot_user_id === "string" ? chSl.bot_user_id : null;
   const slBotName = typeof chSl.bot_name === "string" ? chSl.bot_name : null;
@@ -164,7 +166,6 @@ export function loadConfig(): Config {
       slack: {
         bot_token: slBotToken,
         app_token: slAppToken,
-        channel_id: slChannelId,
         dm_user_id: slDmUserId,
         bot_user_id: slBotUserId,
         bot_name: slBotName,

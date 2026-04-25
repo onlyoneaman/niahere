@@ -22,15 +22,14 @@ function cleanSentinel(text: string): string {
 class SlackChannel implements Channel {
   name = "slack";
   private app: App | null = null;
-  private defaultChannelId: string | null = null;
   private dmUserId: string | null = null;
   /** Timestamps of messages Nia posted proactively (used to detect replies to our own messages) */
   private outboundTs = new Set<string>();
 
   async sendMessage(text: string): Promise<void> {
     if (!this.app) throw new Error("Slack not started");
-    const target = this.defaultChannelId || this.dmUserId;
-    if (!target) throw new Error("No Slack recipient — DM the bot first, or set slack_channel_id in config");
+    const target = this.dmUserId;
+    if (!target) throw new Error("No Slack recipient — set dm_user_id in config");
     const result = await this.app.client.chat.postMessage({ channel: target, text });
     if (result.ts) this.outboundTs.add(result.ts);
   }
@@ -45,8 +44,8 @@ class SlackChannel implements Channel {
 
   async sendMedia(data: Buffer, mimeType: string, filename?: string): Promise<void> {
     if (!this.app) throw new Error("Slack not started");
-    const target = this.defaultChannelId || this.dmUserId;
-    if (!target) throw new Error("No Slack recipient — DM the bot first, or set slack_channel_id in config");
+    const target = this.dmUserId;
+    if (!target) throw new Error("No Slack recipient — set dm_user_id in config");
     await this.app.client.filesUploadV2({
       channel_id: target,
       file: data,
@@ -61,7 +60,6 @@ class SlackChannel implements Channel {
 
     await runMigrations();
 
-    this.defaultChannelId = config.channels.slack.channel_id;
     this.dmUserId = config.channels.slack.dm_user_id;
 
     const chats = new Map<string, ChatState>();

@@ -100,8 +100,7 @@ Config reference:
 - `channels.telegram.open` — if true, anyone can message the bot
 - `channels.slack.bot_token` — Slack bot token (xoxb-...)
 - `channels.slack.app_token` — Slack app token (xapp-...)
-- `channels.slack.channel_id` — default Slack channel for outbound
-- `channels.slack.dm_user_id` — auto-registered DM user
+- `channels.slack.dm_user_id` — Slack user ID for DM-based outbound messages
 - `channels.slack.watch` — per-channel proactive monitoring. Keys use `channel_id#channel_name` format. The `behavior` field is optional and has three forms: (1) omitted — loads `~/.niahere/watches/<channel_name>/behavior.md`; (2) single word like `deal-monitor` — loads `~/.niahere/watches/deal-monitor/behavior.md` (dir-per-watch, like agents); (3) inline prose. File-backed watches hot-reload via mtime tracking, no restart needed.
   {{slackWatch}}
 

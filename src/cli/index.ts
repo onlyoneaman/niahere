@@ -572,7 +572,7 @@ Chat:
   chat [-c] [-r] [--employee|--agent|--job name]  Interactive chat
   run <prompt>                    One-shot execution
   history [room]                  Recent messages
-  send [-c ch] <msg>              Send a message via channel
+  send [-c ch] [--to C --thread T] <msg>  Send message (DM, channel, or thread)
 
 Jobs:
   job <sub>                       Manage jobs (list|add|update|remove|run|...)
@@ -587,8 +587,8 @@ Persona:
 Channels:
   channels [on|off]               Toggle channels
   watch <sub>                     Manage Slack watch channels
-  telegram <token>                Configure telegram
-  slack <bot> <app>               Configure slack
+  telegram [setup]                Configure telegram
+  slack [setup]                   Configure slack
 
 System:
   config <set|get|list>           Manage config values

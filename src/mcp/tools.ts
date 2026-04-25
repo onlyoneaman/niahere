@@ -171,9 +171,9 @@ async function sendDirect(target: string, text: string): Promise<void> {
 
   if (target === "slack") {
     const token = config.channels.slack.bot_token;
-    const recipient = config.channels.slack.channel_id || config.channels.slack.dm_user_id;
+    const recipient = config.channels.slack.dm_user_id;
     if (!token) throw new Error("Slack not configured (no bot token)");
-    if (!recipient) throw new Error("No Slack recipient — DM the bot first, or set slack_channel_id in config");
+    if (!recipient) throw new Error("No Slack recipient — set dm_user_id in config");
     const { App } = await import("@slack/bolt");
     const app = new App({ token, signingSecret: "unused" });
     await app.client.chat.postMessage({ token, channel: recipient, text });
@@ -205,9 +205,9 @@ async function sendMediaDirect(target: string, data: Buffer, mimeType: string, f
 
   if (target === "slack") {
     const token = config.channels.slack.bot_token;
-    const recipient = config.channels.slack.channel_id || config.channels.slack.dm_user_id;
+    const recipient = config.channels.slack.dm_user_id;
     if (!token) throw new Error("Slack not configured (no bot token)");
-    if (!recipient) throw new Error("No Slack recipient — DM the bot first, or set slack_channel_id in config");
+    if (!recipient) throw new Error("No Slack recipient — set dm_user_id in config");
     const { App } = await import("@slack/bolt");
     const app = new App({ token, signingSecret: "unused" });
     await app.client.filesUploadV2({
@@ -245,11 +245,8 @@ export async function sendMessage(text: string, channelName?: string, mediaPath?
       // Replying in-thread: use the source session's room prefix
       roomPrefix = sourceCtx.room.replace(/-\d+$/, "");
     } else {
-      const channelId = config.channels.slack.channel_id;
       const dmUserId = config.channels.slack.dm_user_id;
-      if (channelId) {
-        roomPrefix = `slack-${channelId}`;
-      } else if (dmUserId) {
+      if (dmUserId) {
         roomPrefix = `slack-dm-${dmUserId}`;
       }
     }

@@ -168,7 +168,7 @@ export async function runInit(): Promise<void> {
     // Slack
     let slackBotToken = "";
     let slackAppToken = "";
-    let slackChannelId = (exSl.channel_id as string) || "";
+    let slackDmUserId = (exSl.dm_user_id as string) || "";
 
     const existingSlackBot = (exSl.bot_token as string) || "";
 
@@ -182,12 +182,12 @@ export async function runInit(): Promise<void> {
         const appInput = await ask(rl, "App token (xapp-...)", "");
         slackAppToken = appInput || existingSlackApp;
         if (slackBotToken && slackAppToken) {
-          slackChannelId = await ask(rl, "Default channel ID for outbound messages (optional)", slackChannelId);
+          slackDmUserId = await ask(rl, "DM user ID for outbound messages (U...)", slackDmUserId);
         }
       } else {
         slackBotToken = existingSlackBot;
         slackAppToken = (exSl.app_token as string) || "";
-        slackChannelId = (exSl.channel_id as string) || "";
+        slackDmUserId = (exSl.dm_user_id as string) || "";
       }
     } else {
       const setupSlack = await ask(rl, "\nSet up Slack? (y/n)", "n");
@@ -210,7 +210,7 @@ export async function runInit(): Promise<void> {
         slackAppToken = await ask(rl, "App token (xapp-...)", "");
 
         if (slackBotToken && slackAppToken) {
-          slackChannelId = await ask(rl, "Default channel ID for outbound messages (optional)", "");
+          slackDmUserId = await ask(rl, "DM user ID for outbound messages (U...)", "");
         }
       }
     }
@@ -421,7 +421,7 @@ export async function runInit(): Promise<void> {
     }
     if (slackBotToken && slackAppToken) {
       const sl: Record<string, unknown> = { bot_token: slackBotToken, app_token: slackAppToken };
-      if (slackChannelId) sl.channel_id = slackChannelId;
+      if (slackDmUserId) sl.dm_user_id = slackDmUserId;
       // Enrich with workspace/bot info from auth.test
       const enriched = await enrichSlackConfig(slackBotToken);
       Object.assign(sl, enriched);
