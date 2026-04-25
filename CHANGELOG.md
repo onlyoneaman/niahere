@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.2.75] - 2026-04-25
+
+### Fixed
+
+- **Stale PID identity check** — `isRunning()` previously only verified liveness via `process.kill(pid, 0)`, so a reused PID owned by an unrelated process would be treated as a live nia daemon (the documented "Slack silently fails after restart" failure mode). Pidfile now stores `{ pid, lstart }` (process start time captured via `ps -o lstart=`) and `isRunning()` re-checks both. Legacy integer pidfiles still parse and degrade to liveness-only.
+
+### Changed
+
+- **Bumped `@anthropic-ai/claude-agent-sdk`** from `^0.2.97` to `^0.2.119`. Picks up the GHSA-5474-4w2j-mq4c fix (transitive `@anthropic-ai/sdk` path-traversal), Opus 4.7 access, `forwardSubagentText`, `sessionStore`, and `shouldQuery: false`. Neither call site passes `env`, so the 0.2.113 env-replace semantic change does not affect us.
+
 ## [0.2.74] - 2026-04-25
 
 ### Fixed
