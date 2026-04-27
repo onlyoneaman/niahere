@@ -53,6 +53,16 @@ class SlackChannel implements Channel {
     });
   }
 
+  async sendMediaToThread(channelId: string, data: Buffer, mimeType: string, filename?: string, threadTs?: string): Promise<void> {
+    if (!this.app) throw new Error("Slack not started");
+    await this.app.client.filesUploadV2({
+      channel_id: channelId,
+      file: data,
+      filename: filename || `file.${mimeType.split("/")[1] || "bin"}`,
+      ...(threadTs ? { thread_ts: threadTs } : {}),
+    } as any);
+  }
+
   async start(): Promise<void> {
     const config = getConfig();
     const botToken = config.channels.slack.bot_token!;
@@ -308,6 +318,11 @@ class SlackChannel implements Channel {
       return ext && /^[a-zA-Z0-9]{1,16}$/.test(ext) ? ext : "bin";
     }
 
+    function cacheExtension(filename: string | undefined, mime: string, attType: AttachmentType): string {
+      if (attType === "image" && mime !== "image/gif") return "jpg";
+      return safeExtension(filename);
+    }
+
     async function extractSlackAttachments(files: any[], scope: string): Promise<Attachment[]> {
       const attachments: Attachment[] = [];
       const scopedAttachDir = cacheDirForScope(scope);
@@ -327,7 +342,7 @@ class SlackChannel implements Channel {
 
         // Check disk (survives daemon restarts) — scoped by Slack room/thread.
         const hash = urlHash(file.url_private_download);
-        const ext = safeExtension(file.name);
+        const ext = cacheExtension(file.name, mime, attType);
         const diskPath = join(scopedAttachDir, `${hash}.${ext}`);
         const metaPath = join(scopedAttachDir, `${hash}.meta.json`);
         if (existsSync(diskPath) && existsSync(metaPath)) {

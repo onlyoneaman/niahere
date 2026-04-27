@@ -17,6 +17,11 @@ function safeExtension(filename?: string): string {
   return ext && /^[a-zA-Z0-9]{1,16}$/.test(ext) ? ext : "bin";
 }
 
+function cacheExtension(filename: string | undefined, mimeType: string): string {
+  if (mimeType === "image/jpeg") return "jpg";
+  return safeExtension(filename);
+}
+
 class TelegramChannel implements Channel {
   name = "telegram";
   private bot: Bot | null = null;
@@ -52,11 +57,11 @@ class TelegramChannel implements Channel {
     return Buffer.from(await resp.arrayBuffer());
   }
 
-  private cacheAttachment(chatId: number, roomIndex: number, data: Buffer, filename?: string): string {
+  private cacheAttachment(chatId: number, roomIndex: number, data: Buffer, mimeType: string, filename?: string): string {
     const scope = `telegram-${chatId}-${roomIndex}`;
     const dir = join(getNiaHome(), "tmp", "attachments", scope);
     mkdirSync(dir, { recursive: true });
-    const ext = safeExtension(filename);
+    const ext = cacheExtension(filename, mimeType);
     const hash = createHash("sha256").update(data).digest("hex").slice(0, 16);
     const path = join(dir, `${hash}.${ext}`);
     writeFileSync(path, data);
@@ -257,7 +262,7 @@ class TelegramChannel implements Channel {
             data = prepared.data;
             finalMime = prepared.mimeType;
           }
-          const sourcePath = self.cacheAttachment(ctx.chatId, state.roomIndex, data, doc.file_name);
+          const sourcePath = self.cacheAttachment(ctx.chatId, state.roomIndex, data, finalMime, doc.file_name);
           const attachment: Attachment = { type: attType, data, mimeType: finalMime, filename: doc.file_name, sourcePath };
           const caption = ctx.message.caption || (attType === "image" ? "What's in this image?" : "Here's a file.");
           await processMessage(ctx, state, caption, [attachment]);

@@ -296,7 +296,9 @@ export async function sendMessage(text: string, channelName?: string, mediaPath?
       const mimeType = guessMime(mediaPath);
       const filename = basename(mediaPath);
 
-      if (channel?.sendMedia) {
+      if (useThread && channel?.sendMediaToThread) {
+        await channel.sendMediaToThread(sourceCtx!.slackChannelId!, data, mimeType, filename, sourceCtx!.slackThreadTs);
+      } else if (channel?.sendMedia) {
         await channel.sendMedia(data, mimeType, filename);
       } else {
         await sendMediaDirect(channelTarget, data, mimeType, filename);

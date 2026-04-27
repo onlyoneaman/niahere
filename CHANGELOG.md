@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.2.80] - 2026-04-28
+
+### Fixed
+
+- **Slack thread media routing** — `send_message media_path` now uploads files to the active Slack thread instead of falling back to DM, and cached converted images use a matching `.jpg` extension.
+- **Force shutdown marker cleanup** — `nia stop --force` no longer leaves a stale force marker when no daemon remains to kill.
+
 ## [0.2.79] - 2026-04-28
 
 ### Changed

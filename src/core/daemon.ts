@@ -57,7 +57,10 @@ export function stopDaemon(opts: { force?: boolean } = {}): boolean {
 
   // Kill all daemon processes — pidfile PID plus any orphans.
   const killed = killAllDaemons(pidfilePid);
-  if (killed === 0 && pidfilePid === null) return false;
+  if (killed === 0 && pidfilePid === null) {
+    if (opts.force) clearForceShutdownRequest();
+    return false;
+  }
 
   // Wait for processes to finish (up to 5 min for active engines, then SIGKILL)
   waitForExit(opts.force ? 30_000 : 310_000);

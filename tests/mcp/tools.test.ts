@@ -1,6 +1,16 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync, readFileSync } from "fs";
-import { guessMime, addRule, addMemory, addWatchChannel, removeWatchChannel, enableWatchChannel, disableWatchChannel } from "../../src/mcp/tools";
+import { trackStarted, clearStarted } from "../../src/channels/registry";
+import {
+  guessMime,
+  addRule,
+  addMemory,
+  addWatchChannel,
+  removeWatchChannel,
+  enableWatchChannel,
+  disableWatchChannel,
+  sendMessage,
+} from "../../src/mcp/tools";
 import { resetConfig } from "../../src/utils/config";
 
 const TEST_DIR = "/tmp/test-nia-mcp-tools";
@@ -11,6 +21,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  clearStarted();
   rmSync(TEST_DIR, { recursive: true, force: true });
   delete process.env.NIA_HOME;
   resetConfig();
@@ -51,6 +62,51 @@ describe("guessMime", () => {
 
   test("handles paths with dots in directory names", () => {
     expect(guessMime("/path/v2.0/photo.png")).toBe("image/png");
+  });
+});
+
+describe("sendMessage", () => {
+  test("sends media to the active Slack thread when thread context is present", async () => {
+    mkdirSync(`${TEST_DIR}/tmp`, { recursive: true });
+    const mediaPath = `${TEST_DIR}/tmp/report.txt`;
+    writeFileSync(mediaPath, "hello");
+
+    const mediaCalls: Array<Record<string, unknown>> = [];
+    trackStarted({
+      name: "slack",
+      start: async () => {},
+      stop: async () => {},
+      sendMedia: async () => {
+        throw new Error("sendMedia should not be called for thread media");
+      },
+      sendMediaToThread: async (channelId, data, mimeType, filename, threadTs) => {
+        mediaCalls.push({
+          channelId,
+          data: data.toString(),
+          mimeType,
+          filename,
+          threadTs,
+        });
+      },
+    });
+
+    const result = await sendMessage("", "slack", mediaPath, {
+      channel: "slack",
+      room: "slack-C123-t1710000000.000000-1",
+      slackChannelId: "C123",
+      slackThreadTs: "1710000000.000000",
+    });
+
+    expect(result).toBe("Message with media sent.");
+    expect(mediaCalls).toEqual([
+      {
+        channelId: "C123",
+        data: "hello",
+        mimeType: "text/plain",
+        filename: "report.txt",
+        threadTs: "1710000000.000000",
+      },
+    ]);
   });
 });
 
