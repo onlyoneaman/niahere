@@ -23,6 +23,7 @@ import { truncate, formatToolUse } from "../utils/format-activity";
 import { finalizeSession, cancelPending } from "../core/finalizer";
 import { log } from "../utils/log";
 import { isRetryableApiError, sleep } from "../utils/retry";
+import { registerActiveHandle, unregisterActiveHandle } from "../core/active-handles";
 
 const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const LONG_RUNNING_WARN = 30 * 60 * 1000; // 30 minutes
@@ -272,7 +273,18 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
       queryHandle.close();
       queryHandle = null;
     }
+    unregisterActiveHandle(room);
     alive = false;
+  }
+
+  async function abortActiveQuery(reason: string) {
+    const activePending = pending;
+    pending = null;
+    if (activePending) {
+      activePending.reject(new Error(reason));
+    }
+    teardown();
+    await ActiveEngine.unregister(room).catch(() => {});
   }
 
   function startQuery() {
@@ -309,6 +321,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
       prompt: stream as any,
       options: options as any,
     });
+    registerActiveHandle(room, abortActiveQuery);
 
     // Background consumer — runs for the lifetime of the query
     (async () => {
@@ -523,6 +536,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
         }
       } finally {
         clearLongRunningTimer();
+        unregisterActiveHandle(room);
         alive = false;
         stream = null;
         queryHandle = null;
@@ -596,8 +610,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
           log.error({ err, room }, "finalization enqueue failed during close");
         }
       }
-      teardown();
-      await ActiveEngine.unregister(room).catch(() => {});
+      await abortActiveQuery("chat engine closed");
     },
   };
 }

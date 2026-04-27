@@ -100,6 +100,17 @@ describe("getEnvironmentPrompt", () => {
     expect(prompt).toContain("When writing calendar digests");
   });
 
+  test("contains safe runtime OS context", () => {
+    const prompt = getEnvironmentPrompt();
+    expect(prompt).toContain("Runtime OS");
+    expect(prompt).toContain("Platform:");
+    expect(prompt).toContain("Architecture:");
+    expect(prompt).toContain("Shell:");
+    expect(prompt).not.toContain("Home:");
+    expect(prompt).not.toContain("NIA_HOME:");
+    expect(prompt).not.toContain("PATH=");
+  });
+
   test("documents add_rule and add_memory tools", () => {
     const prompt = getEnvironmentPrompt();
     expect(prompt).toContain("add_rule");

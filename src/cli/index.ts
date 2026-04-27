@@ -116,8 +116,8 @@ switch (command) {
     const stopGuard = parseGuardFlags(process.argv.slice(3));
     if (!(await guardActiveEngines("stop", stopGuard))) process.exit(1);
     const { unregisterService } = await import("../commands/service");
-    await unregisterService();
-    stopDaemon();
+    await unregisterService({ force: stopGuard.force });
+    stopDaemon({ force: stopGuard.force });
     console.log("nia stopped");
     break;
   }
@@ -138,9 +138,9 @@ switch (command) {
     if (!(await guardActiveEngines("restart", restartGuard))) process.exit(1);
     const { isServiceInstalled, restartService } = await import("../commands/service");
     if (isServiceInstalled()) {
-      await restartService();
+      await restartService({ force: restartGuard.force });
     } else {
-      stopDaemon();
+      stopDaemon({ force: restartGuard.force });
       startDaemon();
     }
     const restartPid = readPid();
@@ -536,9 +536,9 @@ switch (command) {
         console.log("Restarting daemon...");
         const { isServiceInstalled, restartService } = await import("../commands/service");
         if (isServiceInstalled()) {
-          await restartService();
+          await restartService({ force: updateGuard.force });
         } else {
-          stopDaemon();
+          stopDaemon({ force: updateGuard.force });
           startDaemon();
         }
         console.log("Restarted.");

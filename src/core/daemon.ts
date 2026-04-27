@@ -15,6 +15,8 @@ import { startAlive, stopAlive } from "./alive";
 import { createNiaMcpServer } from "../mcp/server";
 import { setMcpFactory } from "../mcp";
 import { processPending, cleanupOldRequests } from "./finalizer";
+import { closeAllActiveHandles } from "./active-handles";
+import { clearForceShutdownRequest, consumeForceShutdownRequest, requestForceShutdown } from "./force-shutdown";
 
 export { isRunning, readPid, removePid, writePid };
 
@@ -46,8 +48,11 @@ export function startDaemon(): number {
   return pid;
 }
 
-export function stopDaemon(): boolean {
+export function stopDaemon(opts: { force?: boolean } = {}): boolean {
   const pidfilePid = readPid();
+  if (opts.force) {
+    requestForceShutdown([...(pidfilePid ? [pidfilePid] : []), ...findDaemonPids()]);
+  }
   removePid();
 
   // Kill all daemon processes — pidfile PID plus any orphans.
@@ -55,7 +60,8 @@ export function stopDaemon(): boolean {
   if (killed === 0 && pidfilePid === null) return false;
 
   // Wait for processes to finish (up to 5 min for active engines, then SIGKILL)
-  waitForExit(310_000);
+  waitForExit(opts.force ? 30_000 : 310_000);
+  if (opts.force) clearForceShutdownRequest();
   return true;
 }
 
@@ -361,16 +367,21 @@ export async function runDaemon(): Promise<void> {
   const shutdown = async () => {
     if (shuttingDown) return;
     shuttingDown = true;
+    const force = consumeForceShutdownRequest(process.pid);
 
-    log.info("shutting down...");
+    log.info({ force }, "shutting down...");
 
     stopAlive();
     stopScheduler();
     await stopChannels(channels);
 
     try {
+      if (force) {
+        const closed = await closeAllActiveHandles("force shutdown");
+        log.warn({ closed }, "force closed active engines");
+      }
       const engines = await ActiveEngine.list();
-      if (engines.length > 0) {
+      if (engines.length > 0 && !force) {
         log.info({ count: engines.length }, "waiting for active engines to finish");
         const deadline = Date.now() + 300_000;
         while (Date.now() < deadline) {
@@ -378,8 +389,8 @@ export async function runDaemon(): Promise<void> {
           if (remaining.length === 0) break;
           await new Promise((r) => setTimeout(r, 1000));
         }
-        await ActiveEngine.clearAll();
       }
+      if (engines.length > 0 || force) await ActiveEngine.clearAll();
     } catch {
       // postgres may be gone
     }

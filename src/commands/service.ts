@@ -3,6 +3,7 @@ import { join } from "path";
 import { homedir } from "os";
 import { getPaths } from "../utils/paths";
 import { findDaemonPids } from "../core/daemon";
+import { clearForceShutdownRequest, requestForceShutdown } from "../core/force-shutdown";
 
 const PLIST_NAME = "com.niahere.agent";
 const SYSTEMD_UNIT = "niahere.service";
@@ -173,7 +174,8 @@ export async function registerService(): Promise<void> {
   // Windows/other: no-op, daemon still works via startDaemon()
 }
 
-export async function unregisterService(): Promise<void> {
+export async function unregisterService(opts: { force?: boolean } = {}): Promise<void> {
+  if (opts.force) requestForceShutdown(findDaemonPids());
   if (process.platform === "darwin") {
     await uninstallLaunchd();
   } else if (process.platform === "linux") {
@@ -188,7 +190,9 @@ export function isServiceInstalled(): boolean {
 }
 
 /** Restart via service manager. Waits for old process to fully exit before starting new one. */
-export async function restartService(): Promise<void> {
+export async function restartService(opts: { force?: boolean } = {}): Promise<void> {
+  if (opts.force) requestForceShutdown(findDaemonPids());
+  const waitMs = opts.force ? 30_000 : 310_000;
   if (process.platform === "darwin") {
     const path = plistPath();
     // Unload — sends SIGTERM and disables KeepAlive respawn
@@ -198,7 +202,8 @@ export async function restartService(): Promise<void> {
       console.error(`  warning: launchctl unload failed: ${stderr.trim()}`);
     }
     // Wait for old daemon to fully exit (graceful shutdown may take time for active engines)
-    await waitForDaemonExit(310_000);
+    await waitForDaemonExit(waitMs);
+    if (opts.force) clearForceShutdownRequest();
     // Load — starts a fresh single instance
     const load = Bun.spawn(["launchctl", "load", path], { stdout: "pipe", stderr: "pipe" });
     if (await load.exited !== 0) {
@@ -209,6 +214,8 @@ export async function restartService(): Promise<void> {
     // systemd restart handles stop-wait-start internally
     const restart = Bun.spawn(["systemctl", "--user", "restart", SYSTEMD_UNIT], { stdout: "pipe", stderr: "pipe" });
     await restart.exited;
+    if (opts.force) await waitForDaemonExit(waitMs);
+    if (opts.force) clearForceShutdownRequest();
   }
 }
 

@@ -3,7 +3,7 @@
  *
  * Default: warn and refuse.
  * --wait <minutes>: poll until engines clear, then proceed. Times out with error.
- * --force: skip the check entirely.
+ * --force: skip the guard and ask the daemon to close active handles.
  */
 
 import { ActiveEngine } from "../db/models";

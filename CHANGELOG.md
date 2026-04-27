@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.2.77] - 2026-04-28
+
+### Changed
+
+- **Force shutdown semantics** — `--force` stop/restart/update now actively closes live Claude handles before clearing active-engine bookkeeping.
+- **Runtime OS context** — Agent prompts now include safe OS, architecture, and shell context for platform-aware command choices.
+
 ## [0.2.76] - 2026-04-27
 
 ### Changed

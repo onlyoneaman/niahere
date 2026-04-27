@@ -17,6 +17,7 @@ import { ActiveEngine } from "../db/models";
 import { getPaths } from "../utils/paths";
 import { log } from "../utils/log";
 import { isRetryableApiError, sleep } from "../utils/retry";
+import { registerActiveHandle, unregisterActiveHandle } from "./active-handles";
 
 export type ActivityCallback = (line: string) => void;
 
@@ -98,6 +99,7 @@ export async function runJobWithClaude(
   onActivity?: ActivityCallback,
   model?: string,
   sourceCtx?: McpSourceContext,
+  activeRoom?: string,
 ): Promise<RunnerOutput> {
   const sessionId = randomUUID();
 
@@ -131,6 +133,13 @@ export async function runJobWithClaude(
     prompt: singleMessage() as any,
     options: options as any,
   });
+  let abortReason: string | null = null;
+  if (activeRoom) {
+    registerActiveHandle(activeRoom, (reason) => {
+      abortReason = reason;
+      handle.close();
+    });
+  }
 
   let agentText = "";
   let actualSessionId = sessionId;
@@ -214,8 +223,28 @@ export async function runJobWithClaude(
         }
       }
     }
+  } catch (err) {
+    if (abortReason) {
+      return {
+        agentText: "",
+        sessionId: actualSessionId,
+        terminalReason: "aborted",
+        error: abortReason,
+      };
+    }
+    throw err;
   } finally {
     handle.close();
+    if (activeRoom) unregisterActiveHandle(activeRoom);
+  }
+
+  if (abortReason) {
+    return {
+      agentText: "",
+      sessionId: actualSessionId,
+      terminalReason: "aborted",
+      error: abortReason,
+    };
   }
 
   return { agentText, sessionId: actualSessionId, terminalReason };
@@ -243,7 +272,7 @@ export async function runTask(opts: TaskOptions): Promise<RunnerOutput> {
   await ActiveEngine.register(room, "system").catch(() => {});
   try {
     const systemPrompt = opts.systemPrompt || buildSystemPrompt("job");
-    const output = await runJobWithClaude(systemPrompt, opts.prompt, homedir());
+    const output = await runJobWithClaude(systemPrompt, opts.prompt, homedir(), undefined, undefined, undefined, room);
     if (output.error) {
       log.error({ task: opts.name, error: output.error }, "task failed");
     } else {
@@ -297,11 +326,13 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
   const config = getConfig();
   const timestamp = new Date().toISOString();
   const startMs = performance.now();
+  const room = `job/${job.name}`;
 
   // Update state: running
   const state: Record<string, JobState> = { ...readState() };
   state[job.name] = { lastRun: timestamp, status: "running", duration_ms: 0 };
   writeState(state);
+  await ActiveEngine.register(room, "job").catch(() => {});
 
   try {
     let cwd = homedir();
@@ -352,7 +383,7 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
       const fullPrompt = `${systemPrompt}\n\n---\n\n${jobPrompt}`;
       output = await runJobWithCodex(fullPrompt, cwd, resolvedModel);
     } else {
-      output = await runJobWithClaude(systemPrompt, jobPrompt, cwd, onActivity, resolvedModel, jobSourceCtx);
+      output = await runJobWithClaude(systemPrompt, jobPrompt, cwd, onActivity, resolvedModel, jobSourceCtx, room);
 
       for (let attempt = 0; attempt < MAX_API_RETRIES && output.error && isRetryableApiError(output.error); attempt++) {
         const delay = RETRY_DELAYS[attempt] ?? 8_000;
@@ -361,7 +392,7 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
           "retrying after transient API error",
         );
         await sleep(delay);
-        output = await runJobWithClaude(systemPrompt, jobPrompt, cwd, onActivity, resolvedModel, jobSourceCtx);
+        output = await runJobWithClaude(systemPrompt, jobPrompt, cwd, onActivity, resolvedModel, jobSourceCtx, room);
       }
     }
 
@@ -435,5 +466,7 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
     writeState(freshState);
 
     return result;
+  } finally {
+    await ActiveEngine.unregister(room).catch(() => {});
   }
 }

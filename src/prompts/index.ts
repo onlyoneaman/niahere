@@ -3,6 +3,7 @@ import { join, resolve } from "path";
 import { getPaths } from "../utils/paths";
 import { getConfig } from "../utils/config";
 import { formatPromptDate, formatPromptDateTime } from "../utils/time";
+import { getRuntimeOsInfo } from "../utils/os";
 import type { Mode } from "../types";
 
 const PROMPTS_DIR = resolve(import.meta.dir);
@@ -21,6 +22,7 @@ export function getEnvironmentPrompt(): string {
   const paths = getPaths();
   const config = getConfig();
   const now = new Date();
+  const osInfo = getRuntimeOsInfo();
 
   // Build watch channel summary if Slack is configured with watch channels
   let slackWatch = "";
@@ -37,6 +39,12 @@ export function getEnvironmentPrompt(): string {
     timezone: config.timezone,
     currentDate: formatPromptDate(now, config.timezone),
     currentTime: formatPromptDateTime(now, config.timezone),
+    osName: osInfo.osName,
+    osType: osInfo.osType,
+    osRelease: osInfo.osRelease,
+    osPlatform: osInfo.osPlatform,
+    osArch: osInfo.osArch,
+    shell: osInfo.shell,
     activeStart: config.activeHours.start,
     activeEnd: config.activeHours.end,
     model: config.model,
