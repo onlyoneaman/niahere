@@ -168,6 +168,25 @@ describe("buildContentBlocks", () => {
     expect(blocks[1].text).toBe("inspect this");
   });
 
+  test("adds local path hints for generic files", () => {
+    const attachment: Attachment = {
+      type: "file",
+      data: Buffer.from("binary"),
+      mimeType: "application/zip",
+      filename: "archive.zip",
+      sourcePath: "/tmp/archive.zip",
+    };
+
+    const result = buildContentBlocks("forward this file", [attachment]);
+    const blocks = result as any[];
+
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0].text).toContain("archive.zip (file, application/zip)");
+    expect(blocks[0].text).toContain("/tmp/archive.zip");
+    expect(blocks[0].text).not.toContain("binary");
+    expect(blocks[1].text).toBe("forward this file");
+  });
+
   test("does not add local path hints when source paths are absent", () => {
     const attachment: Attachment = {
       type: "image",

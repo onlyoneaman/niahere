@@ -1,4 +1,7 @@
 import { Bot, InputFile } from "grammy";
+import { createHash } from "crypto";
+import { mkdirSync, writeFileSync } from "fs";
+import { join } from "path";
 import { createChatEngine } from "../chat/engine";
 import type { Channel, ChatState, Attachment } from "../types";
 import { getConfig, updateRawConfig } from "../utils/config";
@@ -7,7 +10,12 @@ import { Session, Message } from "../db/models";
 import { log } from "../utils/log";
 import { getMcpServers } from "../mcp";
 import { classifyMime, validateAttachment, prepareImage } from "../utils/attachment";
+import { getNiaHome } from "../utils/paths";
 
+function safeExtension(filename?: string): string {
+  const ext = filename?.split(".").pop();
+  return ext && /^[a-zA-Z0-9]{1,16}$/.test(ext) ? ext : "bin";
+}
 
 class TelegramChannel implements Channel {
   name = "telegram";
@@ -42,6 +50,17 @@ class TelegramChannel implements Channel {
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
     return Buffer.from(await resp.arrayBuffer());
+  }
+
+  private cacheAttachment(chatId: number, roomIndex: number, data: Buffer, filename?: string): string {
+    const scope = `telegram-${chatId}-${roomIndex}`;
+    const dir = join(getNiaHome(), "tmp", "attachments", scope);
+    mkdirSync(dir, { recursive: true });
+    const ext = safeExtension(filename);
+    const hash = createHash("sha256").update(data).digest("hex").slice(0, 16);
+    const path = join(dir, `${hash}.${ext}`);
+    writeFileSync(path, data);
+    return path;
   }
 
   async start(): Promise<void> {
@@ -225,11 +244,7 @@ class TelegramChannel implements Channel {
         try {
           const doc = ctx.message.document;
           const mime = doc.mime_type || "application/octet-stream";
-          const attType = classifyMime(mime);
-          if (!attType) {
-            await ctx.reply(`Unsupported file type: ${mime}`);
-            return;
-          }
+          const attType = classifyMime(mime) || "file";
           let data = await self.downloadFile(doc.file_id);
           const error = validateAttachment(data, mime);
           if (error) {
@@ -242,8 +257,9 @@ class TelegramChannel implements Channel {
             data = prepared.data;
             finalMime = prepared.mimeType;
           }
-          const attachment: Attachment = { type: attType, data, mimeType: finalMime, filename: doc.file_name };
-          const caption = ctx.message.caption || (attType === "image" ? "What's in this image?" : "Here's a document.");
+          const sourcePath = self.cacheAttachment(ctx.chatId, state.roomIndex, data, doc.file_name);
+          const attachment: Attachment = { type: attType, data, mimeType: finalMime, filename: doc.file_name, sourcePath };
+          const caption = ctx.message.caption || (attType === "image" ? "What's in this image?" : "Here's a file.");
           await processMessage(ctx, state, caption, [attachment]);
         } catch (err) {
           log.error({ err, chatId: ctx.chatId }, "failed to process document");

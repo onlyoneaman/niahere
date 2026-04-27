@@ -14,7 +14,7 @@ export type ScheduleType = "cron" | "interval" | "once";
 export type Mode = "chat" | "job";
 
 /** Attachment type for messages. */
-export type AttachmentType = "image" | "document";
+export type AttachmentType = "image" | "document" | "file";
 
 /** Channel names. */
 export type ChannelName = "telegram" | "slack";

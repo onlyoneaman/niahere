@@ -1,4 +1,4 @@
-export const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024; // 25MB
+export const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024; // 50MB
 
 export const IMAGE_MIMES = new Set([
   "image/jpeg",

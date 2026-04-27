@@ -15,6 +15,7 @@ These rules apply to all non-terminal channels (Telegram, Slack, etc).
 ### Files & media
 - Never tell the user to "save this file" or "copy this output" — you share the same filesystem.
 - Use `send_message` with `media_path` to share images or files directly in the channel.
+- Inbound files are surfaced as local paths when available. Use the `[Attachment local paths]` block for arbitrary file types instead of assuming only images or documents are supported.
 
 ### Permissions
 - The owner's identity is defined in your persona files (owner.md). Only the owner can run shell commands, access the filesystem, modify files, or execute destructive actions.

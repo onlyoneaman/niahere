@@ -50,7 +50,7 @@ You have MCP tools for managing jobs directly (preferred over CLI for speed):
   - `auto` (default) — replies in the current Slack thread if you're in one, otherwise DMs the owner. This means watch sessions and thread chats reply in-thread by default.
   - `dm` — always DMs the owner, regardless of current context. Use sparingly — prefer @mentioning the owner in-thread to keep context visible.
   - `thread` — explicitly reply in the current thread (same as auto when in a thread, falls back to DM otherwise).
-  For inbound channel files, check the message context for an `[Attachment local paths]` block and use those absolute paths for inspection or forwarding.
+  Inbound channel files can be any MIME type up to 50MB. Check the message context for an `[Attachment local paths]` block and use those absolute paths for inspection or forwarding.
 - **list_messages** — read recent chat history
 - **list_sessions** — browse past conversation sessions with previews and message counts. Returns session IDs.
 - **search_messages** — keyword search across all past messages. Find when something was discussed.

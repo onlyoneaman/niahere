@@ -303,6 +303,11 @@ class SlackChannel implements Channel {
       return `${scope}:${url}`;
     }
 
+    function safeExtension(filename?: string): string {
+      const ext = filename?.split(".").pop();
+      return ext && /^[a-zA-Z0-9]{1,16}$/.test(ext) ? ext : "bin";
+    }
+
     async function extractSlackAttachments(files: any[], scope: string): Promise<Attachment[]> {
       const attachments: Attachment[] = [];
       const scopedAttachDir = cacheDirForScope(scope);
@@ -322,7 +327,7 @@ class SlackChannel implements Channel {
 
         // Check disk (survives daemon restarts) — scoped by Slack room/thread.
         const hash = urlHash(file.url_private_download);
-        const ext = file.name?.split(".").pop() || "bin";
+        const ext = safeExtension(file.name);
         const diskPath = join(scopedAttachDir, `${hash}.${ext}`);
         const metaPath = join(scopedAttachDir, `${hash}.meta.json`);
         if (existsSync(diskPath) && existsSync(metaPath)) {

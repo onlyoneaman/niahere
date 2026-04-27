@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.2.78] - 2026-04-28
+
+### Changed
+
+- **Attachment file support** — Slack and Telegram now accept arbitrary file MIME types up to 50MB and expose them by local path for inspection or forwarding.
+
 ## [0.2.77] - 2026-04-28
 
 ### Changed

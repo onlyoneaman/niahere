@@ -24,11 +24,11 @@ describe("classifyMime", () => {
     expect(classifyMime("text/javascript")).toBe("document");
   });
 
-  test("returns null for unsupported types", () => {
-    expect(classifyMime("video/mp4")).toBeNull();
-    expect(classifyMime("audio/mpeg")).toBeNull();
-    expect(classifyMime("application/octet-stream")).toBeNull();
-    expect(classifyMime("application/zip")).toBeNull();
+  test("classifies other MIME types as generic files", () => {
+    expect(classifyMime("video/mp4")).toBe("file");
+    expect(classifyMime("audio/mpeg")).toBe("file");
+    expect(classifyMime("application/octet-stream")).toBe("file");
+    expect(classifyMime("application/zip")).toBe("file");
   });
 });
 
@@ -43,29 +43,28 @@ describe("validateAttachment", () => {
     expect(validateAttachment(data, "text/plain")).toBeNull();
   });
 
-  test("rejects file over 25MB", () => {
-    const data = Buffer.alloc(26 * 1024 * 1024); // 26MB
+  test("rejects file over 50MB", () => {
+    const data = Buffer.alloc(51 * 1024 * 1024); // 51MB
     const error = validateAttachment(data, "image/jpeg");
     expect(error).toContain("too large");
-    expect(error).toContain("26.0MB");
-    expect(error).toContain("max 25MB");
+    expect(error).toContain("51.0MB");
+    expect(error).toContain("max 50MB");
   });
 
-  test("accepts file exactly at 25MB", () => {
-    const data = Buffer.alloc(25 * 1024 * 1024); // exactly 25MB
+  test("accepts file exactly at 50MB", () => {
+    const data = Buffer.alloc(50 * 1024 * 1024); // exactly 50MB
     expect(validateAttachment(data, "image/jpeg")).toBeNull();
   });
 
-  test("rejects unsupported MIME type", () => {
+  test("accepts arbitrary MIME types as files", () => {
     const data = Buffer.alloc(100);
-    const error = validateAttachment(data, "video/mp4");
-    expect(error).toContain("Unsupported");
-    expect(error).toContain("video/mp4");
+    expect(validateAttachment(data, "video/mp4")).toBeNull();
+    expect(validateAttachment(data, "application/zip")).toBeNull();
   });
 
-  test("rejects application/octet-stream", () => {
+  test("accepts application/octet-stream as a file", () => {
     const data = Buffer.alloc(100);
-    expect(validateAttachment(data, "application/octet-stream")).toContain("Unsupported");
+    expect(validateAttachment(data, "application/octet-stream")).toBeNull();
   });
 });
 
