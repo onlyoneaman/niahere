@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseGuardFlags } from "../../src/core/engine-guard";
+import { parseGuardFlags, withDefaultWait } from "../../src/core/engine-guard";
 
 describe("parseGuardFlags", () => {
   test("returns defaults for empty args", () => {
@@ -24,5 +24,19 @@ describe("parseGuardFlags", () => {
 
   test("--force and --wait together", () => {
     expect(parseGuardFlags(["--force", "--wait", "3"])).toEqual({ force: true, waitMinutes: 3 });
+  });
+});
+
+describe("withDefaultWait", () => {
+  test("applies default wait when no wait or force was provided", () => {
+    expect(withDefaultWait(parseGuardFlags([]), 1)).toEqual({ waitMinutes: 1, force: false });
+  });
+
+  test("preserves explicit wait", () => {
+    expect(withDefaultWait(parseGuardFlags(["--wait", "3"]), 1)).toEqual({ waitMinutes: 3, force: false });
+  });
+
+  test("does not add wait when force is set", () => {
+    expect(withDefaultWait(parseGuardFlags(["--force"]), 1)).toEqual({ waitMinutes: 0, force: true });
   });
 });

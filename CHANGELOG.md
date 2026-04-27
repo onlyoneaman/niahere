@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.2.79] - 2026-04-28
+
+### Changed
+
+- **Update waits by default** — `nia update` now waits up to 1 minute for active engines before requiring `--wait` or `--force`.
+
 ## [0.2.78] - 2026-04-28
 
 ### Changed

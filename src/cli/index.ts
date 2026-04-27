@@ -16,7 +16,7 @@ import { rulesCommand, memoryCommand } from "./self";
 import { watchCommand } from "./watch";
 import { agentCommand } from "./agent";
 import { employeeCommand } from "./employee";
-import { guardActiveEngines, parseGuardFlags } from "../core/engine-guard";
+import { guardActiveEngines, parseGuardFlags, withDefaultWait } from "../core/engine-guard";
 
 // Set LOG_LEVEL from config before anything else logs
 try {
@@ -497,7 +497,7 @@ switch (command) {
   }
 
   case "update": {
-    const updateGuard = parseGuardFlags(process.argv.slice(3));
+    const updateGuard = withDefaultWait(parseGuardFlags(process.argv.slice(3)), 1);
     const { version: currentVersion } = await import("../../package.json");
     console.log(`Current: v${currentVersion}`);
 

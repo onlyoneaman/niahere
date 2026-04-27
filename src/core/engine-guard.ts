@@ -30,6 +30,11 @@ export function parseGuardFlags(args: string[]): GuardOptions {
   return { waitMinutes, force };
 }
 
+export function withDefaultWait(opts: GuardOptions, defaultWaitMinutes: number): GuardOptions {
+  if (opts.force || opts.waitMinutes > 0) return opts;
+  return { ...opts, waitMinutes: defaultWaitMinutes };
+}
+
 interface ActiveSummary {
   count: number;
   rooms: string[];
