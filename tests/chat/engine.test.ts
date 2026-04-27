@@ -128,7 +128,7 @@ describe("buildContentBlocks", () => {
     }
   });
 
-  test("adds local path hints when attachment source paths are present", () => {
+  test("uses only local path hints when attachment source paths are present", () => {
     const attachment: Attachment = {
       type: "image",
       data: Buffer.from("img"),
@@ -140,13 +140,32 @@ describe("buildContentBlocks", () => {
     const result = buildContentBlocks("forward this", [attachment]);
     const blocks = result as any[];
 
-    expect(blocks).toHaveLength(3);
+    expect(blocks).toHaveLength(2);
     expect(blocks[0].type).toBe("text");
     expect(blocks[0].text).toContain("[Attachment local paths]");
+    expect(blocks[0].text).toContain("photo.png (image, image/png)");
     expect(blocks[0].text).toContain("/tmp/nia-attachment-photo.png");
-    expect(blocks[1].type).toBe("image");
-    expect(blocks[2].type).toBe("text");
-    expect(blocks[2].text).toBe("forward this");
+    expect(blocks[1].type).toBe("text");
+    expect(blocks[1].text).toBe("forward this");
+  });
+
+  test("does not decode source path documents into message content", () => {
+    const attachment: Attachment = {
+      type: "document",
+      data: Buffer.from("secret document content"),
+      mimeType: "application/pdf",
+      filename: "report.pdf",
+      sourcePath: "/tmp/report.pdf",
+    };
+
+    const result = buildContentBlocks("inspect this", [attachment]);
+    const blocks = result as any[];
+
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0].text).toContain("report.pdf (document, application/pdf)");
+    expect(blocks[0].text).toContain("/tmp/report.pdf");
+    expect(blocks[0].text).not.toContain("secret document content");
+    expect(blocks[1].text).toBe("inspect this");
   });
 
   test("does not add local path hints when source paths are absent", () => {

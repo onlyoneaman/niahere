@@ -43,16 +43,16 @@ describe("validateAttachment", () => {
     expect(validateAttachment(data, "text/plain")).toBeNull();
   });
 
-  test("rejects file over 10MB", () => {
-    const data = Buffer.alloc(11 * 1024 * 1024); // 11MB
+  test("rejects file over 25MB", () => {
+    const data = Buffer.alloc(26 * 1024 * 1024); // 26MB
     const error = validateAttachment(data, "image/jpeg");
     expect(error).toContain("too large");
-    expect(error).toContain("11.0MB");
-    expect(error).toContain("max 10MB");
+    expect(error).toContain("26.0MB");
+    expect(error).toContain("max 25MB");
   });
 
-  test("accepts file exactly at 10MB", () => {
-    const data = Buffer.alloc(10 * 1024 * 1024); // exactly 10MB
+  test("accepts file exactly at 25MB", () => {
+    const data = Buffer.alloc(25 * 1024 * 1024); // exactly 25MB
     expect(validateAttachment(data, "image/jpeg")).toBeNull();
   });
 

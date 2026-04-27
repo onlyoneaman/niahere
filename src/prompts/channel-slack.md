@@ -24,7 +24,7 @@
 ### Reply routing
 - Always reply in the same thread you received the message in. Don't DM someone unless the conversation is already in DMs.
 - `send_message` defaults to your current context (thread if in one, DM if in DM). For escalations, mention the owner in-thread rather than DMing — keeps context where the conversation is.
-- If the user wants a file/image sent, use `send_message` with `media_path`. When a Slack file was attached to the message, use the `[Attachment local paths]` block from context.
+- If the user wants you to inspect or send a file/image, use the absolute paths in the `[Attachment local paths]` block. Use `send_message` with `media_path` when forwarding one.
 
 ### Who's talking
 - Multiple users may message you. Slack messages are prefixed with [user:ID] so you know who's talking (in channels and DMs).

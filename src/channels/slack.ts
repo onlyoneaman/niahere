@@ -259,8 +259,8 @@ class SlackChannel implements Channel {
     });
 
     // Disk-backed file cache: download once, read from disk on subsequent requests
-    const attachDir = join(getNiaHome(), "tmp", "attachments");
-    mkdirSync(attachDir, { recursive: true });
+    const attachRoot = join(getNiaHome(), "tmp", "attachments");
+    mkdirSync(attachRoot, { recursive: true });
 
     interface CachedFile {
       path: string;
@@ -292,26 +292,39 @@ class SlackChannel implements Channel {
       return Buffer.from(await resp.arrayBuffer());
     }
 
-    async function extractSlackAttachments(files: any[]): Promise<Attachment[]> {
+    function cacheDirForScope(scope: string): string {
+      const safeScope = scope.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const dir = join(attachRoot, safeScope);
+      mkdirSync(dir, { recursive: true });
+      return dir;
+    }
+
+    function cacheKey(scope: string, url: string): string {
+      return `${scope}:${url}`;
+    }
+
+    async function extractSlackAttachments(files: any[], scope: string): Promise<Attachment[]> {
       const attachments: Attachment[] = [];
-      for (const file of files.slice(0, 5)) {
+      const scopedAttachDir = cacheDirForScope(scope);
+      for (const file of files) {
         const mime = file.mimetype || "application/octet-stream";
         const attType = classifyMime(mime);
         if (!attType) continue;
         if (!file.url_private_download) continue;
 
         // Check in-memory index first
-        const cached = fileIndex.get(file.url_private_download);
+        const indexedKey = cacheKey(scope, file.url_private_download);
+        const cached = fileIndex.get(indexedKey);
         if (cached && existsSync(cached.path)) {
           attachments.push(loadCached(cached));
           continue;
         }
 
-        // Check disk (survives daemon restarts) — keyed by URL hash only (global dedup)
+        // Check disk (survives daemon restarts) — scoped by Slack room/thread.
         const hash = urlHash(file.url_private_download);
         const ext = file.name?.split(".").pop() || "bin";
-        const diskPath = join(attachDir, `${hash}.${ext}`);
-        const metaPath = join(attachDir, `${hash}.meta.json`);
+        const diskPath = join(scopedAttachDir, `${hash}.${ext}`);
+        const metaPath = join(scopedAttachDir, `${hash}.meta.json`);
         if (existsSync(diskPath) && existsSync(metaPath)) {
           try {
             const meta = JSON.parse(readFileSync(metaPath, "utf8"));
@@ -321,7 +334,7 @@ class SlackChannel implements Channel {
               mimeType: meta.mimeType || mime,
               filename: meta.filename || file.name,
             };
-            fileIndex.set(file.url_private_download, entry);
+            fileIndex.set(indexedKey, entry);
             attachments.push(loadCached(entry));
             continue;
           } catch {
@@ -348,7 +361,7 @@ class SlackChannel implements Channel {
           writeFileSync(diskPath, finalData);
           writeFileSync(metaPath, JSON.stringify({ type: attType, mimeType: finalMime, filename: file.name }));
           const entry: CachedFile = { path: diskPath, type: attType, mimeType: finalMime, filename: file.name };
-          fileIndex.set(file.url_private_download, entry);
+          fileIndex.set(indexedKey, entry);
 
           attachments.push({ type: attType, data: finalData, mimeType: finalMime, filename: file.name, sourcePath: diskPath });
         } catch (err) {
@@ -484,7 +497,7 @@ class SlackChannel implements Channel {
       // Download any file attachments
       let attachments: Attachment[] | undefined;
       if (hasFiles) {
-        attachments = await extractSlackAttachments(msg.files!);
+        attachments = await extractSlackAttachments(msg.files!, roomPrefix(key));
       }
 
       if (!text && (!attachments || attachments.length === 0)) return;
@@ -516,24 +529,19 @@ class SlackChannel implements Channel {
             text = `[Thread context]\n${threadMessages.join("\n")}\n\n[Current message]\n${text}`;
           }
 
-          // Download files from recent thread messages (last 5 messages, max 5 files total)
+          // Download files from fetched thread messages.
           if (!attachments) attachments = [];
-          const threadFileBudget = 5 - attachments.length;
-          if (threadFileBudget > 0) {
-            const messagesWithFiles = priorMessages.filter((m: any) => m.files?.length > 0).slice(-5);
-            let threadFilesAdded = 0;
-            for (const m of messagesWithFiles) {
-              if (threadFilesAdded >= threadFileBudget) break;
-              const extracted = await extractSlackAttachments(m.files || []);
-              for (const att of extracted) {
-                if (threadFilesAdded >= threadFileBudget) break;
-                attachments.push(att);
-                threadFilesAdded++;
-              }
+          const messagesWithFiles = priorMessages.filter((m: any) => m.files?.length > 0);
+          let threadFilesAdded = 0;
+          for (const m of messagesWithFiles) {
+            const extracted = await extractSlackAttachments(m.files || [], roomPrefix(key));
+            for (const att of extracted) {
+              attachments.push(att);
+              threadFilesAdded++;
             }
-            if (threadFilesAdded > 0) {
-              log.info({ threadFiles: threadFilesAdded, channel: msg.channel }, "slack: downloaded thread attachments");
-            }
+          }
+          if (threadFilesAdded > 0) {
+            log.info({ threadFiles: threadFilesAdded, channel: msg.channel }, "slack: downloaded thread attachments");
           }
         } catch (err) {
           log.warn({ err, channel: msg.channel, thread_ts: msg.thread_ts }, "failed to fetch thread context");

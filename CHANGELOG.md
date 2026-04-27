@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.2.76] - 2026-04-27
+
+### Changed
+
+- **Slack attachment handling** — Inbound Slack files now cache under the Slack thread room, all fetched thread files are exposed by local path, and file contents are no longer embedded in the model payload.
+
 ## [0.2.75] - 2026-04-25
 
 ### Fixed
