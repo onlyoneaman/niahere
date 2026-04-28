@@ -29,6 +29,8 @@ const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const LONG_RUNNING_WARN = 30 * 60 * 1000; // 30 minutes
 const MAX_SEND_RETRIES = 2;
 const SEND_RETRY_DELAYS = [3_000, 8_000];
+const GENERIC_CHAT_ERROR =
+  "Claude/Anthropic returned an error without details. This is usually temporary; please try again shortly.";
 
 interface SDKUserMessage {
   type: "user";
@@ -91,6 +93,15 @@ export function buildContentBlocks(text: string, attachments?: Attachment[]): Me
   }
 
   return blocks as MessageParam["content"];
+}
+
+/** Convert SDK error text into a channel-safe chat response. */
+export function formatChatError(rawError: string | null | undefined): string {
+  const error = rawError?.trim();
+  if (!error || error.toLowerCase() === "unknown error") {
+    return GENERIC_CHAT_ERROR;
+  }
+  return `[error] ${error}`;
 }
 
 /**
@@ -505,7 +516,18 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
                 retryPending.onActivity?.("retrying after API error...");
                 stream!.push(retryPending.userMessage);
               } else {
-                const errorText = `[error] ${rawError}`;
+                const errorText = formatChatError(rawError);
+                log.error(
+                  {
+                    room,
+                    error: rawError,
+                    errors,
+                    subtype: msg.subtype,
+                    terminal_reason: msg.terminal_reason,
+                    session_id: msg.session_id,
+                  },
+                  "chat send failed with SDK result error",
+                );
                 await ActiveEngine.unregister(room);
                 clearLongRunningTimer();
                 pending.resolve({ result: errorText, costUsd: 0, turns: 0 });

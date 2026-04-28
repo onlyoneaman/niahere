@@ -1,6 +1,24 @@
 import { describe, expect, test } from "bun:test";
-import { buildContentBlocks } from "../../src/chat/engine";
+import { buildContentBlocks, formatChatError } from "../../src/chat/engine";
 import type { Attachment } from "../../src/types/attachment";
+
+describe("formatChatError", () => {
+  test("replaces unknown SDK errors with a user-facing transient message", () => {
+    expect(formatChatError("unknown error")).toBe(
+      "Claude/Anthropic returned an error without details. This is usually temporary; please try again shortly.",
+    );
+  });
+
+  test("replaces blank SDK errors with a user-facing transient message", () => {
+    expect(formatChatError("")).toBe(
+      "Claude/Anthropic returned an error without details. This is usually temporary; please try again shortly.",
+    );
+  });
+
+  test("keeps detailed errors visible", () => {
+    expect(formatChatError("rate limit exceeded")).toBe("[error] rate limit exceeded");
+  });
+});
 
 describe("buildContentBlocks", () => {
   test("returns plain string when no attachments", () => {

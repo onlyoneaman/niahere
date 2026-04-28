@@ -1,5 +1,11 @@
 import { describe, test, expect, beforeAll } from "bun:test";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { randomUUID } from "crypto";
+import { mkdtempSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+
+const TEST_CWD = mkdtempSync(join(tmpdir(), "nia-sdk-integration-"));
 
 // Strip nested-session env vars so tests work inside Claude Code
 beforeAll(() => {
@@ -17,9 +23,10 @@ describe("chat engine SDK integration", () => {
       prompt: "Reply with exactly: PONG",
       options: {
         systemPrompt: "You are a test bot. Reply concisely.",
-        cwd: process.env.HOME!,
+        cwd: TEST_CWD,
         permissionMode: "bypassPermissions",
         continue: false,
+        sessionId: randomUUID(),
         maxTurns: 1,
       } as any,
     });
@@ -58,9 +65,10 @@ describe("chat engine SDK integration", () => {
       prompt: 'Remember this secret code: BANANA42. Reply with "Got it."',
       options: {
         systemPrompt: "You are a test bot. Reply concisely.",
-        cwd: process.env.HOME!,
+        cwd: TEST_CWD,
         permissionMode: "bypassPermissions",
         continue: false,
+        sessionId: randomUUID(),
         maxTurns: 1,
       } as any,
     });
@@ -79,9 +87,10 @@ describe("chat engine SDK integration", () => {
       prompt: 'What is the secret code I told you? If you don\'t know, reply exactly "NO_CONTEXT".',
       options: {
         systemPrompt: "You are a test bot. Reply concisely. If you have no prior context, say NO_CONTEXT.",
-        cwd: process.env.HOME!,
+        cwd: TEST_CWD,
         permissionMode: "bypassPermissions",
         continue: false,
+        sessionId: randomUUID(),
         maxTurns: 1,
       } as any,
     });

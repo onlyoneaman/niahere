@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.2.81] - 2026-04-29
+
+### Fixed
+
+- **Generic chat error fallback** — Slack, Telegram, and terminal chat now show a clear transient-failure message instead of `[error] unknown error`, while logging the raw SDK error details.
+
 ## [0.2.80] - 2026-04-28
 
 ### Fixed
