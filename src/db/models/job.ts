@@ -3,6 +3,7 @@ import { CronExpressionParser } from "cron-parser";
 import { parseDuration } from "../../utils/duration";
 import { computeInitialNextRun } from "../../utils/schedule";
 import { getConfig } from "../../utils/config";
+import { validateJobName } from "../../utils/job-workspace";
 import type { ScheduleType, JobLifecycle } from "../../types";
 
 /** Validate that a schedule string matches its declared type. Throws on mismatch. */
@@ -96,6 +97,7 @@ export async function create(
   model?: string,
   employee?: string,
 ): Promise<void> {
+  validateJobName(name);
   validateSchedule(schedule, scheduleType);
   const existing = await get(name);
   if (existing) {

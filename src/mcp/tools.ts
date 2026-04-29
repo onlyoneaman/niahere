@@ -11,12 +11,22 @@ import { log } from "../utils/log";
 import { classifyMime } from "../utils/attachment";
 import { scanAgents } from "../core/agents";
 import { listEmployeesForMcp } from "../core/employees";
+import { resolveJobPrompt } from "../core/job-prompt";
 import type { McpSourceContext } from "./index";
 
 export async function listJobs(): Promise<string> {
   const jobs = await Job.list();
   if (jobs.length === 0) return "No jobs found.";
-  return JSON.stringify(jobs, null, 2);
+  const withPromptSource = jobs.map((job) => {
+    const resolvedPrompt = resolveJobPrompt(job);
+    return {
+      ...job,
+      prompt: resolvedPrompt.prompt,
+      promptSource: resolvedPrompt.source,
+      promptPath: resolvedPrompt.filePath,
+    };
+  });
+  return JSON.stringify(withPromptSource, null, 2);
 }
 
 export async function addJob(args: {
@@ -89,6 +99,15 @@ export async function updateJob(args: {
 
   const updated = await Job.update(args.name, fields);
   if (!updated) return `Job "${args.name}" not found.`;
+  if (fields.prompt !== undefined) {
+    const job = await Job.get(args.name);
+    if (job) {
+      const resolvedPrompt = resolveJobPrompt(job);
+      if (resolvedPrompt.source === "file") {
+        return `Job "${args.name}" updated. Note: runtime prompt is still overridden by ${resolvedPrompt.filePath}.`;
+      }
+    }
+  }
   return `Job "${args.name}" updated.`;
 }
 

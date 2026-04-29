@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Job prompt files** — Jobs can now use `~/.niahere/jobs/<name>/prompt.md` as their editable runtime prompt, with the database prompt retained as a fallback.
+
 ## [0.2.81] - 2026-04-29
 
 ### Fixed

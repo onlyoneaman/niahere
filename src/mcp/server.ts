@@ -17,7 +17,11 @@ export function createNiaMcpServer(sourceCtx?: McpSourceContext) {
         {
           name: z.string().describe("Unique job name"),
           schedule: z.string().describe("Cron expression, duration string, or ISO timestamp"),
-          prompt: z.string().describe("What the job should do"),
+          prompt: z
+            .string()
+            .describe(
+              "What the job should do. A non-empty ~/.niahere/jobs/<job-name>/prompt.md overrides this database prompt at runtime.",
+            ),
           schedule_type: z.enum(["cron", "interval", "once"]).default("cron").describe("Schedule type"),
           always: z.boolean().default(false).describe("If true, runs 24/7 ignoring active hours"),
           agent: z
@@ -50,7 +54,12 @@ export function createNiaMcpServer(sourceCtx?: McpSourceContext) {
             .string()
             .optional()
             .describe("New schedule (cron expression, interval duration, or ISO timestamp)"),
-          prompt: z.string().optional().describe("New prompt"),
+          prompt: z
+            .string()
+            .optional()
+            .describe(
+              "New database prompt. A non-empty ~/.niahere/jobs/<job-name>/prompt.md overrides this at runtime.",
+            ),
           always: z.boolean().optional().describe("If true, runs 24/7 ignoring active hours"),
           agent: z.string().nullable().optional().describe("Agent name (set null to remove agent)"),
           employee: z.string().nullable().optional().describe("Employee name (set null to remove employee)"),

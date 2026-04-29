@@ -1,6 +1,5 @@
 import { homedir } from "os";
-import { existsSync, mkdirSync, readFileSync } from "fs";
-import { join } from "path";
+import { existsSync } from "fs";
 import { randomUUID } from "crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { JobInput, JobResult } from "../types";
@@ -11,13 +10,15 @@ import { buildSystemPrompt, buildContextSuffix } from "../chat/identity";
 import { buildEmployeePrompt } from "../chat/employee-prompt";
 import { getEmployee } from "./employees";
 import { scanAgents } from "./agents";
+import { buildJobPrompt } from "./job-prompt";
 import { truncate, formatToolUse } from "../utils/format-activity";
 import { getMcpServers, type McpSourceContext } from "../mcp";
 import { ActiveEngine } from "../db/models";
-import { getPaths } from "../utils/paths";
 import { log } from "../utils/log";
 import { isRetryableApiError, sleep } from "../utils/retry";
 import { registerActiveHandle, unregisterActiveHandle } from "./active-handles";
+
+export { buildWorkingMemory } from "./job-prompt";
 
 export type ActivityCallback = (line: string) => void;
 
@@ -285,40 +286,6 @@ export async function runTask(opts: TaskOptions): Promise<RunnerOutput> {
 }
 
 // ---------------------------------------------------------------------------
-// Working memory
-// ---------------------------------------------------------------------------
-
-/** Build the working memory block for a stateful job. Returns empty string for stateless jobs. */
-export function buildWorkingMemory(jobName: string, stateless?: boolean): string {
-  if (stateless) return "";
-
-  const jobDir = join(getPaths().jobsDir, jobName);
-  mkdirSync(jobDir, { recursive: true });
-  const statePath = join(jobDir, "state.md");
-  let stateContent = "";
-  if (existsSync(statePath)) {
-    try {
-      stateContent = readFileSync(statePath, "utf8").trim();
-    } catch {
-      stateContent = "";
-    }
-  }
-
-  const stateBlock = stateContent ? `\n${stateContent}\n` : "(first run — no prior state)";
-
-  return `
-
-## Working Memory
-
-You have a persistent workspace at \`${jobDir}/\`. This directory is yours — create files, organize data, track history, maintain state however you need.
-
-Your \`state.md\` from last run:
-${stateBlock}
-
-Before finishing, update \`state.md\` with: what you did this run, what you noticed, and what to do or focus on next time. Keep it concise — a working notebook, not a log.`;
-}
-
-// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -364,12 +331,7 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
       systemPrompt = buildSystemPrompt("job");
     }
 
-    let jobPrompt = job.prompt
-      ? `Job: ${job.name} (schedule: ${job.schedule})\n\n${job.prompt}`
-      : `Job: ${job.name} (schedule: ${job.schedule})\n\nExecute your scheduled tasks.`;
-
-    // Working memory: give stateful jobs a persistent workspace
-    jobPrompt += buildWorkingMemory(job.name, job.stateless);
+    const jobPrompt = buildJobPrompt(job);
 
     // Model priority: job.model > agent.model > config.model
     const resolvedModel = job.model || agentModel || config.model;

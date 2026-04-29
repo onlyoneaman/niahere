@@ -110,7 +110,7 @@ All config and data lives in `~/.niahere/`:
     soul.md         — how the agent works
     rules.md        — behavioral instructions (loaded every session)
     memory.md       — persistent facts and context (loaded every session)
-  jobs/               — per-job working memory and state (auto-created)
+  jobs/               — per-job prompt.md, working memory, and state (auto-created)
   optimizations/      — optimization loop run workspaces
   images/
     reference.webp  — visual identity reference image

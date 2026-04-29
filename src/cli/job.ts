@@ -10,6 +10,7 @@ import type { ScheduleType } from "../types";
 import { errMsg } from "../utils/errors";
 import { fail, parseArgs, pickFromList, ICON_PASS, ICON_FAIL } from "../utils/cli";
 import { computeInitialNextRun } from "../core/scheduler";
+import { resolveJobPrompt } from "../core/job-prompt";
 
 const HELP = `Usage: nia job <command>
 
@@ -104,7 +105,8 @@ export async function jobCommand(): Promise<void> {
               const type = job.scheduleType !== "cron" ? ` (${job.scheduleType})` : "";
               const agentTag = job.agent ? `  [${job.agent}]` : "";
               const empTag = job.employee ? `  [emp:${job.employee}]` : "";
-              console.log(`  ${icon} ${job.name}  ${job.schedule}${type}${tag}${agentTag}${empTag}`);
+              const promptTag = resolveJobPrompt(job).source === "file" ? "  [prompt.md]" : "";
+              console.log(`  ${icon} ${job.name}  ${job.schedule}${type}${tag}${agentTag}${empTag}${promptTag}`);
             }
             if (archived.length > 0) {
               console.log(
@@ -283,6 +285,15 @@ export async function jobCommand(): Promise<void> {
           const updated = await Job.update(name, fields);
           if (!updated) fail(`Job not found: "${name}". Use \`nia job list\` to see available jobs.`);
           console.log(`Job "${name}" updated.`);
+          if (fields.prompt !== undefined) {
+            const job = await Job.get(name);
+            if (job) {
+              const resolvedPrompt = resolveJobPrompt(job);
+              if (resolvedPrompt.source === "file") {
+                console.log(`Note: runtime prompt is still overridden by ${resolvedPrompt.filePath}.`);
+              }
+            }
+          }
         });
       } catch (err) {
         fail(`Failed to update job: ${errMsg(err)}`);
@@ -307,7 +318,11 @@ export async function jobCommand(): Promise<void> {
           if (job.employee) console.log(`  employee: ${job.employee}`);
           if (job.model) console.log(`  model:    ${job.model}`);
           if (job.stateless) console.log(`  stateless: true`);
-          console.log(`  prompt:   ${job.prompt}`);
+          const resolvedPrompt = resolveJobPrompt(job);
+          const promptSource =
+            resolvedPrompt.source === "file" ? `file (${resolvedPrompt.filePath})` : resolvedPrompt.source;
+          console.log(`  prompt source: ${promptSource}`);
+          console.log(`  prompt:   ${resolvedPrompt.prompt}`);
 
           const state = readState();
           const info = state[job.name];

@@ -93,6 +93,12 @@ describe("getEnvironmentPrompt", () => {
     expect(prompt).toContain("config.yaml");
   });
 
+  test("environment prompt documents job prompt.md convention", () => {
+    const prompt = getEnvironmentPrompt();
+    expect(prompt).toContain("prompt.md");
+    expect(prompt).toContain("~/.niahere/jobs/<job-name>/prompt.md");
+  });
+
   test("contains current timezone", () => {
     const prompt = getEnvironmentPrompt();
     expect(prompt).toContain("Timezone:");

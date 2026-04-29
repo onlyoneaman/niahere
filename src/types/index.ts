@@ -1,6 +1,6 @@
 export type { Attachment } from "./attachment";
 export type { JobStatus, JobStateStatus, JobLifecycle, ScheduleType, Mode, AttachmentType, ChannelName } from "./enums";
-export type { JobInput, JobResult } from "./job";
+export type { JobInput, JobPromptSource, JobResult, ResolvedJobPrompt } from "./job";
 export type { SendResult, StreamCallback, ActivityCallback, SendCallbacks, ChatEngine, EngineOptions } from "./engine";
 export type { AuditEntry, JobState, CronState } from "./audit";
 export type { Channel, ChannelFactory } from "./channel";

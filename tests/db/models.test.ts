@@ -266,6 +266,7 @@ describe("Job model", () => {
   afterAll(async () => {
     const sql = getSql();
     await sql`DELETE FROM jobs WHERE name LIKE ${TEST_JOB + "%"}`;
+    await sql`DELETE FROM jobs WHERE name = '../escape'`;
   });
 
   test("create and get", async () => {
@@ -276,6 +277,10 @@ describe("Job model", () => {
     expect(job!.schedule).toBe("*/5 * * * *");
     expect(job!.prompt).toBe("do something");
     expect(job!.status).toBe("active");
+  });
+
+  test("create rejects job names outside the jobs workspace", async () => {
+    await expect(Job.create("../escape", "*/5 * * * *", "do something")).rejects.toThrow("Invalid job name");
   });
 
   test("create with agent and get", async () => {

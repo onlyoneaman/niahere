@@ -10,6 +10,14 @@ export interface JobInput {
   stateless?: boolean;
 }
 
+export type JobPromptSource = "file" | "database" | "default";
+
+export interface ResolvedJobPrompt {
+  prompt: string;
+  source: JobPromptSource;
+  filePath: string | null;
+}
+
 export interface JobResult {
   job: string;
   timestamp: string;

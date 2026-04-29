@@ -24,6 +24,7 @@ import { finalizeSession, cancelPending } from "../core/finalizer";
 import { log } from "../utils/log";
 import { isRetryableApiError, sleep } from "../utils/retry";
 import { registerActiveHandle, unregisterActiveHandle } from "../core/active-handles";
+import { resolveJobPrompt } from "../core/job-prompt";
 
 const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const LONG_RUNNING_WARN = 30 * 60 * 1000; // 30 minutes
@@ -198,7 +199,9 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
         const agentDef = agents.find((a) => a.name === jobData.agent);
         if (agentDef) systemPrompt = agentDef.body + "\n\n" + buildContextSuffix("chat");
       }
-      systemPrompt += `\n\n## Job Context\nYou are chatting in the context of job "${jobData.name}" (schedule: ${jobData.schedule}).\n\nJob prompt:\n${jobData.prompt}`;
+      const resolvedPrompt = resolveJobPrompt(jobData);
+      const source = resolvedPrompt.source === "file" ? ` from ${resolvedPrompt.filePath}` : "";
+      systemPrompt += `\n\n## Job Context\nYou are chatting in the context of job "${jobData.name}" (schedule: ${jobData.schedule}).\n\nJob prompt (${resolvedPrompt.source}${source}):\n${resolvedPrompt.prompt}`;
     }
   }
 

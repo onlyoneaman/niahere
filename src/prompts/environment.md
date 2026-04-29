@@ -39,7 +39,7 @@ You have MCP tools for managing jobs directly (preferred over CLI for speed):
   - Set `stateless: true` to disable working memory (no state.md or workspace)
   - Set `model` to override the default (e.g., `haiku`, `sonnet`, `opus`) — use cheaper models for high-frequency or simple jobs. Priority: job model > agent model > config model.
   - Set `employee` to assign the job to an employee (employee identity takes precedence over agent)
-- **update_job** — update an existing job's schedule, prompt, always, stateless, agent, model, or employee
+- **update_job** — update an existing job's schedule, prompt, always, stateless, agent, model, or employee. If `~/.niahere/jobs/<job-name>/prompt.md` exists and is non-empty, it overrides the database prompt at runtime.
 - **remove_job** — delete a job by name
 - **enable_job** / **disable_job** — toggle a job on or off
 - **archive_job** — archive a job (hidden from list, won't run)
@@ -68,7 +68,9 @@ Active hours: {{activeStart}}–{{activeEnd}} ({{timezone}}). Jobs respect this;
 
 Jobs are **stateful by default**. Each job gets a persistent workspace at `~/.niahere/jobs/<job-name>/`. Before each run, the runner reads `state.md` from that directory and injects it into the prompt. The agent should update `state.md` at the end of each run with what it did, what it noticed, and what to focus on next time.
 
-The workspace is freeform — the agent can create any files it needs (data, cache, history, etc.). `state.md` is the convention for the runner to inject automatically; everything else is the agent's to organize.
+Jobs may also keep their task instructions in `~/.niahere/jobs/<job-name>/prompt.md`. If this file exists and is non-empty, it is the runtime job prompt. If it is missing or empty, the job falls back to the database prompt set through `add_job`, `update_job`, or `nia job update --prompt`.
+
+The workspace is freeform — the agent can create any files it needs (data, cache, history, etc.). `prompt.md` is the editable task prompt convention; `state.md` is the working-memory convention the runner injects automatically.
 
 To disable working memory for a specific job, set `stateless: true` when creating or updating it.
 
