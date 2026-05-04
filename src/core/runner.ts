@@ -119,6 +119,7 @@ export async function runJobWithClaude(
     cwd,
     permissionMode: "bypassPermissions",
     sessionId,
+    skills: [],
   };
 
   if (model && model !== "default") {

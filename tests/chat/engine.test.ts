@@ -18,6 +18,12 @@ describe("formatChatError", () => {
   test("keeps detailed errors visible", () => {
     expect(formatChatError("rate limit exceeded")).toBe("[error] rate limit exceeded");
   });
+
+  test("explains OAuth organization access failures", () => {
+    expect(formatChatError("oauth_org_not_allowed")).toBe(
+      "[error] This Claude account is not allowed to access the configured organization. Check your Claude login or organization access.",
+    );
+  });
 });
 
 describe("buildContentBlocks", () => {

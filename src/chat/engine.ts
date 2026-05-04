@@ -102,6 +102,9 @@ export function formatChatError(rawError: string | null | undefined): string {
   if (!error || error.toLowerCase() === "unknown error") {
     return GENERIC_CHAT_ERROR;
   }
+  if (error === "oauth_org_not_allowed") {
+    return "[error] This Claude account is not allowed to access the configured organization. Check your Claude login or organization access.";
+  }
   return `[error] ${error}`;
 }
 
@@ -311,6 +314,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
       permissionMode: "bypassPermissions",
       includePartialMessages: true,
       settingSources: ["project", "user"],
+      skills: [],
     };
 
     if (sessionId) {

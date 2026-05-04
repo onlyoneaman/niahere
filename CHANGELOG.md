@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.2.83] - 2026-05-04
+
+### Fixed
+
+- **SDK skill prompt duplication** — Claude SDK chat and job runs now disable SDK skill preloading to avoid duplicating Nia's own skill summary.
+- **Claude organization auth errors** — Chat now explains `oauth_org_not_allowed` instead of surfacing the raw SDK error code.
+
 ## [0.2.82] - 2026-04-29
 
 ### Added
