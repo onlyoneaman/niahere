@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Global model command** — `nia model [name]` now shows or sets the global Claude model, and chat sessions honor explicit non-default config models.
+- **Active engine command** — `nia active` now prints the current active engine count, with `--full` for status-style room/channel timing details.
+
 ## [0.2.84] - 2026-05-06
 
 ### Added

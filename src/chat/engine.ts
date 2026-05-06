@@ -22,6 +22,7 @@ import type {
 import { truncate, formatToolUse } from "../utils/format-activity";
 import { finalizeSession, cancelPending } from "../core/finalizer";
 import { log } from "../utils/log";
+import { getConfig } from "../utils/config";
 import { isRetryableApiError, sleep } from "../utils/retry";
 import { registerActiveHandle, unregisterActiveHandle } from "../core/active-handles";
 import { resolveJobPrompt } from "../core/job-prompt";
@@ -108,6 +109,11 @@ export function formatChatError(rawError: string | null | undefined): string {
   return `[error] ${error}`;
 }
 
+export function resolveSdkModel(contextModel?: string | null): string | undefined {
+  const model = contextModel || getConfig().model;
+  return model && model !== "default" ? model : undefined;
+}
+
 /**
  * Push-based async iterable for streaming user messages to the SDK.
  * Keeps the query subprocess alive between messages.
@@ -177,30 +183,40 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
 
   // Context overrides: employee > agent > job > default
   let cwd = homedir();
+  let contextModel: string | null | undefined;
   if (opts.employee) {
     const empPrompt = buildEmployeePrompt(opts.employee);
     if (empPrompt) systemPrompt = empPrompt;
     const emp = getEmployee(opts.employee);
+    contextModel = emp?.model;
     if (emp?.repo && existsSync(emp.repo)) cwd = emp.repo;
   } else if (opts.agent) {
     const agents = scanAgents();
     const agentDef = agents.find((a) => a.name === opts.agent);
-    if (agentDef) systemPrompt = agentDef.body + "\n\n" + buildContextSuffix("chat");
+    if (agentDef) {
+      systemPrompt = agentDef.body + "\n\n" + buildContextSuffix("chat");
+      contextModel = agentDef.model;
+    }
   } else if (opts.job) {
     // Job chat: load job and use its context
     const jobData = await Job.get(opts.job);
     if (jobData) {
+      contextModel = jobData.model;
       // If job has an employee, use employee prompt
       if (jobData.employee) {
         const empPrompt = buildEmployeePrompt(jobData.employee);
         if (empPrompt) systemPrompt = empPrompt;
         const emp = getEmployee(jobData.employee);
+        if (!contextModel) contextModel = emp?.model;
         if (emp?.repo && existsSync(emp.repo)) cwd = emp.repo;
       } else if (jobData.agent) {
         // If job has an agent, use agent prompt + context
         const agents = scanAgents();
         const agentDef = agents.find((a) => a.name === jobData.agent);
-        if (agentDef) systemPrompt = agentDef.body + "\n\n" + buildContextSuffix("chat");
+        if (agentDef) {
+          systemPrompt = agentDef.body + "\n\n" + buildContextSuffix("chat");
+          if (!contextModel) contextModel = agentDef.model;
+        }
       }
       const resolvedPrompt = resolveJobPrompt(jobData);
       const source = resolvedPrompt.source === "file" ? ` from ${resolvedPrompt.filePath}` : "";
@@ -316,6 +332,10 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
       settingSources: ["project", "user"],
       skills: [],
     };
+    const model = resolveSdkModel(contextModel);
+    if (model) {
+      options.model = model;
+    }
 
     if (sessionId) {
       options.resume = sessionId;

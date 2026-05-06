@@ -1,6 +1,22 @@
-import { describe, expect, test } from "bun:test";
-import { buildContentBlocks, formatChatError } from "../../src/chat/engine";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdirSync, rmSync, writeFileSync } from "fs";
+import { buildContentBlocks, formatChatError, resolveSdkModel } from "../../src/chat/engine";
+import { resetConfig } from "../../src/utils/config";
 import type { Attachment } from "../../src/types/attachment";
+
+const TEST_DIR = "/tmp/test-nia-chat-engine";
+
+beforeEach(() => {
+  mkdirSync(TEST_DIR, { recursive: true });
+  process.env.NIA_HOME = TEST_DIR;
+  resetConfig();
+});
+
+afterEach(() => {
+  rmSync(TEST_DIR, { recursive: true, force: true });
+  delete process.env.NIA_HOME;
+  resetConfig();
+});
 
 describe("formatChatError", () => {
   test("replaces unknown SDK errors with a user-facing transient message", () => {
@@ -23,6 +39,26 @@ describe("formatChatError", () => {
     expect(formatChatError("oauth_org_not_allowed")).toBe(
       "[error] This Claude account is not allowed to access the configured organization. Check your Claude login or organization access.",
     );
+  });
+});
+
+describe("resolveSdkModel", () => {
+  test("does not pass a model when global config is default", () => {
+    expect(resolveSdkModel()).toBeUndefined();
+  });
+
+  test("uses global config model when set", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, "model: sonnet\n");
+    resetConfig();
+
+    expect(resolveSdkModel()).toBe("sonnet");
+  });
+
+  test("context model overrides global config model", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, "model: sonnet\n");
+    resetConfig();
+
+    expect(resolveSdkModel("opus")).toBe("opus");
   });
 });
 

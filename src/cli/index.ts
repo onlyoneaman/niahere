@@ -11,6 +11,8 @@ import { errMsg } from "../utils/errors";
 import { fail, ICON_PASS, ICON_WARN } from "../utils/cli";
 import { jobCommand } from "./job";
 import { statusCommand } from "./status";
+import { activeCommand } from "./active";
+import { modelCommand } from "./model";
 import { sendCommand, telegramCommand, slackCommand } from "./channels";
 import { rulesCommand, memoryCommand } from "./self";
 import { watchCommand } from "./watch";
@@ -124,6 +126,16 @@ switch (command) {
 
   case "status": {
     await statusCommand(process.argv.slice(3));
+    break;
+  }
+
+  case "active": {
+    await activeCommand(process.argv.slice(3));
+    break;
+  }
+
+  case "model": {
+    await modelCommand(process.argv.slice(3));
     break;
   }
 
@@ -565,6 +577,8 @@ Daemon:
   restart [--wait N] [--force]    Restart daemon
   update [--wait N] [--force]     Update to latest version
   status [--json --rooms N --all] Show daemon, jobs, channels
+  active [--full]                 Show active engine count or details
+  model [name]                    Show or set global Claude model
   health                          Check daemon, db, channels, config
   logs [-f] [--channel ch]        Daemon logs (filter by channel)
 

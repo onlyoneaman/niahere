@@ -25,6 +25,8 @@ src/
     self.ts              # Persona commands (rules, memory)
     watch.ts             # Slack watch channel management
     status.ts            # Status command output
+    active.ts            # Active engine count/detail output
+    model.ts             # Global model show/set shortcut
   core/
     daemon.ts            # Daemon lifecycle, service-aware restart, startup guard
     runner.ts            # Job execution via Claude Agent SDK query() + MCP tools; optional Codex CLI
@@ -187,7 +189,7 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 - **Jobs vs crons:** Jobs respect `active_hours`, crons (`always: true`) run 24/7. Both use the same `jobs` table.
 - **Job execution:** Configurable via `runner` in config.yaml — `"claude"` (default, uses Claude Agent SDK `query()`) or `"codex"` (uses `codex exec --json`). Session ID stored in audit for inspection. `terminal_reason` tracks why a job ended (`completed`, `max_turns`, `aborted_tools`, etc.).
 - **Job prompt files and working memory:** Jobs are stateful by default. Each job gets a workspace at `~/.niahere/jobs/<name>/`. If `prompt.md` exists and is non-empty, it overrides the DB prompt at runtime; otherwise the job uses the DB prompt. `state.md` is auto-injected into the prompt unless `stateless: true` is set. The agent updates `state.md` at the end of each run.
-- **Per-job model routing:** Jobs can specify a `model` field (e.g. `haiku`, `sonnet`) that overrides agent and global model. Priority: `job.model > agent.model > config.model`. Use for cost savings on simple jobs.
+- **Model routing:** Global `config.model` defaults to `default` (Claude Code's tier-based default) and can be changed with `nia model <model>`. Chat sessions and jobs pass explicit non-default models to the SDK. Jobs can specify a `model` field (e.g. `haiku`, `sonnet`) that overrides agent and global model. Priority for jobs: `job.model > agent.model > config.model`. Use for cost savings on simple jobs.
 - **Optimization workspaces:** The `optimize` skill creates self-contained run directories at `~/.niahere/optimizations/{slug}-{hex}/` with frozen contracts, rubrics, baselines, and JSONL result logs.
 - **Channel registration:** Channels export factory functions, `registerAllChannels()` wires them up explicitly. No side-effect imports.
 - **Daemon lifecycle:** Blocking stop (waits for engines, escalates to SIGKILL). Service-aware restart via launchctl/systemd. Startup guard prevents duplicate daemons. `nia stop`, `nia restart`, and `nia update` guard against active engines — if engines are running, stop/restart refuse by default while update waits up to 1 minute by default. `--wait <minutes>` polls every 5s and proceeds when engines clear or timeout. `--force` skips the check, writes a short-lived force-shutdown marker for service-managed daemons, actively closes live Claude handles, clears active-engine bookkeeping, and proceeds immediately.

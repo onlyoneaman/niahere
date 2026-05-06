@@ -55,6 +55,8 @@ nia init                       — interactive setup (db, channels, persona, age
 nia start / stop               — daemon + OS service (launchd/systemd)
 nia restart                    — restart daemon (service-aware)
 nia status                     — show daemon, jobs, channels, chat rooms
+nia active [--full]            — show active engine count or details
+nia model [name]               — show or set global Claude model
 nia health                     — check daemon, db, channels, config
 nia chat [-c|-r] [--channel ch] — terminal chat (new by default, -c continue, -r pick)
 nia run <prompt>               — one-shot prompt execution
