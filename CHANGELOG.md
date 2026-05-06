@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.85] - 2026-05-06
+
 ### Added
 
 - **Global model command** — `nia model [name]` now shows or sets the global Claude model, and chat sessions honor explicit non-default config models.
