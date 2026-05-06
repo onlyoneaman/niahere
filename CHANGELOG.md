@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.84] - 2026-05-06
+
 ### Added
 
 - **Session finalization switches** — `session_finalization` config can now disable memory consolidation, session summaries, or all post-session background finalization work.
