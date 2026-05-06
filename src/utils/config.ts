@@ -16,6 +16,11 @@ const DEFAULTS: Config = {
   database_url: DEFAULT_DATABASE_URL,
   log_level: "info",
   gemini_api_key: null,
+  sessionFinalization: {
+    enabled: true,
+    memoryConsolidation: true,
+    summaries: true,
+  },
   channels: {
     enabled: true,
     default: "telegram",
@@ -100,6 +105,14 @@ export function loadConfig(): Config {
   const gemini_api_key =
     process.env.GEMINI_API_KEY || (typeof raw.gemini_api_key === "string" ? raw.gemini_api_key : null);
 
+  // Session finalization — controls post-session background LLM work.
+  const sf = (raw.session_finalization || {}) as Record<string, unknown>;
+  const sessionFinalization = {
+    enabled: sf.enabled !== false,
+    memoryConsolidation: sf.memory_consolidation !== false,
+    summaries: sf.summaries !== false,
+  };
+
   // --- Channels (nested under `channels:` in yaml) ---
   const ch = (raw.channels || {}) as Record<string, unknown>;
   const chTg = (ch.telegram || {}) as Record<string, unknown>;
@@ -159,6 +172,7 @@ export function loadConfig(): Config {
     database_url,
     log_level,
     gemini_api_key,
+    sessionFinalization,
     channels: {
       enabled: channelsEnabled,
       default: defaultChannel,

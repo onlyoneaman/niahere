@@ -121,6 +121,26 @@ describe("loadConfig", () => {
     expect(config.runner).toBe("claude");
   });
 
+  test("session finalization defaults to enabled", () => {
+    const config = loadConfig();
+    expect(config.sessionFinalization.enabled).toBe(true);
+    expect(config.sessionFinalization.memoryConsolidation).toBe(true);
+    expect(config.sessionFinalization.summaries).toBe(true);
+  });
+
+  test("parses session finalization switches", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, [
+      "session_finalization:",
+      "  enabled: true",
+      "  memory_consolidation: false",
+      "  summaries: false",
+    ].join("\n"));
+    const config = loadConfig();
+    expect(config.sessionFinalization.enabled).toBe(true);
+    expect(config.sessionFinalization.memoryConsolidation).toBe(false);
+    expect(config.sessionFinalization.summaries).toBe(false);
+  });
+
   test("parses slack watch channels", () => {
     writeFileSync(`${TEST_DIR}/config.yaml`, [
       "channels:",

@@ -35,6 +35,12 @@ export interface ChannelsConfig {
   slack: SlackConfig;
 }
 
+export interface SessionFinalizationConfig {
+  enabled: boolean;
+  memoryConsolidation: boolean;
+  summaries: boolean;
+}
+
 export interface Config {
   model: string;
   runner: "claude" | "codex";
@@ -43,5 +49,6 @@ export interface Config {
   database_url: string;
   log_level: string;
   gemini_api_key: string | null;
+  sessionFinalization: SessionFinalizationConfig;
   channels: ChannelsConfig;
 }

@@ -30,7 +30,7 @@ src/
     runner.ts            # Job execution via Claude Agent SDK query() + MCP tools; optional Codex CLI
     agents.ts            # Agent scanner — scanAgents(), getAgentsSummary(), getAgentDefinitions()
     scheduler.ts         # Job scheduling, due-time queries, cron/interval/once
-    consolidator.ts      # Background memory extraction from sessions and jobs
+    consolidator.ts      # Background memory extraction from chat sessions
     summarizer.ts        # Session summary generation for cross-session continuity
   chat/
     engine.ts            # Chat engine — Claude SDK query(), sessions, streaming
@@ -136,6 +136,10 @@ openai_api_key: ...
 active_hours:
   start: "11:00"
   end: "02:00"
+session_finalization:
+  enabled: true
+  memory_consolidation: true
+  summaries: true
 channels:
   enabled: true
   default: telegram
@@ -194,7 +198,7 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 - **Watch behaviors:** Each watch lives in `~/.niahere/watches/<name>/` (dir-per-watch, like agents). Contains at least `behavior.md` and may later contain `state.md` for working memory. The `behavior` field in `channels.slack.watch` is optional and has three forms: (1) omitted/empty — uses the watch name from the key (part after `#`) and loads `watches/<name>/behavior.md`; (2) single token `[a-zA-Z0-9_-]+` — explicit override, loads `watches/<token>/behavior.md`; (3) prose with whitespace — inline behavior. If the file is missing, the watch still runs but without explicit behavior (agent uses general judgement). Hot-reloads via mtime tracking of config.yaml AND any referenced behavior files.
 - **Persona:** 5 files loaded every session: `identity.md`, `owner.md`, `soul.md`, `rules.md`, `memory.md`. Rules = behavioral instructions (verbs). Memory = facts and context (nouns). Both preloaded into every session automatically. Use `add_rule` / `add_memory` MCP tools, or edit files directly.
 - **Two-stage memory:** Durable memory/rules are only written via a staging pipeline. Stage 1: after a chat session goes idle, the consolidator (`src/core/consolidator.ts`) reflects on the transcript and appends candidate lines to `~/.niahere/self/staging.md` (format: `- [count×] [type] content :: first_seen → last_seen`, types: `persona | project | reference | correction`). Reinforcement happens in-place — the consolidator bumps `[1×] → [2×]` instead of duplicating. Stage 2: the `memory-promoter` system job runs nightly at 3am (auto-installed via `bootstrapSystemJobs` in `daemon.ts`), reaps entries older than 14d with count<2, and promotes qualifying candidates (`count ≥ 2` + durability review) to `memory.md` or `rules.md`. Jobs do NOT flow through this pipeline — job-local learnings live in each job's `state.md` via `buildWorkingMemory()`. Routing job output through global memory caused layer violations.
-- **Session finalization:** Post-session consolidation and summarization are managed by a unified finalizer (`src/core/finalizer.ts`). All callers use `finalizeSession(sessionId, room)` which writes to a `finalization_requests` table and returns instantly. The daemon listens on `nia_finalize` via pg_notify and drains pending requests on startup. In daemon mode, requests also process inline (fire-and-forget). CLI processes (`nia chat`, `nia run`) exit immediately — the daemon picks up the work. Session activity cancels pending (not yet processing) requests.
+- **Session finalization:** Post-session consolidation and summarization are managed by a unified finalizer (`src/core/finalizer.ts`). All callers use `finalizeSession(sessionId, room)` which writes to a `finalization_requests` table and returns instantly. The daemon listens on `nia_finalize` via pg_notify and drains pending requests on startup. In daemon mode, requests also process inline (fire-and-forget). CLI processes (`nia chat`, `nia run`) exit immediately — the daemon picks up the work. Session activity cancels pending (not yet processing) requests. `session_finalization.enabled`, `session_finalization.memory_consolidation`, and `session_finalization.summaries` in config.yaml can disable all or part of this background work; if no tasks are enabled, new requests are not enqueued and already-pending requests are marked done without running consolidator/summarizer.
 - **Visual identity:** Images at `~/.niahere/images/`. Generated during `nia init` via Gemini.
 - **Service:** `nia start` registers OS service (launchd/systemd). `nia restart` is service-aware.
 - **Agents:** Role/domain specialists defined as `AGENT.md` files in `agents/` directories. Scanned from project `agents/`, `~/.niahere/agents/`, `~/.shared/agents/`. Passed to Claude Agent SDK as subagents via `query()` options — SDK handles routing and context isolation. Jobs can reference an agent via `agent` column — agent body becomes the systemPrompt. See [MULTI_AGENT_PHILOSOPHY.md](MULTI_AGENT_PHILOSOPHY.md).

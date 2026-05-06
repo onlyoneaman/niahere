@@ -10,10 +10,25 @@
 import { getSql } from "../db/connection";
 import { consolidateSession } from "./consolidator";
 import { summarizeSession } from "./summarizer";
+import { loadConfig } from "../utils/config";
 import { log } from "../utils/log";
+
+type FinalizationTask = "consolidate" | "summarize";
+
+function getEnabledTasks(): FinalizationTask[] {
+  const { sessionFinalization } = loadConfig();
+  if (!sessionFinalization.enabled) return [];
+
+  const tasks: FinalizationTask[] = [];
+  if (sessionFinalization.memoryConsolidation) tasks.push("consolidate");
+  if (sessionFinalization.summaries) tasks.push("summarize");
+  return tasks;
+}
 
 /** Enqueue a session for finalization. Always returns immediately. */
 export async function finalizeSession(sessionId: string, room: string): Promise<void> {
+  if (getEnabledTasks().length === 0) return;
+
   const sql = getSql();
 
   // Get current message count for idempotency
@@ -77,19 +92,30 @@ async function processOne(sessionId: string, room: string, messageCount: number)
   if (claimed.length === 0) return; // Already claimed or cancelled
 
   const requestId = claimed[0].id;
+  const tasks = getEnabledTasks();
+  if (tasks.length === 0) {
+    await sql`
+      UPDATE finalization_requests
+      SET status = 'done', updated_at = NOW()
+      WHERE id = ${requestId}
+    `;
+    log.info({ sessionId, room, messageCount }, "finalizer: skipped because all tasks are disabled");
+    return;
+  }
 
   try {
-    const [consolidateResult, summarizeResult] = await Promise.allSettled([
-      consolidateSession(sessionId, room),
-      summarizeSession(sessionId, room),
-    ]);
+    const results = await Promise.allSettled(
+      tasks.map((task) =>
+        task === "consolidate" ? consolidateSession(sessionId, room) : summarizeSession(sessionId, room),
+      ),
+    );
 
     const errors: string[] = [];
-    if (consolidateResult.status === "rejected") {
-      errors.push(`consolidate: ${formatRejection(consolidateResult.reason)}`);
-    }
-    if (summarizeResult.status === "rejected") {
-      errors.push(`summarize: ${formatRejection(summarizeResult.reason)}`);
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result.status === "rejected") {
+        errors.push(`${tasks[i]}: ${formatRejection(result.reason)}`);
+      }
     }
 
     const finalStatus = errors.length === 0 ? "done" : "failed";

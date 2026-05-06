@@ -43,8 +43,8 @@ nia start               # starts daemon + registers OS service
 - **Skills** — loads skills from multiple directories, invokable as slash commands
 - **Cross-platform service** — launchd (macOS), systemd (Linux), service-aware restart
 - **MCP tools** — 20 tools for job management, messaging, memory, rules, and channel control
-- **Background memory consolidation** — extracts memories from conversations and job runs automatically
-- **Session summaries** — handoff notes between sessions for continuity
+- **Background memory consolidation** — stages memory candidates from conversations automatically
+- **Session summaries** — optional handoff notes between sessions for continuity
 - **Backups** — `nia backup` with auto-backup before updates
 - **Optional integrations** — add Gmail, Discord, and more via skills
 
@@ -118,6 +118,17 @@ All config and data lives in `~/.niahere/`:
   tmp/
     nia.pid, daemon.log, cron-state.json, cron-audit.jsonl
 ```
+
+Post-session background LLM work can be disabled in `config.yaml`:
+
+```yaml
+session_finalization:
+  enabled: true
+  memory_consolidation: true
+  summaries: true
+```
+
+Use `nia config set session_finalization.memory_consolidation false` to stop memory staging, `nia config set session_finalization.summaries false` to stop session summaries, or `nia config set session_finalization.enabled false` to disable both.
 
 ## Contributing
 

@@ -85,6 +85,29 @@ export function validateConfig(): Result {
     messages.push(`${PASS} runner: ${runner}`);
   }
 
+  // Session finalization
+  const sf = raw.session_finalization as Record<string, unknown> | undefined;
+  if (sf) {
+    let sessionFinalizationOk = true;
+    for (const key of ["enabled", "memory_consolidation", "summaries"]) {
+      const val = sf[key];
+      if (val !== undefined && typeof val !== "boolean") {
+        messages.push(`${FAIL} session_finalization.${key} must be true or false`);
+        ok = false;
+        sessionFinalizationOk = false;
+      }
+    }
+    if (sessionFinalizationOk) {
+      const enabled = sf.enabled !== false;
+      const memoryConsolidation = sf.memory_consolidation !== false;
+      const summaries = sf.summaries !== false;
+      messages.push(
+        `${PASS} session_finalization: ${enabled ? "enabled" : "disabled"} ` +
+          `(memory_consolidation=${memoryConsolidation}, summaries=${summaries})`,
+      );
+    }
+  }
+
   // Channels
   const ch = raw.channels as Record<string, unknown> | undefined;
   if (ch) {
