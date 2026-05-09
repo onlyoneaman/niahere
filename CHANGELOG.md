@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Whisper.cpp transcription skill** — The bundled skill now installs whisper.cpp only when missing and defaults to the verified medium model.
+
 ## [0.2.85] - 2026-05-06
 
 ### Added
