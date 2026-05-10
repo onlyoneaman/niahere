@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Browser handoff stability** — Cloned Playwright Chrome runs now detach from the launching shell so verification-code pauses do not close the browser before the agent can reconnect.
+- **Browser run close command** — The Playwright profile helper now lets agents explicitly close a tracked browser run and wait for commit or cleanup.
+
 ## [0.2.87] - 2026-05-10
 
 ### Changed

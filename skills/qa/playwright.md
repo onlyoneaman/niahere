@@ -49,6 +49,7 @@ This:
 - watches the Chrome process; when Chrome exits, commits the run profile back to the canonical profile and removes the run clone
 
 Each concurrent `open` gets its own user-data dir and CDP URL.
+The Chrome process is detached from the invoking shell, so it stays open across agent turn boundaries, Slack replies, and manual verification-code pauses. Reconnect later with the printed `PW_CDP_URL` or retrieve it with `status --run-id <run-id>`.
 
 Attach with Playwright when needed:
 
@@ -86,6 +87,7 @@ skills/qa/scripts/playwright-profile-clone.sh prepare
 skills/qa/scripts/playwright-profile-clone.sh open
 skills/qa/scripts/playwright-profile-clone.sh open --discard-on-close
 skills/qa/scripts/playwright-profile-clone.sh open --keep
+skills/qa/scripts/playwright-profile-clone.sh close --run-id <run-id> --wait
 skills/qa/scripts/playwright-profile-clone.sh status --run-id <run-id>
 skills/qa/scripts/playwright-profile-clone.sh commit --run-id <run-id>
 skills/qa/scripts/playwright-profile-clone.sh cleanup --run-id <run-id>
@@ -93,6 +95,7 @@ skills/qa/scripts/playwright-profile-clone.sh prune --keep 100
 ```
 
 The helper auto-prunes old run profiles after `prepare`/`open`. Default cap is `100` run dirs. Override it with `PLAYWRIGHT_PROFILE_MAX_RUNS=<count>`, or disable automatic pruning with `PLAYWRIGHT_PROFILE_MAX_RUNS=0` or `PLAYWRIGHT_PROFILE_MAX_RUNS=off`. Pruning skips the current run and any run with a tracked live Chrome PID.
+When browser work is complete, call `close --run-id <run-id> --wait`; this terminates the tracked Chrome process and lets the configured close behavior commit or discard the run.
 
 ## Quickstart: Open a Browser
 

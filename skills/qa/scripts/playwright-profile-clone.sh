@@ -15,6 +15,7 @@ usage() {
 Usage:
   playwright-profile-clone.sh prepare [--run-id <hex>] [--primary <path>]
   playwright-profile-clone.sh open [--run-id <hex>] [--primary <path>] [--commit-on-close|--discard-on-close|--keep]
+  playwright-profile-clone.sh close [--run-id <hex>] [--wait]
   playwright-profile-clone.sh commit [--run-id <hex>]
   playwright-profile-clone.sh cleanup [--run-id <hex>]
   playwright-profile-clone.sh prune [--keep <count>|--off]
@@ -384,7 +385,7 @@ cmd_open() {
   chrome="$(chrome_path)"
   log_file="$RUNS_DIR/$run_id.chrome.log"
 
-  "$chrome" \
+  nohup "$chrome" \
     --user-data-dir="$run_dir" \
     --remote-debugging-port="$port" \
     --no-first-run \
@@ -439,18 +440,24 @@ start_close_watchdog() {
 
   [ "$close_action" != "keep" ] || return 0
 
-  (
+  nohup bash -c '
+    script_path="$1"
+    run_id="$2"
+    chrome_pid="$3"
+    close_action="$4"
+    log_file="$5"
+
     while kill -0 "$chrome_pid" 2>/dev/null; do
       sleep 0.2
     done
 
     if [ "$close_action" = "commit" ]; then
-      bash "$SCRIPT_PATH" commit --run-id "$run_id" --assume-closed >>"$log_file" 2>&1 &&
-        bash "$SCRIPT_PATH" cleanup --run-id "$run_id" >>"$log_file" 2>&1
+      bash "$script_path" commit --run-id "$run_id" --assume-closed >>"$log_file" 2>&1 &&
+        bash "$script_path" cleanup --run-id "$run_id" >>"$log_file" 2>&1
     elif [ "$close_action" = "discard" ]; then
-      bash "$SCRIPT_PATH" cleanup --run-id "$run_id" >>"$log_file" 2>&1
+      bash "$script_path" cleanup --run-id "$run_id" >>"$log_file" 2>&1
     fi
-  ) >/dev/null 2>&1 &
+  ' _ "$SCRIPT_PATH" "$run_id" "$chrome_pid" "$close_action" "$log_file" >/dev/null 2>&1 &
 }
 
 cmd_commit() {
@@ -468,6 +475,49 @@ cmd_commit() {
   local run_id
   run_id="$(resolve_run_id_arg "$run_id_arg")"
   commit_profile "$run_id" "$allow_running"
+}
+
+cmd_close() {
+  local run_id_arg=""
+  local wait_for_cleanup="false"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --run-id) run_id_arg="${2:-}"; shift 2 ;;
+      --wait) wait_for_cleanup="true"; shift ;;
+      -h|--help) usage; exit 0 ;;
+      *) die "unknown close arg: $1" ;;
+    esac
+  done
+
+  local run_id
+  run_id="$(resolve_run_id_arg "$run_id_arg")"
+  load_state "$run_id"
+
+  [ -n "${PW_CHROME_PID:-}" ] || die "run id $run_id has no tracked Chrome PID"
+
+  if kill -0 "$PW_CHROME_PID" 2>/dev/null; then
+    kill "$PW_CHROME_PID" 2>/dev/null || true
+    echo "status=closing"
+  else
+    echo "status=already_closed"
+  fi
+  echo "run_id=$run_id"
+
+  if [ "$wait_for_cleanup" = "true" ]; then
+    local deadline=$((SECONDS + 30))
+    if [ "${PW_PROFILE_CLOSE_ACTION:-manual}" = "keep" ]; then
+      while kill -0 "$PW_CHROME_PID" 2>/dev/null && [ "$SECONDS" -lt "$deadline" ]; do
+        sleep 0.2
+      done
+      kill -0 "$PW_CHROME_PID" 2>/dev/null && die "timed out waiting for browser to close for run id $run_id"
+    else
+      while [ -e "$(state_file "$run_id")" ] && [ "$SECONDS" -lt "$deadline" ]; do
+        sleep 0.2
+      done
+      [ ! -e "$(state_file "$run_id")" ] || die "timed out waiting for close handling for run id $run_id"
+    fi
+    echo "status=closed"
+  fi
 }
 
 cmd_cleanup() {
@@ -523,6 +573,7 @@ main() {
   case "$command" in
     prepare) cmd_prepare "$@" ;;
     open) cmd_open "$@" ;;
+    close) cmd_close "$@" ;;
     commit) cmd_commit "$@" ;;
     cleanup) cmd_cleanup "$@" ;;
     prune) cmd_prune "$@" ;;

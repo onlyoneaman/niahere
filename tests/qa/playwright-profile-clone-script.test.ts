@@ -157,6 +157,64 @@ describe("playwright profile clone helper", () => {
     }
   });
 
+  test("close terminates the tracked browser and waits for close handling", async () => {
+    const home = mkdtempSync(join(tmpdir(), "nia-pw-helper-home-"));
+    const mockChrome = join(home, "mock-chrome.sh");
+    try {
+      const primary = join(home, ".shared", "playwright-user-profile");
+      mkdirSync(primary, { recursive: true });
+      writeFileSync(join(primary, "state.txt"), "before");
+      writeFileSync(mockChrome, "#!/usr/bin/env bash\nsleep 60\n");
+      chmodSync(mockChrome, 0o755);
+
+      const opened = run(["open", "--discard-on-close"], { HOME: home, PLAYWRIGHT_CHROME: mockChrome });
+
+      expect(opened.status).toBe(0);
+      const runId = getOutputValue(opened.stdout, "PW_PROFILE_RUN_ID");
+      const runDir = getOutputValue(opened.stdout, "PW_USER_DATA_DIR");
+      const pid = Number(getOutputValue(opened.stdout, "PW_CHROME_PID"));
+      expect(process.kill(pid, 0)).toBe(true);
+
+      const closed = run(["close", "--run-id", runId, "--wait"], { HOME: home });
+
+      expect(closed.status).toBe(0);
+      expect(closed.stdout).toContain("status=closing");
+      expect(closed.stdout).toContain("status=closed");
+      expect(existsSync(runDir)).toBe(false);
+      expect(existsSync(join(home, ".shared", "playwright-profile-runs", ".state", `${runId}.env`))).toBe(false);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("close with --wait leaves kept runs for manual commit or cleanup", () => {
+    const home = mkdtempSync(join(tmpdir(), "nia-pw-helper-home-"));
+    const mockChrome = join(home, "mock-chrome.sh");
+    try {
+      const primary = join(home, ".shared", "playwright-user-profile");
+      mkdirSync(primary, { recursive: true });
+      writeFileSync(join(primary, "state.txt"), "before");
+      writeFileSync(mockChrome, "#!/usr/bin/env bash\nsleep 60\n");
+      chmodSync(mockChrome, 0o755);
+
+      const opened = run(["open", "--keep"], { HOME: home, PLAYWRIGHT_CHROME: mockChrome });
+
+      expect(opened.status).toBe(0);
+      const runId = getOutputValue(opened.stdout, "PW_PROFILE_RUN_ID");
+      const runDir = getOutputValue(opened.stdout, "PW_USER_DATA_DIR");
+
+      const closed = run(["close", "--run-id", runId, "--wait"], { HOME: home });
+
+      expect(closed.status).toBe(0);
+      expect(closed.stdout).toContain("status=closed");
+      expect(existsSync(runDir)).toBe(true);
+      expect(existsSync(join(home, ".shared", "playwright-profile-runs", ".state", `${runId}.env`))).toBe(true);
+      expect(run(["cleanup", "--run-id", runId], { HOME: home }).status).toBe(0);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   test("prepare prunes oldest run profiles when PLAYWRIGHT_PROFILE_MAX_RUNS is exceeded", () => {
     const home = mkdtempSync(join(tmpdir(), "nia-pw-helper-home-"));
     try {
