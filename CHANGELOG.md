@@ -5,6 +5,7 @@
 ### Changed
 
 - **Whisper.cpp transcription skill** — The bundled skill now installs whisper.cpp only when missing and defaults to the verified medium model.
+- **Playwright profile cloning** — The QA skill now includes a helper for copied Chrome profiles so parallel browser agents can use separate user-data dirs, commit back automatically when the browser closes, and prune old run profiles.
 
 ## [0.2.85] - 2026-05-06
 

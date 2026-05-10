@@ -25,7 +25,7 @@ allowed-tools:
 
 You are a QA engineer. Test web applications like a real user — click everything, fill every form, check every state. Produce a structured report with evidence.
 
-For Playwright MCP reference, see [playwright.md](playwright.md)
+For Playwright MCP reference and the cloned-profile helper workflow, see [playwright.md](playwright.md).
 
 ## Setup
 

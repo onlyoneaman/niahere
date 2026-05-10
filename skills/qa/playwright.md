@@ -6,7 +6,7 @@
 
 ## How Playwright Works Here
 
-Playwright is available as **MCP tools already in your tool list**. You do NOT need to:
+Playwright is usually available as **MCP tools already in your tool list**. You do NOT need to:
 - Install anything (`npm install playwright`, `npx playwright install` — NO)
 - Import or require playwright in code
 - Write scripts or launch a browser manually
@@ -14,7 +14,85 @@ Playwright is available as **MCP tools already in your tool list**. You do NOT n
 
 **Just call the tools directly.** They are prefixed `mcp__plugin_playwright_playwright__` in your tool list (e.g., `mcp__plugin_playwright_playwright__browser_navigate`). Search your available tools for `browser_` to see them all.
 
-A persistent Chrome profile at `~/.shared/playwright-profile/` is pre-configured with saved logins. The browser launches automatically on your first tool call and reuses this profile.
+A persistent Chrome profile is available for saved logins. For ordinary browser work, use the MCP tools directly. For parallel agents or sites that block fresh Chromium, use the cloned-profile helper below.
+
+## Cloned Profile Helper
+
+Use this when multiple agents need browser access from a warmed profile, or when a site blocks clean Playwright Chromium.
+
+Helper:
+
+```bash
+skills/qa/scripts/playwright-profile-clone.sh
+```
+
+Default canonical profile:
+
+```text
+~/.shared/playwright-user-profile
+```
+
+If that profile does not exist, the helper creates it. If `~/.shared/playwright-config.json` has a `browser.userDataDir`, the helper seeds `playwright-user-profile` from that existing configured profile on first use.
+
+### Open a cloned browser
+
+```bash
+skills/qa/scripts/playwright-profile-clone.sh open
+```
+
+This:
+- generates a random hex run id
+- copies the canonical profile to `~/.shared/playwright-profile-runs/<run-id>`
+- launches Chrome with that copied `--user-data-dir`
+- assigns a free `--remote-debugging-port`
+- prints `PW_PROFILE_RUN_ID`, `PW_USER_DATA_DIR`, `PW_CDP_URL`, and `PW_PROFILE_CLOSE_ACTION`
+- watches the Chrome process; when Chrome exits, commits the run profile back to the canonical profile and removes the run clone
+
+Each concurrent `open` gets its own user-data dir and CDP URL.
+
+Attach with Playwright when needed:
+
+```js
+const { chromium } = require("playwright");
+const browser = await chromium.connectOverCDP(process.env.PW_CDP_URL);
+const context = browser.contexts()[0];
+const page = context.pages()[0] || await context.newPage();
+```
+
+### Close behavior
+
+Default close behavior is `commit`: when the Chrome process exits, the helper backs up the canonical profile, overwrites it from the run profile, and deletes the run clone.
+
+Use `--discard-on-close` for throwaway browser work:
+
+```bash
+skills/qa/scripts/playwright-profile-clone.sh open --discard-on-close
+```
+
+Use `--keep` when debugging or when you want to commit and cleanup manually:
+
+```bash
+skills/qa/scripts/playwright-profile-clone.sh open --keep
+skills/qa/scripts/playwright-profile-clone.sh commit --run-id <run-id>
+skills/qa/scripts/playwright-profile-clone.sh cleanup --run-id <run-id>
+```
+
+`commit` backs up the canonical profile and overwrites it from the run profile. `cleanup` removes the run profile. If multiple runs are active, pass `--run-id`; do not rely on a global current pointer.
+
+Atomic commands:
+
+```bash
+skills/qa/scripts/playwright-profile-clone.sh prepare
+skills/qa/scripts/playwright-profile-clone.sh open
+skills/qa/scripts/playwright-profile-clone.sh open --discard-on-close
+skills/qa/scripts/playwright-profile-clone.sh open --keep
+skills/qa/scripts/playwright-profile-clone.sh status --run-id <run-id>
+skills/qa/scripts/playwright-profile-clone.sh commit --run-id <run-id>
+skills/qa/scripts/playwright-profile-clone.sh cleanup --run-id <run-id>
+skills/qa/scripts/playwright-profile-clone.sh prune --keep 100
+```
+
+The helper auto-prunes old run profiles after `prepare`/`open`. Default cap is `100` run dirs. Override it with `PLAYWRIGHT_PROFILE_MAX_RUNS=<count>`, or disable automatic pruning with `PLAYWRIGHT_PROFILE_MAX_RUNS=0` or `PLAYWRIGHT_PROFILE_MAX_RUNS=off`. Pruning skips the current run and any run with a tracked live Chrome PID.
 
 ## Quickstart: Open a Browser
 
@@ -183,23 +261,24 @@ When the snapshot is too large, it auto-saves to a file. Use Grep on the saved f
 ## Session Management & Persistent Chrome Profile
 
 ### Profile Location
-- **Persistent profile**: `~/.shared/playwright-profile/` — cookies, logins, and browser state persist across sessions and agents
+- **Canonical cloned profile**: `~/.shared/playwright-user-profile/` — cookies, logins, and browser state used as the source for copied runs
+- **Run profiles**: `~/.shared/playwright-profile-runs/<run-id>/` — per-agent copied profiles
 - **Config**: `~/.shared/playwright-config.json` — controls browser type, headless mode, and profile path
 - **MCP registration**: `~/.claude/plugins/.../playwright/.mcp.json` — must include `--config` flag pointing to the config file
 
 ### How It Works
 - Playwright launches a **separate Chrome instance** using the persistent profile — won't conflict with your running Chrome
 - Log in manually once in the Playwright Chrome window (e.g., App Store Connect, RevenueCat), sessions persist across restarts and new conversations
-- Any agent or session that uses Playwright MCP shares the same profile — no re-login needed
+- For parallel spawned agents, use copied run profiles. Do not launch multiple Chrome instances against the same user-data dir.
 
 ### If Sessions Expire or Browser Won't Connect
-- **"Opening in existing browser session" error**: A Chrome instance with this profile is already running. Find and kill it:
+- **"Opening in existing browser session" error**: A Chrome instance with this profile is already running. For cloned runs, open a new clone instead of reusing the same run id. If you intentionally need to stop an old canonical-profile browser:
   ```bash
-  ps aux | grep "user-data-dir=/Users/aman/.shared/playwright-profile" | grep -v grep | grep -v "Helper" | awk '{print $2}' | xargs kill
+  ps aux | grep "user-data-dir=.*playwright-user-profile" | grep -v grep | grep -v "Helper" | awk '{print $2}' | xargs kill
   ```
   Then retry the Playwright action. The persistent profile (cookies/logins) is on disk and survives browser restarts.
 - **Auth expired?** Navigate to the login page in the Playwright Chrome window and re-login — the new session will persist automatically.
-- **Random cache profiles**: If Chrome uses `/Library/Caches/ms-playwright/mcp-chrome-*` instead of the persistent profile, the `--config` flag is missing from the MCP registration. Fix: ensure `~/.claude/plugins/.../playwright/.mcp.json` includes `"--config", "/Users/aman/.claude/playwright-config.json"` in the args array.
+- **Random cache profiles**: If Chrome uses `/Library/Caches/ms-playwright/mcp-chrome-*` instead of the persistent profile, the `--config` flag is missing from the MCP registration. Fix: ensure the Playwright MCP registration includes `"--config", "~/.shared/playwright-config.json"` in the args array.
 
 ### Logged-In Services (as of Feb 2026)
 - Apple App Store Connect (`appstoreconnect.apple.com`)
@@ -230,7 +309,7 @@ When the snapshot is too large, it auto-saves to a file. Use Grep on the saved f
 | Navigate without waiting | Always `wait_for` before reading content |
 | Keep browser open indefinitely | Close when done to free resources |
 | Ignore snapshot file saves | Grep/parse the saved file for large outputs |
-| Try to launch/setup browser manually | Just call `browser_navigate` — it auto-launches |
+| Launch Chrome manually for ordinary QA | Use `browser_navigate`; use `playwright-profile-clone.sh open` only when a copied warmed profile is needed |
 
 ## Debugging Tips
 
