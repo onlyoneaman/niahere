@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.88] - 2026-05-10
+
 ### Fixed
 
 - **Browser handoff stability** — Cloned Playwright Chrome runs now detach from the launching shell so verification-code pauses do not close the browser before the agent can reconnect.
