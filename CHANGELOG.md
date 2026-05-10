@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.87] - 2026-05-10
+
 ### Changed
 
 - **SDK skill loading** — Chat and job sessions now enable all Claude SDK-discovered skills while retaining Nia's existing custom skill summary injection.
