@@ -17,6 +17,7 @@ import { ActiveEngine } from "../db/models";
 import { log } from "../utils/log";
 import { isRetryableApiError, sleep } from "../utils/retry";
 import { registerActiveHandle, unregisterActiveHandle } from "./active-handles";
+import { getSdkSkillsSetting } from "./skills";
 
 export { buildWorkingMemory } from "./job-prompt";
 
@@ -119,7 +120,7 @@ export async function runJobWithClaude(
     cwd,
     permissionMode: "bypassPermissions",
     sessionId,
-    skills: [],
+    skills: getSdkSkillsSetting(),
   };
 
   if (model && model !== "default") {

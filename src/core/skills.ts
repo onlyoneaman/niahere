@@ -10,6 +10,8 @@ const PROJECT_ROOT = resolve(import.meta.dir, "../..");
 
 export type SkillInfo = { name: string; description: string; source: string };
 
+export const SDK_SKILLS_SETTING = "all" as const;
+
 const SKILL_DIRS: { dir: string; source: string }[] = [
   { dir: join(process.cwd(), "skills"), source: "cwd" },
   { dir: join(PROJECT_ROOT, "skills"), source: "project" },
@@ -70,4 +72,8 @@ export function getSkillsSummary(): string {
   if (skills.length === 0) return "";
   const lines = skills.map((s) => (s.description ? `- /${s.name}: ${s.description}` : `- /${s.name}`));
   return `Available skills:\n${lines.join("\n")}`;
+}
+
+export function getSdkSkillsSetting(): typeof SDK_SKILLS_SETTING {
+  return SDK_SKILLS_SETTING;
 }
