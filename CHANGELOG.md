@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.89] - 2026-05-12
+
 ### Changed
 
 - **Beads session tracking skill** — The Beads skill now documents a shared Claude/Codex `session_*` metadata convention for finding and resuming task sessions.
