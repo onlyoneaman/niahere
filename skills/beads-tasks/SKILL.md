@@ -4,7 +4,7 @@ description: >
   Persistent task management via Beads CLI (bd). Use when user mentions tasks, todos, issues, or tracking work.
   Check `which bd` first — if missing, offer: `npm install -g @beads/bd`.
   All commands: run from `$BEATS_DIR` (for example `~/.niahere/beads`) and use `bd <command>`. Always label: `--label project:<project-name>`.
-  Run `bd help-all` for available commands. Not for ephemeral in-conversation tracking.
+  Run `bd --help` or `bd help --all` for available commands. Not for ephemeral in-conversation tracking.
 ---
 
 ## Overview
@@ -19,7 +19,7 @@ Global task manager powered by [Beads](https://github.com/steveyegge/beads). Sto
 3. Set `BEATS_DIR` to your Beads workspace (for example `~/.niahere/beads`).
 4. All commands: `cd "$BEATS_DIR" && bd <command>`.
 5. Always label with `--label project:<name>`.
-6. Run `cd "$BEATS_DIR" && bd help-all` for available commands.
+6. Run `cd "$BEATS_DIR" && bd --help` or `bd help --all` for available commands.
 
 ## Core Commands
 
@@ -53,6 +53,8 @@ bd update <id> --status in_progress        # Start work
 bd update <id> --description "..."         # Add/replace description
 bd update <id> --add-label personal        # Add label
 bd update <id> --set-labels bug,urgent     # Replace all labels
+bd update <id> --claim                     # Atomically claim work
+bd update <id> --set-metadata team=platform # Set task-scoped metadata
 ```
 
 Chain multiple updates: `bd update <id> --priority P1 --type bug --parent <parent-id>`
@@ -63,7 +65,11 @@ Chain multiple updates: `bd update <id> --priority P1 --type bug --parent <paren
 bd list                          # Open tasks (tree view)
 bd list --all                    # Include closed/deferred tasks
 bd list --label project:<name>   # Filter by project
+bd ready                         # Ready work with blocker-aware semantics
+bd ready --claim                 # Atomically claim the first matching ready issue
 bd show <id>                     # Full details of a task
+bd show <id> --long              # Full details, including extended metadata
+bd show --current --long         # Current/last touched issue with metadata
 bd children <id>                 # List children of a parent
 ```
 
@@ -87,6 +93,57 @@ bd reopen <id>                   # Reopen if closed prematurely
 - bd not installed → offer install, don't silently fail
 - Ephemeral/conversation-only tracking → use conversation context, not beads
 - `bd set-state ... state=...` is for operational metadata only; it does not change the task status shown in list.
+
+## Agent Session Tracking
+
+When a Beads task is worked in Claude Code, Codex, or another agent CLI, store the active session on the task as metadata. Do not invent session IDs yourself; let the tool create the session, then attach the discovered session ID to the bead.
+
+Use one shared metadata schema for all tools:
+
+```bash
+session_tool=codex|claude
+session_id=<tool-created-session-id>
+session_cwd=<absolute repo/worktree path>
+session_resume_cmd=<exact resume command>
+session_attached_at=<ISO timestamp>
+```
+
+Attach a session after starting or identifying it:
+
+```bash
+cd "$BEATS_DIR"
+bd update <id> --claim
+bd update <id> \
+  --set-metadata session_tool=codex \
+  --set-metadata session_id="$sid" \
+  --set-metadata session_cwd="$PWD" \
+  --set-metadata session_resume_cmd="cd $PWD && codex resume $sid" \
+  --set-metadata session_attached_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+bd note <id> "Attached codex session $sid"
+```
+
+For Claude, use the same keys and a Claude resume command:
+
+```bash
+bd update <id> \
+  --set-metadata session_tool=claude \
+  --set-metadata session_id="$sid" \
+  --set-metadata session_cwd="$PWD" \
+  --set-metadata session_resume_cmd="cd $PWD && claude --resume $sid" \
+  --set-metadata session_attached_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+```
+
+Find session-backed tasks:
+
+```bash
+bd list --has-metadata-key session_id --all --long
+bd list --metadata-field session_tool=codex --all --long
+bd list --metadata-field session_tool=claude --all --long
+bd show <id> --long
+bd show --current --long
+```
+
+Use task metadata as the source of truth. `bd kv` is global and not task-scoped, so do not use it for task sessions. `bd audit` is append-only history, not a jump table. Notes/comments are useful human breadcrumbs, but the resume command and session ID should live in metadata.
 
 ## Hierarchy & Organization
 
