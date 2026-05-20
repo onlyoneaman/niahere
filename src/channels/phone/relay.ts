@@ -85,8 +85,11 @@ export function createRelay(opts: RelayOpts): RelayHandle {
 
   const openAiUrl = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`;
   const openAiWs = new WebSocket(openAiUrl, {
-    headers: { Authorization: `Bearer ${openAiKey}`, "OpenAI-Beta": "realtime=v1" },
+    headers: { Authorization: `Bearer ${openAiKey}` },
   } as any);
+
+  /** Whether a response is currently in flight on the OpenAI side. */
+  let responseActive = false;
 
   let resolveReady: () => void;
   let rejectReady: (err: Error) => void;
@@ -129,12 +132,23 @@ export function createRelay(opts: RelayOpts): RelayHandle {
     sendOpenAi({
       type: "session.update",
       session: {
+        type: "realtime",
+        model,
+        // Without this explicit list, the GA session silently drops audio
+        // synthesis and only emits transcripts — verified empirically.
+        output_modalities: ["audio"],
         instructions: context.instructions,
-        voice,
-        input_audio_format: "g711_ulaw",
-        output_audio_format: "g711_ulaw",
-        turn_detection: { type: "server_vad", threshold: 0.5, silence_duration_ms: 300 },
-        input_audio_transcription: { model: "whisper-1" },
+        audio: {
+          input: {
+            format: { type: "audio/pcmu" },
+            transcription: { model: "whisper-1" },
+            turn_detection: { type: "server_vad", threshold: 0.5, silence_duration_ms: 300 },
+          },
+          output: {
+            format: { type: "audio/pcmu" },
+            voice,
+          },
+        },
         tools: context.tools.map((t) => ({
           type: "function",
           name: t.name,
@@ -148,7 +162,6 @@ export function createRelay(opts: RelayOpts): RelayHandle {
       sendOpenAi({
         type: "response.create",
         response: {
-          modalities: ["audio", "text"],
           instructions: context.opener || "Greet the caller warmly and explain what you can help with.",
         },
       });
@@ -170,23 +183,46 @@ export function createRelay(opts: RelayOpts): RelayHandle {
   });
 
   openAiWs.addEventListener("message", async (ev) => {
+    const isText = typeof ev.data === "string";
     let evt: any;
     try {
-      evt = JSON.parse(typeof ev.data === "string" ? ev.data : new TextDecoder().decode(ev.data as ArrayBuffer));
+      evt = JSON.parse(isText ? ev.data : new TextDecoder().decode(ev.data as ArrayBuffer));
     } catch {
+      log.debug(
+        {
+          callSid: context.callSid,
+          isText,
+          bytes: isText ? (ev.data as string).length : (ev.data as ArrayBuffer).byteLength,
+        },
+        "openai realtime: non-json frame dropped",
+      );
       return;
     }
 
     switch (evt.type) {
+      case "response.created": {
+        responseActive = true;
+        break;
+      }
+      case "response.done":
+      case "response.cancelled": {
+        responseActive = false;
+        break;
+      }
+      // GA event names. We keep the older `response.audio.*` aliases for
+      // forward/back compatibility — both fire `delta` with base64 audio.
+      case "response.output_audio.delta":
       case "response.audio.delta": {
         if (!context.streamSid) return;
         sendTwilio({ event: "media", streamSid: context.streamSid, media: { payload: evt.delta } });
         break;
       }
+      case "response.output_audio_transcript.delta":
       case "response.audio_transcript.delta": {
         pendingAssistantText += evt.delta || "";
         break;
       }
+      case "response.output_audio_transcript.done":
       case "response.audio_transcript.done": {
         if (pendingAssistantText.trim()) {
           transcript.push({ role: "assistant", text: pendingAssistantText.trim(), ts: Date.now() });
@@ -201,7 +237,10 @@ export function createRelay(opts: RelayOpts): RelayHandle {
       }
       case "input_audio_buffer.speech_started": {
         if (context.streamSid) sendTwilio({ event: "clear", streamSid: context.streamSid });
-        sendOpenAi({ type: "response.cancel" });
+        if (responseActive) {
+          sendOpenAi({ type: "response.cancel" });
+          responseActive = false;
+        }
         break;
       }
       case "response.function_call_arguments.done": {
@@ -238,6 +277,13 @@ export function createRelay(opts: RelayOpts): RelayHandle {
       case "error": {
         log.error({ callSid: context.callSid, evt }, "openai realtime: error event");
         break;
+      }
+      default: {
+        // Track unrecognized event types at debug level — invaluable when the
+        // GA API evolves and we need to discover new fields without breaking
+        // production logs. Truncate the body to keep logs sane.
+        const preview = JSON.stringify(evt).slice(0, 500);
+        log.debug({ callSid: context.callSid, type: evt.type, preview }, "openai realtime: unhandled event");
       }
     }
   });

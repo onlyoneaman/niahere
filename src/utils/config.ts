@@ -39,6 +39,7 @@ const DEFAULTS: Config = {
     phone: {
       twilio_sid: null,
       twilio_secret: null,
+      twilio_auth_token: null,
       from_number: null,
       owner_number: null,
       allowlist: [],
@@ -165,6 +166,8 @@ export function loadConfig(): Config {
   const phTwilioSid = process.env.TWILIO_SID || (typeof chPh.twilio_sid === "string" ? chPh.twilio_sid : null);
   const phTwilioSecret =
     process.env.TWILIO_SECRET || (typeof chPh.twilio_secret === "string" ? chPh.twilio_secret : null);
+  const phTwilioAuthToken =
+    process.env.TWILIO_AUTH_TOKEN || (typeof chPh.twilio_auth_token === "string" ? chPh.twilio_auth_token : null);
   const phFromNumber =
     process.env.PHONE_FROM_NUMBER || (typeof chPh.from_number === "string" ? chPh.from_number : null);
   const phOwnerNumber =
@@ -242,6 +245,7 @@ export function loadConfig(): Config {
       phone: {
         twilio_sid: phTwilioSid,
         twilio_secret: phTwilioSecret,
+        twilio_auth_token: phTwilioAuthToken,
         from_number: phFromNumber,
         owner_number: phOwnerNumber,
         allowlist: phAllowlist,

@@ -26,7 +26,7 @@ import { getChannel } from "../registry";
 import { Session, Message } from "../../db/models";
 import { runMigrations } from "../../db/migrate";
 
-import { placeCall as twilioPlaceCall, updateCallUrl, validateTwilioSignature } from "./twilio";
+import { placeCall as twilioPlaceCall, validateTwilioSignature } from "./twilio";
 import { streamTwiML, sayAndHangupTwiML, rejectTwiML } from "./twiml";
 import { createRelay, type CallContext, type RelayHandle, type RelayResult } from "./relay";
 import { buildInboundInstructions, buildOutboundInstructions } from "./instructions";
@@ -99,9 +99,8 @@ class PhoneChannel implements Channel {
         if (path === "/twilio/voice/incoming" && req.method === "POST") {
           return await self.handleIncoming(req);
         }
-        if (path.startsWith("/twilio/voice/outbound/") && req.method === "POST") {
-          const callSid = decodeURIComponent(path.slice("/twilio/voice/outbound/".length));
-          return await self.handleOutboundTwiml(req, callSid);
+        if (path === "/twilio/voice/outbound" && req.method === "POST") {
+          return await self.handleOutboundTwiml(req);
         }
         if (path === "/twilio/voice/status" && req.method === "POST") {
           return await self.handleStatus(req);
@@ -175,15 +174,15 @@ class PhoneChannel implements Channel {
       opts.maxMinutes && opts.maxMinutes > 0 ? Math.min(opts.maxMinutes, HARD_MAX_MINUTES) : DEFAULT_MAX_MINUTES;
     const instructions = buildOutboundInstructions(opts.goal, opts.context);
 
-    // We don't know the callSid until Twilio returns it, so we initially
-    // point Twilio at a placeholder TwiML URL, then immediately PATCH the
-    // call to use the real callSid in the path. Twilio fetches the URL only
-    // when the callee answers, so the swap is safe.
+    // Twilio always includes `CallSid` in the form body of the TwiML
+    // webhook, so we don't need to encode it in the URL path — one static
+    // endpoint handles every outbound call, and we look up context by the
+    // CallSid Twilio sends us back.
     const result = await twilioPlaceCall({
       ...creds,
       to: opts.number,
       from,
-      twimlUrl: `${base}/twilio/voice/outbound/PLACEHOLDER`,
+      twimlUrl: `${base}/twilio/voice/outbound`,
       statusCallbackUrl: `${base}/twilio/voice/status`,
       maxDurationSec: maxMinutes * 60,
     });
@@ -201,12 +200,6 @@ class PhoneChannel implements Channel {
       startedAt: Date.now(),
     });
     this.completions.set(result.callSid, defer<RelayResult>());
-
-    await updateCallUrl({
-      ...creds,
-      callSid: result.callSid,
-      url: `${base}/twilio/voice/outbound/${result.callSid}`,
-    }).catch((err) => log.warn({ err, callSid: result.callSid }, "phone: failed to update call URL"));
 
     log.info({ callSid: result.callSid, to: opts.number }, "phone: outbound call placed");
     return result;
@@ -261,10 +254,11 @@ class PhoneChannel implements Channel {
     return twimlResponse(streamTwiML(this.buildWssUrl(), { callSid, direction: "inbound" }));
   }
 
-  private async handleOutboundTwiml(req: Request, callSid: string): Promise<Response> {
+  private async handleOutboundTwiml(req: Request): Promise<Response> {
     const { params } = await readForm(req);
     if (!this.verifySignature(req, params)) return forbidden();
 
+    const callSid = params.CallSid || "";
     const pending = this.pending.get(callSid);
     if (!pending) {
       log.warn({ callSid }, "phone: outbound TwiML requested for unknown call");
@@ -362,11 +356,15 @@ class PhoneChannel implements Channel {
   }
 
   private verifySignature(req: Request, params: Record<string, string>): boolean {
-    const secret = this.cfg.twilio_secret;
-    if (!secret) return false;
+    // X-Twilio-Signature is HMAC-SHA1 with the account's Auth Token. When an
+    // API Key (SK…) + Secret is used for REST auth, the Auth Token is a
+    // separate value — set as TWILIO_AUTH_TOKEN. We fall back to TWILIO_SECRET
+    // so the simple "Account SID + Auth Token" pairing also works.
+    const signingToken = this.cfg.twilio_auth_token || this.cfg.twilio_secret;
+    if (!signingToken) return false;
     const signature = req.headers.get("X-Twilio-Signature") || "";
     const fullUrl = this.cfg.public_base_url ? `${this.cfg.public_base_url}${new URL(req.url).pathname}` : req.url;
-    return validateTwilioSignature({ authToken: secret, fullUrl, params, signature });
+    return validateTwilioSignature({ authToken: signingToken, fullUrl, params, signature });
   }
 
   private requireCreds(): { accountSid: string; authToken: string } {

@@ -31,6 +31,10 @@ export interface SlackConfig {
 export interface PhoneConfig {
   twilio_sid: string | null;
   twilio_secret: string | null;
+  /** Account-level Auth Token used to verify X-Twilio-Signature on inbound webhooks.
+   *  Falls back to twilio_secret if not set (works when twilio_sid is the Account SID
+   *  and twilio_secret is the Auth Token). */
+  twilio_auth_token: string | null;
   /** Twilio number Nia dials from (E.164, e.g. +13025480697) */
   from_number: string | null;
   /** Owner's phone number (E.164). Highest-trust caller. */
