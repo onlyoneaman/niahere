@@ -90,6 +90,8 @@ export function createRelay(opts: RelayOpts): RelayHandle {
 
   /** Whether a response is currently in flight on the OpenAI side. */
   let responseActive = false;
+  /** Whether the opener response.create has been sent yet (outbound only). */
+  let openerSent = false;
 
   let resolveReady: () => void;
   let rejectReady: (err: Error) => void;
@@ -158,7 +160,14 @@ export function createRelay(opts: RelayOpts): RelayHandle {
         tool_choice: "auto",
       },
     });
+    // For outbound calls Nia is the caller and must speak first — fire the
+    // opener immediately once the session is configured. streamSid was set
+    // synchronously in bootstrapWsMessage before this relay was created, so
+    // any audio we generate now will forward to Twilio. Anti-restart logic
+    // lives in the outbound instructions to prevent a misheard "hi" from
+    // re-triggering the greeting.
     if (context.speakFirst) {
+      openerSent = true;
       sendOpenAi({
         type: "response.create",
         response: {

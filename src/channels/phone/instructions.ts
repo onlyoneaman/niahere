@@ -30,8 +30,9 @@ export function buildOutboundInstructions(goal: string, context?: string): strin
     VOICE_RULES,
     `Goal: ${goal}`,
     context ? `Context:\n${context}` : "",
-    "Speak first to introduce yourself and the purpose of the call.",
+    "You are the caller — speak first the moment the call connects. Introduce yourself and the purpose in your first sentence.",
     "Be efficient: get to the point in the first two sentences.",
+    "Do NOT repeat your greeting. If the other side responds with a short 'hi' / 'hello' / unclear sound, treat it as acknowledgement and proceed to the next part of your goal — never restart the introduction.",
     "If you reach voicemail, leave a brief message, then call end_call.",
     "When the goal is met or the conversation is naturally complete, call end_call.",
   ]
