@@ -5,7 +5,7 @@ export type { SendResult, StreamCallback, ActivityCallback, SendCallbacks, ChatE
 export type { AuditEntry, JobState, CronState } from "./audit";
 export type { Channel, ChannelFactory } from "./channel";
 export type { ChatState } from "./chat-state";
-export type { Config, ChannelsConfig, TelegramConfig, SlackConfig } from "./config";
+export type { Config, ChannelsConfig, TelegramConfig, SlackConfig, PhoneConfig } from "./config";
 export type { Paths } from "./paths";
 export type { SaveMessageParams, RoomStats, RecentMessage, SearchResult, SessionMessage } from "./message";
 export type { AgentInfo } from "./agent";

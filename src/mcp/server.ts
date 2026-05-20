@@ -158,7 +158,9 @@ export function createNiaMcpServer(sourceCtx?: McpSourceContext) {
           target: z
             .enum(["auto", "dm", "thread"])
             .default("auto")
-            .describe("Where to send: 'auto' (current context — thread if in one, else DM), 'dm' (always DM the owner), 'thread' (reply in current thread)"),
+            .describe(
+              "Where to send: 'auto' (current context — thread if in one, else DM), 'dm' (always DM the owner), 'thread' (reply in current thread)",
+            ),
         },
         async (args) => ({
           content: [
@@ -347,6 +349,27 @@ export function createNiaMcpServer(sourceCtx?: McpSourceContext) {
         {},
         async () => ({
           content: [{ type: "text" as const, text: handlers.listEmployees() }],
+        }),
+      ),
+      tool(
+        "place_call",
+        "Place an outbound phone call. Nia dials the number, introduces herself, and pursues the stated goal. Use for appointments, vendor follow-ups, scheduled standup calls to the owner, or anything that's faster by voice than by message.",
+        {
+          number: z.string().describe("E.164 phone number to dial (e.g. +13025551234)."),
+          goal: z
+            .string()
+            .describe(
+              "What this call should accomplish, in plain English. Seeded into the voice agent's instructions.",
+            ),
+          context: z
+            .string()
+            .optional()
+            .describe("Extra background to seed the call (calendar dump, prior notes, etc.)."),
+          max_minutes: z.number().optional().describe("Hard cap on call duration in minutes (default 10, max 30)."),
+          voice: z.string().optional().describe("Override the default realtime voice for this call."),
+        },
+        async (args) => ({
+          content: [{ type: "text" as const, text: await handlers.placeCall(args) }],
         }),
       ),
     ],

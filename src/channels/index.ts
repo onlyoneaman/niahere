@@ -3,6 +3,7 @@ import { registerChannel, getFactories, trackStarted, clearStarted } from "./reg
 import { log } from "../utils/log";
 import { createTelegramChannel } from "./telegram";
 import { createSlackChannel } from "./slack";
+import { createPhoneChannel } from "./phone";
 
 export { getChannel, getStarted } from "./registry";
 
@@ -10,6 +11,7 @@ export { getChannel, getStarted } from "./registry";
 export function registerAllChannels(): void {
   registerChannel(() => createTelegramChannel());
   registerChannel(() => createSlackChannel());
+  registerChannel(() => createPhoneChannel());
 }
 
 export interface StartResult {

@@ -36,6 +36,18 @@ const DEFAULTS: Config = {
       workspace_url: null,
       watch: null,
     },
+    phone: {
+      twilio_sid: null,
+      twilio_secret: null,
+      from_number: null,
+      owner_number: null,
+      allowlist: [],
+      public_base_url: null,
+      port: 7079,
+      openai_api_key: null,
+      realtime_model: "gpt-realtime",
+      voice: "marin",
+    },
   },
 };
 
@@ -117,6 +129,7 @@ export function loadConfig(): Config {
   const ch = (raw.channels || {}) as Record<string, unknown>;
   const chTg = (ch.telegram || {}) as Record<string, unknown>;
   const chSl = (ch.slack || {}) as Record<string, unknown>;
+  const chPh = (ch.phone || {}) as Record<string, unknown>;
 
   const channelsEnabled = ch.enabled !== false;
 
@@ -137,17 +150,55 @@ export function loadConfig(): Config {
   const slAppToken = process.env.SLACK_APP_TOKEN || (typeof chSl.app_token === "string" ? chSl.app_token : null);
 
   // Legacy: channel_id was removed in favor of dm_user_id. Fall back to channel_id if dm_user_id is not set.
-  const legacyChannelId = process.env.SLACK_CHANNEL_ID || (typeof chSl.channel_id === "string" ? chSl.channel_id : null);
+  const legacyChannelId =
+    process.env.SLACK_CHANNEL_ID || (typeof chSl.channel_id === "string" ? chSl.channel_id : null);
   const slDmUserId =
-    process.env.SLACK_DM_USER_ID ||
-    (typeof chSl.dm_user_id === "string" ? chSl.dm_user_id : null) ||
-    legacyChannelId;
+    process.env.SLACK_DM_USER_ID || (typeof chSl.dm_user_id === "string" ? chSl.dm_user_id : null) || legacyChannelId;
 
   const slBotUserId = typeof chSl.bot_user_id === "string" ? chSl.bot_user_id : null;
   const slBotName = typeof chSl.bot_name === "string" ? chSl.bot_name : null;
   const slWorkspace = typeof chSl.workspace === "string" ? chSl.workspace : null;
   const slWorkspaceId = typeof chSl.workspace_id === "string" ? chSl.workspace_id : null;
   const slWorkspaceUrl = typeof chSl.workspace_url === "string" ? chSl.workspace_url : null;
+
+  // Phone — env vars override config; secrets are env-only by convention
+  const phTwilioSid = process.env.TWILIO_SID || (typeof chPh.twilio_sid === "string" ? chPh.twilio_sid : null);
+  const phTwilioSecret =
+    process.env.TWILIO_SECRET || (typeof chPh.twilio_secret === "string" ? chPh.twilio_secret : null);
+  const phFromNumber =
+    process.env.PHONE_FROM_NUMBER || (typeof chPh.from_number === "string" ? chPh.from_number : null);
+  const phOwnerNumber =
+    process.env.PRIMARY_PHONE_USER || (typeof chPh.owner_number === "string" ? chPh.owner_number : null);
+  const phPublicBaseUrl =
+    (
+      process.env.PUBLIC_BASE_URL ||
+      (typeof chPh.public_base_url === "string" ? chPh.public_base_url : null) ||
+      ""
+    ).replace(/\/$/, "") || null;
+  const phPortRaw = process.env.PHONE_PORT ? Number(process.env.PHONE_PORT) : null;
+  const phPort =
+    phPortRaw && Number.isFinite(phPortRaw)
+      ? phPortRaw
+      : typeof chPh.port === "number"
+        ? chPh.port
+        : DEFAULTS.channels.phone.port;
+  const phOpenAiKey =
+    process.env.OPENAI_API_KEY || (typeof chPh.openai_api_key === "string" ? chPh.openai_api_key : null);
+  const phRealtimeModel =
+    process.env.PHONE_REALTIME_MODEL ||
+    (typeof chPh.realtime_model === "string" ? chPh.realtime_model : DEFAULTS.channels.phone.realtime_model);
+  const phVoice =
+    process.env.PHONE_VOICE || (typeof chPh.voice === "string" ? chPh.voice : DEFAULTS.channels.phone.voice);
+
+  const phAllowlistRaw =
+    process.env.PHONE_ALLOWLIST ||
+    (Array.isArray(chPh.allowlist)
+      ? (chPh.allowlist as unknown[]).filter((x): x is string => typeof x === "string").join(",")
+      : "");
+  const phAllowlist = phAllowlistRaw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 
   // Slack watch channels — behavior is optional (defaults to key name lookup)
   const rawWatch = chSl.watch as Record<string, unknown> | undefined;
@@ -187,6 +238,18 @@ export function loadConfig(): Config {
         workspace_id: slWorkspaceId,
         workspace_url: slWorkspaceUrl,
         watch: slWatch,
+      },
+      phone: {
+        twilio_sid: phTwilioSid,
+        twilio_secret: phTwilioSecret,
+        from_number: phFromNumber,
+        owner_number: phOwnerNumber,
+        allowlist: phAllowlist,
+        public_base_url: phPublicBaseUrl,
+        port: phPort,
+        openai_api_key: phOpenAiKey,
+        realtime_model: phRealtimeModel,
+        voice: phVoice,
       },
     },
   };

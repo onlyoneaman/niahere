@@ -14,6 +14,7 @@ import { statusCommand } from "./status";
 import { activeCommand } from "./active";
 import { modelCommand } from "./model";
 import { sendCommand, telegramCommand, slackCommand } from "./channels";
+import { phoneCommand } from "./phone";
 import { rulesCommand, memoryCommand } from "./self";
 import { watchCommand } from "./watch";
 import { agentCommand } from "./agent";
@@ -378,6 +379,11 @@ switch (command) {
 
   case "slack": {
     await slackCommand();
+    break;
+  }
+
+  case "phone": {
+    await phoneCommand();
     break;
   }
 

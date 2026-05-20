@@ -28,11 +28,33 @@ export interface SlackConfig {
   watch: Record<string, SlackWatchChannel> | null;
 }
 
+export interface PhoneConfig {
+  twilio_sid: string | null;
+  twilio_secret: string | null;
+  /** Twilio number Nia dials from (E.164, e.g. +13025480697) */
+  from_number: string | null;
+  /** Owner's phone number (E.164). Highest-trust caller. */
+  owner_number: string | null;
+  /** Extra allowlisted E.164 numbers (family, close contacts). */
+  allowlist: string[];
+  /** Public base URL Twilio hits (e.g. https://nia.example.com). No trailing slash. */
+  public_base_url: string | null;
+  /** Local HTTP port for the Twilio webhook server. */
+  port: number;
+  /** OpenAI API key for the Realtime voice loop. */
+  openai_api_key: string | null;
+  /** OpenAI Realtime model id. */
+  realtime_model: string;
+  /** Realtime voice name (marin, alloy, echo, etc.). */
+  voice: string;
+}
+
 export interface ChannelsConfig {
   enabled: boolean;
   default: string;
   telegram: TelegramConfig;
   slack: SlackConfig;
+  phone: PhoneConfig;
 }
 
 export interface SessionFinalizationConfig {

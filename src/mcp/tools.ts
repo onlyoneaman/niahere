@@ -12,6 +12,7 @@ import { classifyMime } from "../utils/attachment";
 import { scanAgents } from "../core/agents";
 import { listEmployeesForMcp } from "../core/employees";
 import { resolveJobPrompt } from "../core/job-prompt";
+import { readMemory as readMemoryUtil, addMemory as addMemoryUtil } from "../utils/memory";
 import type { McpSourceContext } from "./index";
 
 export async function listJobs(): Promise<string> {
@@ -240,7 +241,13 @@ async function sendMediaDirect(target: string, data: Buffer, mimeType: string, f
   throw new Error(`Channel "${target}" not configured`);
 }
 
-export async function sendMessage(text: string, channelName?: string, mediaPath?: string, sourceCtx?: McpSourceContext, target: "auto" | "dm" | "thread" = "auto"): Promise<string> {
+export async function sendMessage(
+  text: string,
+  channelName?: string,
+  mediaPath?: string,
+  sourceCtx?: McpSourceContext,
+  target: "auto" | "dm" | "thread" = "auto",
+): Promise<string> {
   const config = getConfig();
   const channelTarget = channelName || config.channels.default;
 
@@ -440,43 +447,8 @@ export function disableWatchChannel(name: string): string {
   return `Watch channel "${name}" disabled. Takes effect on next message.`;
 }
 
-export function readMemory(): string {
-  const { selfDir } = getPaths();
-  const memoryPath = join(selfDir, "memory.md");
-  if (!existsSync(memoryPath)) return "No memories saved yet.";
-  const content = readFileSync(memoryPath, "utf8").trim();
-  // Extract just the entries, skip the header/instructions
-  const lines = content.split("\n").filter((l) => l.startsWith("- ") || l.startsWith("## "));
-  if (lines.length === 0) return "No memories saved yet.";
-  return lines.join("\n");
-}
-
-export function addMemory(entry: string): string {
-  // Guard: reject raw logs, transcripts, and overly long entries
-  const trimmed = entry.trim();
-  if (!trimmed) return "Rejected: empty entry.";
-  if (trimmed.length > 300) return "Rejected: too long (max 300 chars). Distill to a single concise insight.";
-  if (trimmed.includes("[Thread context]") || trimmed.includes("[Current messag"))
-    return "Rejected: no raw conversation transcripts.";
-  if (trimmed.split("\n").length > 5) return "Rejected: too many lines. One concise insight per memory.";
-
-  const { selfDir } = getPaths();
-  const memoryPath = join(selfDir, "memory.md");
-  const existing = existsSync(memoryPath) ? readFileSync(memoryPath, "utf8") : "";
-
-  // TODO: add semantic dedup later (embeddings or similar)
-
-  const date = new Date().toISOString().slice(0, 10);
-  const header = `\n## ${date}`;
-
-  if (existing.includes(header)) {
-    const updated = existing.replace(header, `${header}\n- ${trimmed}`);
-    writeFileSync(memoryPath, updated, "utf8");
-  } else {
-    appendFileSync(memoryPath, `${header}\n- ${trimmed}\n`, "utf8");
-  }
-  return `Memory saved.`;
-}
+export const readMemory = readMemoryUtil;
+export const addMemory = addMemoryUtil;
 
 export function listAgents(): string {
   const agents = scanAgents();
@@ -495,4 +467,31 @@ export function listAgents(): string {
 
 export function listEmployees(): string {
   return listEmployeesForMcp();
+}
+
+export async function placeCall(args: {
+  number: string;
+  goal: string;
+  context?: string;
+  max_minutes?: number;
+  voice?: string;
+}): Promise<string> {
+  // Dynamic import avoids a static cycle with channels/phone -> mcp/tools.
+  const { getPhoneChannel } = await import("../channels/phone");
+  const phone = getPhoneChannel();
+  if (!phone) {
+    return "Phone channel is not configured. Set TWILIO_SID, TWILIO_SECRET, PHONE_FROM_NUMBER, PUBLIC_BASE_URL, OPENAI_API_KEY in .env and restart the daemon.";
+  }
+  try {
+    const result = await phone.placeCall({
+      number: args.number,
+      goal: args.goal,
+      context: args.context,
+      maxMinutes: args.max_minutes,
+      voice: args.voice,
+    });
+    return `Call placed. callSid=${result.callSid} status=${result.status}. Transcript will land in messages once the call completes.`;
+  } catch (err) {
+    return `place_call failed: ${err instanceof Error ? err.message : String(err)}`;
+  }
 }
