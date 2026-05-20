@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Image generation skill** — Defaults to OpenAI `gpt-image-2` and adds a `--resolution` flag (OpenAI 1K/2K, Gemini 1K/2K/4K). Refreshes the model/pricing tables, drops the post-EOL DALL·E note, lifts the quality gate to all `gpt-image-*` models, and pipes `imageConfig.imageSize` to Gemini.
+
 ## [0.2.89] - 2026-05-12
 
 ### Changed
