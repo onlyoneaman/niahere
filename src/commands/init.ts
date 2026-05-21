@@ -215,14 +215,18 @@ export async function runInit(): Promise<void> {
       }
     }
 
-    // Phone (Twilio Voice + OpenAI Realtime)
+    // Phone (Twilio Voice + OpenAI Realtime). Shared Twilio creds (sid,
+    // secret, auth_token, owner_number, public_base_url) live under
+    // channels.twilio so SMS and WhatsApp can reuse them; voice-specific
+    // fields stay under channels.phone.
+    const exTw = (exCh.twilio || {}) as Record<string, unknown>;
     const exPh = (exCh.phone || {}) as Record<string, unknown>;
-    let phoneTwilioSid = (exPh.twilio_sid as string) || "";
-    let phoneTwilioSecret = (exPh.twilio_secret as string) || "";
-    let phoneTwilioAuthToken = (exPh.twilio_auth_token as string) || "";
+    let phoneTwilioSid = (exTw.sid as string) || "";
+    let phoneTwilioSecret = (exTw.secret as string) || "";
+    let phoneTwilioAuthToken = (exTw.auth_token as string) || "";
     let phoneFromNumber = (exPh.from_number as string) || "";
-    let phoneOwnerNumber = (exPh.owner_number as string) || "";
-    let phonePublicBaseUrl = (exPh.public_base_url as string) || "";
+    let phoneOwnerNumber = (exTw.owner_number as string) || "";
+    let phonePublicBaseUrl = (exTw.public_base_url as string) || "";
     let phoneOpenAiKey = (exPh.openai_api_key as string) || "";
     let phoneVoice = (exPh.voice as string) || "";
 
@@ -485,14 +489,13 @@ export async function runInit(): Promise<void> {
       channels.default = "slack";
     }
     if (phoneTwilioSid && phoneTwilioSecret && phoneFromNumber) {
-      const ph: Record<string, unknown> = {
-        twilio_sid: phoneTwilioSid,
-        twilio_secret: phoneTwilioSecret,
-        from_number: phoneFromNumber,
-      };
-      if (phoneTwilioAuthToken) ph.twilio_auth_token = phoneTwilioAuthToken;
-      if (phoneOwnerNumber) ph.owner_number = phoneOwnerNumber;
-      if (phonePublicBaseUrl) ph.public_base_url = phonePublicBaseUrl.replace(/\/$/, "");
+      const tw: Record<string, unknown> = { sid: phoneTwilioSid, secret: phoneTwilioSecret };
+      if (phoneTwilioAuthToken) tw.auth_token = phoneTwilioAuthToken;
+      if (phoneOwnerNumber) tw.owner_number = phoneOwnerNumber;
+      if (phonePublicBaseUrl) tw.public_base_url = phonePublicBaseUrl.replace(/\/$/, "");
+      channels.twilio = tw;
+
+      const ph: Record<string, unknown> = { from_number: phoneFromNumber };
       if (phoneOpenAiKey) ph.openai_api_key = phoneOpenAiKey;
       if (phoneVoice && phoneVoice !== "marin") ph.voice = phoneVoice;
       channels.phone = ph;

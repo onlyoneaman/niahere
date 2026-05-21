@@ -480,7 +480,7 @@ export async function placeCall(args: {
   const { getPhoneChannel } = await import("../channels/phone");
   const phone = getPhoneChannel();
   if (!phone) {
-    return "Phone channel is not configured. Add a channels.phone block to ~/.niahere/config.yaml with twilio_sid, twilio_secret, from_number, public_base_url, openai_api_key (or set the matching env vars in .env), then restart the daemon.";
+    return "Phone channel is not configured. Add channels.twilio.{sid, secret, public_base_url} and channels.phone.{from_number, openai_api_key} to ~/.niahere/config.yaml (or set the matching env vars in .env), then restart the daemon.";
   }
   try {
     const result = await phone.placeCall({

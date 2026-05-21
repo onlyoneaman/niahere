@@ -146,14 +146,10 @@ export function loadConfig(): Config {
   const chSms = (ch.sms || {}) as Record<string, unknown>;
   const chWa = (ch.whatsapp || {}) as Record<string, unknown>;
 
-  // Helper: read a value from `channels.twilio.<newKey>`, falling back to
-  // legacy `channels.phone.<oldKey>` (the pre-refactor location), then env.
-  const twilioOrPhone = (newKey: string, oldKey: string, envKey: string | null): string | null => {
+  const twilioField = (key: string, envKey: string | null): string | null => {
     const envVal = envKey ? process.env[envKey] : undefined;
     if (envVal) return envVal;
-    if (typeof chTw[newKey] === "string") return chTw[newKey] as string;
-    if (typeof chPh[oldKey] === "string") return chPh[oldKey] as string;
-    return null;
+    return typeof chTw[key] === "string" ? (chTw[key] as string) : null;
   };
 
   const channelsEnabled = ch.enabled !== false;
@@ -187,15 +183,12 @@ export function loadConfig(): Config {
   const slWorkspaceUrl = typeof chSl.workspace_url === "string" ? chSl.workspace_url : null;
 
   // --- Twilio shared config (used by phone, sms, whatsapp) ---
-  // New shape: channels.twilio.{sid,secret,auth_token,owner_number,allowlist,public_base_url,port}.
-  // Legacy shape kept for one release: channels.phone.{twilio_sid,twilio_secret,twilio_auth_token,
-  // owner_number,allowlist,public_base_url,port}. Env vars take precedence over both.
-  const twSid = twilioOrPhone("sid", "twilio_sid", "TWILIO_SID");
-  const twSecret = twilioOrPhone("secret", "twilio_secret", "TWILIO_SECRET");
-  const twAuthToken = twilioOrPhone("auth_token", "twilio_auth_token", "TWILIO_AUTH_TOKEN");
-  const twOwnerNumber = twilioOrPhone("owner_number", "owner_number", "PRIMARY_PHONE_USER");
-  const twPublicBaseUrl =
-    (twilioOrPhone("public_base_url", "public_base_url", "PUBLIC_BASE_URL") || "").replace(/\/$/, "") || null;
+  // Env vars take precedence over channels.twilio.* values.
+  const twSid = twilioField("sid", "TWILIO_SID");
+  const twSecret = twilioField("secret", "TWILIO_SECRET");
+  const twAuthToken = twilioField("auth_token", "TWILIO_AUTH_TOKEN");
+  const twOwnerNumber = twilioField("owner_number", "PRIMARY_PHONE_USER");
+  const twPublicBaseUrl = (twilioField("public_base_url", "PUBLIC_BASE_URL") || "").replace(/\/$/, "") || null;
 
   const twPortRaw = process.env.PHONE_PORT ? Number(process.env.PHONE_PORT) : null;
   const twPort =
@@ -203,17 +196,13 @@ export function loadConfig(): Config {
       ? twPortRaw
       : typeof chTw.port === "number"
         ? chTw.port
-        : typeof chPh.port === "number"
-          ? chPh.port
-          : DEFAULTS.channels.twilio.port;
+        : DEFAULTS.channels.twilio.port;
 
   const twAllowlistRaw =
     process.env.PHONE_ALLOWLIST ||
     (Array.isArray(chTw.allowlist)
       ? (chTw.allowlist as unknown[]).filter((x): x is string => typeof x === "string").join(",")
-      : Array.isArray(chPh.allowlist)
-        ? (chPh.allowlist as unknown[]).filter((x): x is string => typeof x === "string").join(",")
-        : "");
+      : "");
   const twAllowlist = twAllowlistRaw
     .split(",")
     .map((s) => s.trim())

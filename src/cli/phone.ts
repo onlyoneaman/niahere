@@ -45,7 +45,7 @@ async function phoneCallCommand(): Promise<void> {
   const channel = createPhoneChannel();
   if (!channel) {
     fail(
-      "Phone channel not configured. Set channels.phone.{twilio_sid,twilio_secret,from_number} in ~/.niahere/config.yaml (also channels.phone.{openai_api_key,public_base_url} for the realtime voice loop). Env vars TWILIO_SID / TWILIO_SECRET / PHONE_FROM_NUMBER / OPENAI_API_KEY / PUBLIC_BASE_URL override if you prefer .env.",
+      "Phone channel not configured. Set channels.twilio.{sid,secret} and channels.phone.from_number in ~/.niahere/config.yaml (also channels.phone.openai_api_key and channels.twilio.public_base_url for the realtime voice loop). Env vars TWILIO_SID / TWILIO_SECRET / PHONE_FROM_NUMBER / OPENAI_API_KEY / PUBLIC_BASE_URL override if you prefer .env.",
     );
   }
 
@@ -125,11 +125,14 @@ function helpText(): string {
     "                                phone server, dials, waits, prints transcript.",
     "  status                        Show phone channel configuration.",
     "",
-    "Config lives in ~/.niahere/config.yaml under channels.phone:",
-    "  twilio_sid, twilio_secret, from_number          (required)",
-    "  openai_api_key, public_base_url                 (required for realtime voice loop)",
-    "  twilio_auth_token                               (required if twilio_sid is an API Key SID)",
-    "  port, voice, realtime_model, allowlist          (optional)",
+    "Config lives in ~/.niahere/config.yaml:",
+    "  channels.twilio.{sid, secret}                       (required)",
+    "  channels.phone.from_number                          (required)",
+    "  channels.phone.openai_api_key, channels.twilio.public_base_url",
+    "                                                      (required for realtime voice loop)",
+    "  channels.twilio.auth_token                          (required if sid is an API Key SID)",
+    "  channels.twilio.{owner_number, allowlist, port}     (optional)",
+    "  channels.phone.{voice, realtime_model}              (optional)",
     "",
     "Each field can be overridden by the matching env var (TWILIO_SID, OPENAI_API_KEY, etc.)",
     "if you prefer .env. See the nia-phone skill for full deploy walkthrough.",

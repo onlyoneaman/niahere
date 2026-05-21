@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`channels.twilio.*` is the only Twilio config shape** — removed the `channels.phone.twilio_*` legacy-keys fallback that shipped in 0.3.1 for migration. Configs that still use the pre-0.3.0 shape need to move credentials into a `channels.twilio` block (see the migration note for 0.3.0).
+- **`nia init` writes the new shape** — phone setup now writes Twilio creds to `channels.twilio` and voice-only fields to `channels.phone`.
+
 ### Fixed
 
 - **Service templates set `WorkingDirectory`** — launchd and systemd unit templates now point at the niahere install root, so Bun's automatic `.env` loading works. Before this, the daemon spawned by launchd ran with cwd=`/`, silently dropped any credentials in `.env`, and channels that depended on them quietly refused to start.
