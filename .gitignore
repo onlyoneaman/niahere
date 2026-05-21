@@ -4,3 +4,4 @@ tmp/
 *.log
 .env
 bun.lockb
+.playwright-mcp/

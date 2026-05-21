@@ -1,18 +1,14 @@
 import { App } from "@slack/bolt";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from "fs";
-import { join } from "path";
-import { createHash } from "crypto";
-import type { Channel, ChatState, Attachment, AttachmentType, Outbound, Recipient } from "../types";
-import { getConfig, updateRawConfig, resetConfig } from "../utils/config";
+import type { Channel, ChatState, Attachment, Outbound, Recipient } from "../types";
+import { getConfig, updateRawConfig } from "../utils/config";
 import { relativeTime } from "../utils/format";
 import { runMigrations } from "../db/migrate";
 import { Session, Message } from "../db/models";
 import { log } from "../utils/log";
 import { getMcpServers } from "../mcp";
-import { getNiaHome, getPaths } from "../utils/paths";
-import { classifyMime, validateAttachment, prepareImage } from "../utils/attachment";
-import { resolveWatchBehavior } from "../utils/watches";
 import { chainLock, openChatEngine, rotateRoom } from "./common/chat-session";
+import { SlackAttachmentCache } from "./slack/attachments";
+import { SlackWatchReloader } from "./slack/watch";
 
 /** Strip markdown backticks so sentinel tokens like [NO_REPLY] match even when the LLM wraps them. */
 function cleanSentinel(text: string): string {
@@ -141,59 +137,8 @@ class SlackChannel implements Channel {
 
     let botUserId: string | undefined;
 
-    // Watch channels: mtime-based hot-reload from config.yaml AND any watch
-    // behavior files referenced by that config. Keys are channel_id#channel_name.
-    let watchCache: Map<string, { name: string; behavior: string }> = new Map();
-    let watchFilePaths: string[] = [];
-    let lastReloadMtime = 0;
-
-    function maxMtime(paths: string[]): number {
-      let max = 0;
-      for (const p of paths) {
-        try {
-          const m = statSync(p).mtimeMs;
-          if (m > max) max = m;
-        } catch {
-          // ignore missing files
-        }
-      }
-      return max;
-    }
-
-    function reloadWatchChannels(): Map<string, { name: string; behavior: string }> {
-      const configPath = getPaths().config;
-      const mtime = maxMtime([configPath, ...watchFilePaths]);
-      if (mtime === 0) return watchCache;
-      if (mtime === lastReloadMtime) return watchCache;
-
-      resetConfig(); // clear cached config so getConfig() re-reads from disk
-      const cfg = getConfig();
-      const watch = cfg.channels.slack.watch;
-      const fresh = new Map<string, { name: string; behavior: string }>();
-      const freshFiles: string[] = [];
-      if (watch) {
-        for (const [key, entry] of Object.entries(watch)) {
-          if (!entry.enabled) continue;
-          const hashIdx = key.indexOf("#");
-          if (hashIdx === -1) {
-            log.warn({ channel: key }, "slack: watch key must use channel_id#name format, skipping");
-            continue;
-          }
-          const id = key.slice(0, hashIdx);
-          const name = key.slice(hashIdx + 1);
-          const resolved = resolveWatchBehavior(entry.behavior, name);
-          if (resolved.filePath) freshFiles.push(resolved.filePath);
-          fresh.set(id, { name, behavior: resolved.behavior });
-        }
-      }
-      if (fresh.size !== watchCache.size) {
-        log.info({ count: fresh.size }, "slack: watch channels reloaded");
-      }
-      watchCache = fresh;
-      watchFilePaths = freshFiles;
-      lastReloadMtime = maxMtime([configPath, ...freshFiles]);
-      return watchCache;
-    }
+    const watchReloader = new SlackWatchReloader();
+    const attachmentCache = new SlackAttachmentCache(botToken);
 
     // Slash command: /nia
     app.command("/nia", async ({ command, ack, respond }) => {
@@ -241,135 +186,6 @@ class SlackChannel implements Channel {
       );
       await respond("New conversation started.");
     });
-
-    // Disk-backed file cache: download once, read from disk on subsequent requests
-    const attachRoot = join(getNiaHome(), "tmp", "attachments");
-    mkdirSync(attachRoot, { recursive: true });
-
-    interface CachedFile {
-      path: string;
-      type: AttachmentType;
-      mimeType: string;
-      filename?: string;
-    }
-    const fileIndex = new Map<string, CachedFile>();
-
-    function urlHash(url: string): string {
-      return createHash("sha256").update(url).digest("hex").slice(0, 16);
-    }
-
-    function loadCached(entry: CachedFile): Attachment {
-      return {
-        type: entry.type,
-        data: readFileSync(entry.path),
-        mimeType: entry.mimeType,
-        filename: entry.filename,
-        sourcePath: entry.path,
-      };
-    }
-
-    async function downloadSlackFile(url: string): Promise<Buffer> {
-      const resp = await fetch(url, {
-        headers: { Authorization: `Bearer ${botToken}` },
-      });
-      if (!resp.ok) throw new Error(`Slack file download failed: ${resp.status}`);
-      return Buffer.from(await resp.arrayBuffer());
-    }
-
-    function cacheDirForScope(scope: string): string {
-      const safeScope = scope.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const dir = join(attachRoot, safeScope);
-      mkdirSync(dir, { recursive: true });
-      return dir;
-    }
-
-    function cacheKey(scope: string, url: string): string {
-      return `${scope}:${url}`;
-    }
-
-    function safeExtension(filename?: string): string {
-      const ext = filename?.split(".").pop();
-      return ext && /^[a-zA-Z0-9]{1,16}$/.test(ext) ? ext : "bin";
-    }
-
-    function cacheExtension(filename: string | undefined, mime: string, attType: AttachmentType): string {
-      if (attType === "image" && mime !== "image/gif") return "jpg";
-      return safeExtension(filename);
-    }
-
-    async function extractSlackAttachments(files: any[], scope: string): Promise<Attachment[]> {
-      const attachments: Attachment[] = [];
-      const scopedAttachDir = cacheDirForScope(scope);
-      for (const file of files) {
-        const mime = file.mimetype || "application/octet-stream";
-        const attType = classifyMime(mime);
-        if (!attType) continue;
-        if (!file.url_private_download) continue;
-
-        // Check in-memory index first
-        const indexedKey = cacheKey(scope, file.url_private_download);
-        const cached = fileIndex.get(indexedKey);
-        if (cached && existsSync(cached.path)) {
-          attachments.push(loadCached(cached));
-          continue;
-        }
-
-        // Check disk (survives daemon restarts) — scoped by Slack room/thread.
-        const hash = urlHash(file.url_private_download);
-        const ext = cacheExtension(file.name, mime, attType);
-        const diskPath = join(scopedAttachDir, `${hash}.${ext}`);
-        const metaPath = join(scopedAttachDir, `${hash}.meta.json`);
-        if (existsSync(diskPath) && existsSync(metaPath)) {
-          try {
-            const meta = JSON.parse(readFileSync(metaPath, "utf8"));
-            const entry: CachedFile = {
-              path: diskPath,
-              type: meta.type || attType,
-              mimeType: meta.mimeType || mime,
-              filename: meta.filename || file.name,
-            };
-            fileIndex.set(indexedKey, entry);
-            attachments.push(loadCached(entry));
-            continue;
-          } catch {
-            // Corrupt meta — re-download
-          }
-        }
-
-        try {
-          const data = await downloadSlackFile(file.url_private_download);
-          const error = validateAttachment(data);
-          if (error) {
-            log.warn({ file: file.name, error }, "skipping slack attachment");
-            continue;
-          }
-          let finalData = data;
-          let finalMime = mime;
-          if (attType === "image") {
-            const prepared = await prepareImage(data, mime);
-            finalData = prepared.data;
-            finalMime = prepared.mimeType;
-          }
-
-          // Save file + metadata to disk
-          writeFileSync(diskPath, finalData);
-          writeFileSync(metaPath, JSON.stringify({ type: attType, mimeType: finalMime, filename: file.name }));
-          const entry: CachedFile = { path: diskPath, type: attType, mimeType: finalMime, filename: file.name };
-          fileIndex.set(indexedKey, entry);
-
-          attachments.push({
-            type: attType,
-            data: finalData,
-            mimeType: finalMime,
-            filename: file.name,
-            sourcePath: diskPath,
-          });
-        } catch (err) {
-          log.warn({ err, file: file.name }, "failed to download slack file");
-        }
-      }
-      return attachments;
-    }
 
     // Handle messages (DMs + @mentions)
     app.message(async ({ message, say, client }) => {
@@ -435,7 +251,7 @@ class SlackChannel implements Channel {
       }
 
       // Check if this is a watched channel (hot-reloads from config.yaml via mtime)
-      const currentWatch = reloadWatchChannels();
+      const currentWatch = watchReloader.reload();
       const watchConfig = currentWatch.get(msg.channel);
       const isWatched = !!watchConfig;
 
@@ -497,7 +313,7 @@ class SlackChannel implements Channel {
       // Download any file attachments
       let attachments: Attachment[] | undefined;
       if (hasFiles) {
-        attachments = await extractSlackAttachments(msg.files!, roomPrefix(key));
+        attachments = await attachmentCache.extract(msg.files!, roomPrefix(key));
       }
 
       if (!text && (!attachments || attachments.length === 0)) return;
@@ -534,7 +350,7 @@ class SlackChannel implements Channel {
           const messagesWithFiles = priorMessages.filter((m: any) => m.files?.length > 0);
           let threadFilesAdded = 0;
           for (const m of messagesWithFiles) {
-            const extracted = await extractSlackAttachments(m.files || [], roomPrefix(key));
+            const extracted = await attachmentCache.extract(m.files || [], roomPrefix(key));
             for (const att of extracted) {
               attachments.push(att);
               threadFilesAdded++;
@@ -673,7 +489,7 @@ class SlackChannel implements Channel {
     }
 
     // Initial watch channel load
-    reloadWatchChannels();
+    watchReloader.reload();
 
     log.info("slack bot started (Socket Mode)");
     this.app = app;

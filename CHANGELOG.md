@@ -4,6 +4,12 @@
 
 ### Changed
 
+- **Telegram channel restructured into class methods** — the inline `start()` closures (`getState`/`restartChat`/`withLock`/`processMessage`/`registerOutbound`/`isAllowed` and the four `bot.on`/`bot.command` handler bodies) are now proper private methods on `TelegramChannel`. Behavior unchanged; file is scannable end-to-end.
+- **Slack channel split into focused modules** — the disk-backed file cache and the watch-channels mtime reloader move into `src/channels/slack/attachments.ts` (`SlackAttachmentCache`) and `src/channels/slack/watch.ts` (`SlackWatchReloader`). `slack.ts` shrinks from 694 to 510 lines and the auxiliary subsystems are testable in isolation.
+- **`src/mcp/tools.ts` split per-domain** — the 481-line catch-all becomes `src/mcp/tools/{jobs,send,messages,watch,misc}.ts` plus an `index.ts` barrel. Callers (`mcp/server.ts`, `cli/watch.ts`, tests) keep `import * as handlers from "./tools"` / `from "../mcp/tools"` — the barrel preserves the import surface.
+
+### Changed
+
 - **Unified `Channel.deliver(out)` interface** — replaces the optional `sendMessage` / `sendMedia` / `sendToThread` / `sendMediaToThread` quartet with one required `deliver(out: Outbound)` method. `Outbound = { text?, media?, to?: Recipient }`; `Recipient = { kind: "owner" } | { kind: "thread", channelId, threadTs? }`. The MCP `send_message` tool collapses from a 5-arm capability matrix to a single call. Channels that don't support threads (telegram/sms/whatsapp/phone) fall back to the owner recipient; phone throws because voice can't render text.
 - **Extracted chat-session helpers** — `src/channels/common/chat-session.ts` exposes `openChatEngine` / `rotateRoom` / `chainLock`. The four message-driven channels (telegram, slack, sms, whatsapp) now share the engine-creation, room-rotation, and per-sender-lock-chain code that used to be copy-pasted (~95 lines of duplication gone). SMS picked up `rotateRoom` for free (was missing `/reset` support). Telegram's `withLock` "queued behind active lock" debug log was dead (`state.lock !== Promise.resolve()` compares two freshly-resolved promises and is always true) — removed alongside the consolidation.
 - **`channels.phone.{twilio_sid,…}` legacy fallback removed** — `channels.twilio.*` is the only Twilio config shape. The compat shim shipped in 0.3.1 (`twilioOrPhone()` + `chPh` port/allowlist fallback) is gone. Configs created before 0.3.0 must hand-migrate.
