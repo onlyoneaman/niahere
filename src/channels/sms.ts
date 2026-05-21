@@ -18,7 +18,7 @@ import { createChatEngine } from "../chat/engine";
 import { getMcpServers } from "../mcp";
 import { Session } from "../db/models";
 import { runMigrations } from "../db/migrate";
-import type { Channel, ChatState, Outbound, PhoneConfig, SmsConfig, TwilioConfig } from "../types";
+import type { Channel, ChatState, Outbound, TwilioConfig } from "../types";
 import { getConfig } from "../utils/config";
 import { log } from "../utils/log";
 import { sendMessage as twilioSendMessage } from "./twilio/rest";
@@ -29,14 +29,12 @@ const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>
 class SmsChannel implements Channel {
   name = "sms" as const;
   private readonly twilio: TwilioConfig;
-  private readonly sms: SmsConfig;
   /** Cached resolved "from" number: sms.from_number || phone.from_number */
   private readonly fromNumber: string;
   private readonly chats = new Map<string, ChatState>();
 
-  constructor(twilio: TwilioConfig, sms: SmsConfig, fromNumber: string) {
+  constructor(twilio: TwilioConfig, fromNumber: string) {
     this.twilio = twilio;
-    this.sms = sms;
     this.fromNumber = fromNumber;
   }
 
@@ -189,7 +187,7 @@ export function createSmsChannel(): SmsChannel | null {
   // sms.from_number falls back to phone.from_number (same number for voice + SMS).
   const fromNumber = sms.from_number ?? phone.from_number;
   if (!fromNumber) return null;
-  return new SmsChannel(twilio, sms, fromNumber);
+  return new SmsChannel(twilio, fromNumber);
 }
 
 export type { SmsChannel };

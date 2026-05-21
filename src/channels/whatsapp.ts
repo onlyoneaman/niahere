@@ -172,7 +172,7 @@ class WhatsAppChannel implements Channel {
               continue;
             }
 
-            const error = validateAttachment(item.data, item.mime);
+            const error = validateAttachment(item.data);
             if (error) {
               log.warn({ from, mime: item.mime, error }, "whatsapp: rejecting attachment");
               await this.sendTextTo(from, `[error] ${error}`).catch(() => {});

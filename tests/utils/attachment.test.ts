@@ -33,43 +33,28 @@ describe("classifyMime", () => {
 });
 
 describe("validateAttachment", () => {
-  test("accepts valid image", () => {
-    const data = Buffer.alloc(1024); // 1KB
-    expect(validateAttachment(data, "image/jpeg")).toBeNull();
+  test("accepts a small payload", () => {
+    expect(validateAttachment(Buffer.alloc(1024))).toBeNull();
   });
 
-  test("accepts valid document", () => {
-    const data = Buffer.from("hello world");
-    expect(validateAttachment(data, "text/plain")).toBeNull();
-  });
-
-  test("rejects file over 50MB", () => {
-    const data = Buffer.alloc(51 * 1024 * 1024); // 51MB
-    const error = validateAttachment(data, "image/jpeg");
+  test("rejects payloads over 50MB", () => {
+    const error = validateAttachment(Buffer.alloc(51 * 1024 * 1024));
     expect(error).toContain("too large");
     expect(error).toContain("51.0MB");
     expect(error).toContain("max 50MB");
   });
 
-  test("accepts file exactly at 50MB", () => {
-    const data = Buffer.alloc(50 * 1024 * 1024); // exactly 50MB
-    expect(validateAttachment(data, "image/jpeg")).toBeNull();
-  });
-
-  test("accepts arbitrary MIME types as files", () => {
-    const data = Buffer.alloc(100);
-    expect(validateAttachment(data, "video/mp4")).toBeNull();
-    expect(validateAttachment(data, "application/zip")).toBeNull();
-  });
-
-  test("accepts application/octet-stream as a file", () => {
-    const data = Buffer.alloc(100);
-    expect(validateAttachment(data, "application/octet-stream")).toBeNull();
+  test("accepts payloads exactly at 50MB", () => {
+    expect(validateAttachment(Buffer.alloc(50 * 1024 * 1024))).toBeNull();
   });
 });
 
 describe("prepareImage", () => {
-  async function makeTestImage(width: number, height: number, format: "png" | "jpeg" | "webp" = "png"): Promise<Buffer> {
+  async function makeTestImage(
+    width: number,
+    height: number,
+    format: "png" | "jpeg" | "webp" = "png",
+  ): Promise<Buffer> {
     return sharp({ create: { width, height, channels: 3, background: { r: 255, g: 0, b: 0 } } })
       .toFormat(format)
       .toBuffer();

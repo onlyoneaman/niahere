@@ -260,7 +260,7 @@ class TelegramChannel implements Channel {
           const mime = doc.mime_type || "application/octet-stream";
           const attType = classifyMime(mime) || "file";
           let data = await self.downloadFile(doc.file_id);
-          const error = validateAttachment(data, mime);
+          const error = validateAttachment(data);
           if (error) {
             await ctx.reply(error);
             return;

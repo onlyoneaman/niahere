@@ -364,7 +364,7 @@ class SlackChannel implements Channel {
 
         try {
           const data = await downloadSlackFile(file.url_private_download);
-          const error = validateAttachment(data, mime);
+          const error = validateAttachment(data);
           if (error) {
             log.warn({ file: file.name, error }, "skipping slack attachment");
             continue;

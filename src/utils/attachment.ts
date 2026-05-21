@@ -1,5 +1,11 @@
 import type { AttachmentType } from "../types";
-import { IMAGE_MIMES, DOCUMENT_MIMES, MAX_ATTACHMENT_SIZE, MAX_IMAGE_DIMENSION, JPEG_QUALITY } from "../constants/attachment";
+import {
+  IMAGE_MIMES,
+  DOCUMENT_MIMES,
+  MAX_ATTACHMENT_SIZE,
+  MAX_IMAGE_DIMENSION,
+  JPEG_QUALITY,
+} from "../constants/attachment";
 
 export function classifyMime(mimeType: string): AttachmentType | null {
   if (IMAGE_MIMES.has(mimeType)) return "image";
@@ -8,7 +14,7 @@ export function classifyMime(mimeType: string): AttachmentType | null {
   return "file";
 }
 
-export function validateAttachment(data: Buffer, mimeType: string): string | null {
+export function validateAttachment(data: Buffer): string | null {
   if (data.length > MAX_ATTACHMENT_SIZE) {
     return `File too large (${(data.length / 1024 / 1024).toFixed(1)}MB, max ${MAX_ATTACHMENT_SIZE / 1024 / 1024}MB)`;
   }

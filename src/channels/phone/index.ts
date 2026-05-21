@@ -92,7 +92,7 @@ class PhoneChannel implements Channel {
 
     server.registerHttp("/twilio/voice/incoming", (req, ctx) => this.handleIncoming(req, ctx.params));
     server.registerHttp("/twilio/voice/outbound", (req, ctx) => this.handleOutboundTwiml(req, ctx.params));
-    server.registerHttp("/twilio/voice/status", (req, ctx) => this.handleStatus(ctx.params), {
+    server.registerHttp("/twilio/voice/status", (_req, ctx) => this.handleStatus(ctx.params), {
       dedupOn: "CallSid",
     });
 
