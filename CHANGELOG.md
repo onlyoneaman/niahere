@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.2.91] - 2026-05-21
+
+### Added
+
+- **Phone channel** — New `phone` channel bridges Twilio Programmable Voice to OpenAI Realtime for live voice calls, inbound (allowlisted callers reach Nia with full persona context) and outbound (`place_call` MCP tool + `nia phone call` CLI for scheduled jobs like morning standups and ad-hoc delegation).
+- **`nia-phone` skill** — In-conversation reference covering env vars, cloudflared named-tunnel setup, Twilio webhook config, cost model, and the pitfalls hit during the first live deploy.
+
 ## [0.2.90] - 2026-05-20
 
 ### Changed
