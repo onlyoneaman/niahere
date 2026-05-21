@@ -36,18 +36,29 @@ const DEFAULTS: Config = {
       workspace_url: null,
       watch: null,
     },
-    phone: {
-      twilio_sid: null,
-      twilio_secret: null,
-      twilio_auth_token: null,
-      from_number: null,
+    twilio: {
+      sid: null,
+      secret: null,
+      auth_token: null,
       owner_number: null,
       allowlist: [],
       public_base_url: null,
       port: 7079,
+    },
+    phone: {
+      enabled: true,
+      from_number: null,
       openai_api_key: null,
       realtime_model: "gpt-realtime",
       voice: "marin",
+    },
+    sms: {
+      enabled: true,
+      from_number: null,
+    },
+    whatsapp: {
+      enabled: true,
+      from_number: "+14155238886",
     },
   },
 };
@@ -131,6 +142,19 @@ export function loadConfig(): Config {
   const chTg = (ch.telegram || {}) as Record<string, unknown>;
   const chSl = (ch.slack || {}) as Record<string, unknown>;
   const chPh = (ch.phone || {}) as Record<string, unknown>;
+  const chTw = (ch.twilio || {}) as Record<string, unknown>;
+  const chSms = (ch.sms || {}) as Record<string, unknown>;
+  const chWa = (ch.whatsapp || {}) as Record<string, unknown>;
+
+  // Helper: read a value from `channels.twilio.<newKey>`, falling back to
+  // legacy `channels.phone.<oldKey>` (the pre-refactor location), then env.
+  const twilioOrPhone = (newKey: string, oldKey: string, envKey: string | null): string | null => {
+    const envVal = envKey ? process.env[envKey] : undefined;
+    if (envVal) return envVal;
+    if (typeof chTw[newKey] === "string") return chTw[newKey] as string;
+    if (typeof chPh[oldKey] === "string") return chPh[oldKey] as string;
+    return null;
+  };
 
   const channelsEnabled = ch.enabled !== false;
 
@@ -162,29 +186,42 @@ export function loadConfig(): Config {
   const slWorkspaceId = typeof chSl.workspace_id === "string" ? chSl.workspace_id : null;
   const slWorkspaceUrl = typeof chSl.workspace_url === "string" ? chSl.workspace_url : null;
 
-  // Phone — env vars override config; secrets are env-only by convention
-  const phTwilioSid = process.env.TWILIO_SID || (typeof chPh.twilio_sid === "string" ? chPh.twilio_sid : null);
-  const phTwilioSecret =
-    process.env.TWILIO_SECRET || (typeof chPh.twilio_secret === "string" ? chPh.twilio_secret : null);
-  const phTwilioAuthToken =
-    process.env.TWILIO_AUTH_TOKEN || (typeof chPh.twilio_auth_token === "string" ? chPh.twilio_auth_token : null);
+  // --- Twilio shared config (used by phone, sms, whatsapp) ---
+  // New shape: channels.twilio.{sid,secret,auth_token,owner_number,allowlist,public_base_url,port}.
+  // Legacy shape kept for one release: channels.phone.{twilio_sid,twilio_secret,twilio_auth_token,
+  // owner_number,allowlist,public_base_url,port}. Env vars take precedence over both.
+  const twSid = twilioOrPhone("sid", "twilio_sid", "TWILIO_SID");
+  const twSecret = twilioOrPhone("secret", "twilio_secret", "TWILIO_SECRET");
+  const twAuthToken = twilioOrPhone("auth_token", "twilio_auth_token", "TWILIO_AUTH_TOKEN");
+  const twOwnerNumber = twilioOrPhone("owner_number", "owner_number", "PRIMARY_PHONE_USER");
+  const twPublicBaseUrl =
+    (twilioOrPhone("public_base_url", "public_base_url", "PUBLIC_BASE_URL") || "").replace(/\/$/, "") || null;
+
+  const twPortRaw = process.env.PHONE_PORT ? Number(process.env.PHONE_PORT) : null;
+  const twPort =
+    twPortRaw && Number.isFinite(twPortRaw)
+      ? twPortRaw
+      : typeof chTw.port === "number"
+        ? chTw.port
+        : typeof chPh.port === "number"
+          ? chPh.port
+          : DEFAULTS.channels.twilio.port;
+
+  const twAllowlistRaw =
+    process.env.PHONE_ALLOWLIST ||
+    (Array.isArray(chTw.allowlist)
+      ? (chTw.allowlist as unknown[]).filter((x): x is string => typeof x === "string").join(",")
+      : Array.isArray(chPh.allowlist)
+        ? (chPh.allowlist as unknown[]).filter((x): x is string => typeof x === "string").join(",")
+        : "");
+  const twAllowlist = twAllowlistRaw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  // --- Phone (voice) — env vars and new keys override legacy ---
   const phFromNumber =
     process.env.PHONE_FROM_NUMBER || (typeof chPh.from_number === "string" ? chPh.from_number : null);
-  const phOwnerNumber =
-    process.env.PRIMARY_PHONE_USER || (typeof chPh.owner_number === "string" ? chPh.owner_number : null);
-  const phPublicBaseUrl =
-    (
-      process.env.PUBLIC_BASE_URL ||
-      (typeof chPh.public_base_url === "string" ? chPh.public_base_url : null) ||
-      ""
-    ).replace(/\/$/, "") || null;
-  const phPortRaw = process.env.PHONE_PORT ? Number(process.env.PHONE_PORT) : null;
-  const phPort =
-    phPortRaw && Number.isFinite(phPortRaw)
-      ? phPortRaw
-      : typeof chPh.port === "number"
-        ? chPh.port
-        : DEFAULTS.channels.phone.port;
   const phOpenAiKey =
     process.env.OPENAI_API_KEY || (typeof chPh.openai_api_key === "string" ? chPh.openai_api_key : null);
   const phRealtimeModel =
@@ -192,16 +229,18 @@ export function loadConfig(): Config {
     (typeof chPh.realtime_model === "string" ? chPh.realtime_model : DEFAULTS.channels.phone.realtime_model);
   const phVoice =
     process.env.PHONE_VOICE || (typeof chPh.voice === "string" ? chPh.voice : DEFAULTS.channels.phone.voice);
+  const phEnabled = chPh.enabled !== false;
 
-  const phAllowlistRaw =
-    process.env.PHONE_ALLOWLIST ||
-    (Array.isArray(chPh.allowlist)
-      ? (chPh.allowlist as unknown[]).filter((x): x is string => typeof x === "string").join(",")
-      : "");
-  const phAllowlist = phAllowlistRaw
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+  // --- SMS ---
+  const smsFromNumber =
+    process.env.SMS_FROM_NUMBER || (typeof chSms.from_number === "string" ? chSms.from_number : null);
+  const smsEnabled = chSms.enabled !== false;
+
+  // --- WhatsApp ---
+  const waFromNumber =
+    process.env.WHATSAPP_FROM_NUMBER ||
+    (typeof chWa.from_number === "string" ? chWa.from_number : DEFAULTS.channels.whatsapp.from_number);
+  const waEnabled = chWa.enabled !== false;
 
   // Slack watch channels — behavior is optional (defaults to key name lookup)
   const rawWatch = chSl.watch as Record<string, unknown> | undefined;
@@ -242,18 +281,29 @@ export function loadConfig(): Config {
         workspace_url: slWorkspaceUrl,
         watch: slWatch,
       },
+      twilio: {
+        sid: twSid,
+        secret: twSecret,
+        auth_token: twAuthToken,
+        owner_number: twOwnerNumber,
+        allowlist: twAllowlist,
+        public_base_url: twPublicBaseUrl,
+        port: twPort,
+      },
       phone: {
-        twilio_sid: phTwilioSid,
-        twilio_secret: phTwilioSecret,
-        twilio_auth_token: phTwilioAuthToken,
+        enabled: phEnabled,
         from_number: phFromNumber,
-        owner_number: phOwnerNumber,
-        allowlist: phAllowlist,
-        public_base_url: phPublicBaseUrl,
-        port: phPort,
         openai_api_key: phOpenAiKey,
         realtime_model: phRealtimeModel,
         voice: phVoice,
+      },
+      sms: {
+        enabled: smsEnabled,
+        from_number: smsFromNumber,
+      },
+      whatsapp: {
+        enabled: waEnabled,
+        from_number: waFromNumber,
       },
     },
   };

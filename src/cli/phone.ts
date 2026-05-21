@@ -50,15 +50,15 @@ async function phoneCallCommand(): Promise<void> {
   }
 
   await channel!.start();
-  const cfg = getConfig().channels.phone;
-  console.log(`${ICON_PASS} phone server up on :${cfg.port}`);
-  if (!cfg.public_base_url) {
+  const { twilio, phone } = getConfig().channels;
+  console.log(`${ICON_PASS} phone server up on :${twilio.port}`);
+  if (!twilio.public_base_url) {
     console.log(`${ICON_WARN} public_base_url not set — Twilio cannot reach this server.`);
-    console.log(`         Start cloudflared (or your tunnel) and set channels.phone.public_base_url in config.yaml.`);
+    console.log(`         Start cloudflared (or your tunnel) and set channels.twilio.public_base_url in config.yaml.`);
     await channel!.stop();
     process.exit(1);
   }
-  if (!cfg.openai_api_key) {
+  if (!phone.openai_api_key) {
     console.log(`${ICON_WARN} openai_api_key not set — realtime voice loop will fall back to TwiML <Say>.`);
   }
 
@@ -91,17 +91,23 @@ async function phoneCallCommand(): Promise<void> {
 }
 
 function phoneStatusCommand(): void {
-  const cfg = getConfig().channels.phone;
+  const { twilio, phone, sms, whatsapp } = getConfig().channels;
   const lines = [
-    `from:           ${cfg.from_number ?? "(not set)"}`,
-    `owner:          ${cfg.owner_number ?? "(not set)"}`,
-    `allowlist:      ${cfg.allowlist.length ? cfg.allowlist.join(", ") : "(empty)"}`,
-    `port:           ${cfg.port}`,
-    `public_base_url:${cfg.public_base_url ?? "(not set)"}`,
-    `realtime_model: ${cfg.realtime_model}`,
-    `voice:          ${cfg.voice}`,
-    `twilio creds:   ${cfg.twilio_sid && cfg.twilio_secret ? "configured" : "MISSING"}`,
-    `openai key:     ${cfg.openai_api_key ? "configured" : "MISSING"}`,
+    `phone enabled:    ${phone.enabled}`,
+    `phone from:       ${phone.from_number ?? "(not set)"}`,
+    `sms enabled:      ${sms.enabled}`,
+    `sms from:         ${sms.from_number ?? `(defaults to phone: ${phone.from_number ?? "unset"})`}`,
+    `whatsapp enabled: ${whatsapp.enabled}`,
+    `whatsapp from:    ${whatsapp.from_number ?? "(not set)"}`,
+    `owner:            ${twilio.owner_number ?? "(not set)"}`,
+    `allowlist:        ${twilio.allowlist.length ? twilio.allowlist.join(", ") : "(empty)"}`,
+    `port:             ${twilio.port}`,
+    `public_base_url:  ${twilio.public_base_url ?? "(not set)"}`,
+    `realtime_model:   ${phone.realtime_model}`,
+    `voice:            ${phone.voice}`,
+    `twilio creds:     ${twilio.sid && twilio.secret ? "configured" : "MISSING"}`,
+    `twilio auth_token:${twilio.auth_token ? "configured" : "(falling back to secret)"}`,
+    `openai key:       ${phone.openai_api_key ? "configured" : "MISSING"}`,
   ];
   console.log(lines.join("\n"));
 }

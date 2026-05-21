@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-05-22
+
+### Added
+
+- **SMS channel** — Inbound and outbound text on the same Twilio number as voice; configured via `channels.sms`. Deliverability to Indian mobile is variable under carrier filtering — treat as best-effort.
+- **WhatsApp channel** — Twilio Sandbox by default. Inbound text, images, documents, and voice notes (auto-transcribed via OpenAI `gpt-4o-mini-transcribe`); outbound text and media; `/reset` to start a fresh room; WhatsApp-flavored markdown conversion; 4096-char chunking; delivery-status tracking. Enforces Meta's 24-hour customer-service window.
+- **Shared Twilio webhook server** — New `src/channels/twilio/` houses the Bun HTTP+WS server, X-Twilio-Signature validation, `MessageSid` dedup, per-key rate-limiting, and a disk-backed outbound media cache at `~/.niahere/tmp/outbound/` (LRU: 100 files / 10MB / 24h). Voice, SMS, and WhatsApp all register on the same port.
+
+### Changed
+
+- **`channels.twilio` is the new credential home** — Account SID, auth token, owner number, allowlist, and `public_base_url` move from `channels.phone.*` to `channels.twilio.*`. Legacy `channels.phone.twilio_*` keys still load as a fallback so existing configs keep working.
+
 ## [0.3.0] - 2026-05-21
 
 ### Changed

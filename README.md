@@ -37,6 +37,8 @@ nia start               # starts daemon + registers OS service
 - **Telegram** — message your agent from your phone, typing indicator while processing
 - **Slack** — Socket Mode bot with thread awareness, thinking emoji, watch channels for proactive monitoring
 - **Phone (voice)** — Twilio + OpenAI Realtime. Inbound calls from allowlisted contacts and outbound calls via `place_call` MCP tool. Scheduled jobs can dial you (morning standup, evening retro, escalation). See `/nia-phone` skill.
+- **SMS** — Twilio Messaging on the same number. Inbound webhook → chat engine → REST reply. Reachability fallback when data is unavailable but cellular works (treks, basements, patchy zones).
+- **WhatsApp** — Twilio Sandbox by default (production WABA when policy permits). Rich messaging with `whatsapp:` prefix. Enforces Meta's 24-hour customer-service window.
 - **Terminal chat** — REPL with session resume support
 - **Scheduled jobs** — recurring jobs and crons that run Claude and can message you back. Stateful by default (working memory), per-job model routing for cost savings
 - **Persona system** — customizable identity, soul, owner profile, rules, and memory (preloaded every session)

@@ -40,14 +40,21 @@ src/
     identity.ts          # Persona loading, skill scanning, system prompt assembly
     repl.ts              # Terminal REPL chat interface
   channels/
-    index.ts             # Register, start/stop all channels
+    index.ts             # Register, start/stop all channels (incl. shared Twilio server stop)
     registry.ts          # Channel factory registry
     telegram.ts          # Telegram bot (grammY) — typing indicator
     slack.ts             # Slack bot (Bolt, Socket Mode) — thinking emoji, thread awareness
-    phone/               # Voice calls — Twilio Voice + OpenAI Realtime bridge
-      index.ts           # Channel class + Bun HTTP/WS server + outbound placeCall
+    sms.ts               # SMS via Twilio — inbound webhook → engine → REST reply
+    whatsapp.ts          # WhatsApp via Twilio (Sandbox default) — enforces 24h customer-service window
+    twilio/              # Shared by phone/sms/whatsapp — server, signature, REST, middleware
+      server.ts          # Bun HTTP+WS server + signature/dedup/rate-limit middleware + route registry
+      signature.ts       # X-Twilio-Signature HMAC-SHA1 validator
+      rest.ts            # placeCall, sendMessage, hangupCall, updateIncomingPhoneNumber
+      dedup.ts           # TTL set for MessageSid/CallSid dedup (Twilio retries)
+      rate-limit.ts      # Sliding-window per-key limiter (default 30/min)
+    phone/               # Voice — Twilio Voice + OpenAI Realtime bridge
+      index.ts           # Channel class; registers routes on shared TwilioWebhookServer
       twiml.ts           # TwiML XML response builders
-      twilio.ts          # Twilio REST + webhook signature validation
       relay.ts           # Twilio Media Streams ↔ OpenAI Realtime audio bridge
       instructions.ts    # System-prompt builders (inbound/outbound)
       tools.ts           # consult_claude/send_telegram/save_memory/end_call (model-callable)
@@ -164,7 +171,7 @@ channels:
     dm_user_id: U06PBA2P680
 ```
 
-Env vars override config: `DATABASE_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_CHANNEL_ID`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, `LOG_LEVEL`, `TWILIO_SID`, `TWILIO_SECRET`, `TWILIO_AUTH_TOKEN`, `PHONE_FROM_NUMBER`, `PRIMARY_PHONE_USER`, `PUBLIC_BASE_URL`, `PHONE_PORT`, `PHONE_ALLOWLIST`, `PHONE_VOICE`, `PHONE_REALTIME_MODEL`.
+Env vars override config: `DATABASE_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_CHANNEL_ID`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, `LOG_LEVEL`, `TWILIO_SID`, `TWILIO_SECRET`, `TWILIO_AUTH_TOKEN`, `PHONE_FROM_NUMBER`, `PRIMARY_PHONE_USER`, `PUBLIC_BASE_URL`, `PHONE_PORT`, `PHONE_ALLOWLIST`, `PHONE_VOICE`, `PHONE_REALTIME_MODEL`, `SMS_FROM_NUMBER`, `WHATSAPP_FROM_NUMBER`.
 
 Config can be managed via CLI: `nia config list`, `nia config get <key>`, `nia config set <key> <value>`. Supports dot notation for nested keys (e.g. `channels.default`).
 

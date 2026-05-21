@@ -17,4 +17,4 @@ export type Mode = "chat" | "job";
 export type AttachmentType = "image" | "document" | "file";
 
 /** Channel names. */
-export type ChannelName = "telegram" | "slack";
+export type ChannelName = "telegram" | "slack" | "phone" | "sms" | "whatsapp";

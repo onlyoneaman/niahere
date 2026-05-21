@@ -1,68 +1,94 @@
 ---
 name: nia-phone
 description: >
-  Use when setting up, deploying, or debugging Nia's phone channel
-  (Twilio + OpenAI Realtime voice calls). Covers env vars, cloudflared
-  named-tunnel setup, Twilio number webhook configuration, the
-  `nia phone` CLI subcommands, and the `place_call` MCP tool. Trigger
-  on mentions of "phone", "call", "voice", "twilio", "realtime", "ngrok",
-  "cloudflared", "media stream", or when the user is deploying Nia to a
-  new machine and needs the phone surface to come up.
+  Use when setting up, deploying, or debugging Nia's Twilio-based channels:
+  voice (phone), SMS, and WhatsApp. All three share one Twilio number,
+  one webhook server, and one set of credentials under channels.twilio.
+  Covers config schema, cloudflared named-tunnel setup, Twilio Console
+  webhook wiring, `nia phone` CLI, `place_call` / `send_message` MCP
+  tools, the WhatsApp Sandbox 24h customer-service window, and the
+  shared TwilioWebhookServer's dedup + rate-limit middleware. Trigger
+  on mentions of "phone", "call", "voice", "sms", "whatsapp", "twilio",
+  "realtime", "media stream", "cloudflared", or when deploying Nia to
+  a new machine and a Twilio surface needs to come up.
 ---
 
 ## Overview
 
-The phone channel (`src/channels/phone/`) bridges Twilio Programmable
-Voice to the OpenAI Realtime API. It exposes:
+Three Twilio-based channels share one phone number, one webhook server,
+and one set of credentials:
 
-- **Inbound calls** — owner or allowlisted contacts dial the Twilio
-  number; the call is bridged to the realtime model with full persona
-  context. Unknown callers are politely declined.
-- **Outbound calls** — `place_call` MCP tool (or `nia phone call` CLI)
-  dials a number, seeds a per-call goal into the realtime session, and
-  Nia speaks first. Used by scheduled jobs (morning standup, evening
-  retro, escalation pings) and by chat ("call the dentist for me").
+- **Phone** (`src/channels/phone/`) — voice via Twilio Programmable
+  Voice + OpenAI Realtime. Inbound (caller dials) and outbound
+  (`place_call` MCP tool / `nia phone call` CLI).
+- **SMS** (`src/channels/sms.ts`) — Twilio Messaging on the same number.
+  Inbound webhook → chat engine → REST reply. The reachability
+  fallback when data is unavailable but cellular works.
+- **WhatsApp** (`src/channels/whatsapp.ts`) — Twilio WhatsApp Sandbox
+  by default; production WABA when policy permits. Enforces Meta's
+  24-hour customer-service window — outside it, free-form replies are
+  dropped (Twilio rejects without an approved template).
 
-Transcripts persist to the `messages` table with `channel = 'phone'` and
-`room = phone-<callSid>`.
+All three register routes on the shared `TwilioWebhookServer`
+(`src/channels/twilio/server.ts`), which centralizes:
+
+- `X-Twilio-Signature` HMAC-SHA1 validation
+- `MessageSid` / `CallSid` deduplication (Twilio retries on 5xx/timeouts)
+- Per-remote-number rate limiting (30/min default; owner exempt)
+- `/healthz` and `/twilio/health` endpoints
+
+Transcripts persist to the `messages` table with `channel='phone'`,
+`'sms'`, or `'whatsapp'` and `room=<channel>-<callSid|E164>`.
 
 ## Configuration
 
-Phone config lives in `~/.niahere/config.yaml` under `channels.phone` —
-same place as `channels.telegram` and `channels.slack`. Every field is
-overridable by the matching env var if you prefer `.env` for secrets.
+Twilio creds + identity are shared across all three channels under
+`channels.twilio`. Each channel has its own enable flag and channel-specific
+config under `channels.{phone,sms,whatsapp}`.
 
 ```yaml
 # ~/.niahere/config.yaml
 channels:
-  phone:
-    twilio_sid: AC... # Account SID — or an API Key SID (SK…)
-    twilio_secret: ... # Auth Token if SID is AC, API Key Secret if SID is SK
-    twilio_auth_token:
-      ... # Required when twilio_sid is an API Key (SK…); signs webhooks.
-      # Omit if twilio_secret is already the Auth Token.
-    from_number: "+1..." # Your Twilio number (E.164)
-    owner_number: "+91..." # Owner's phone (E.164) — highest-trust caller
+  twilio:
+    sid: AC... # Account SID (or API Key SID SK…; Twilio resolves both)
+    secret: ... # Auth Token if sid is AC…, API Key Secret if SK…
+    auth_token: ... # Required when sid is SK… (signs webhooks). Omit if secret is the Auth Token.
+    owner_number: "+91..." # Highest-trust caller/messenger
+    allowlist: ["+12025550100"] # Extra allowed senders/callers (E.164)
     public_base_url: https://nia.example.com # No trailing slash
-    openai_api_key: sk-proj-... # For the Realtime voice loop
+    port: 7079 # Local port the shared webhook server binds to
 
-    # Optional
-    port: 7079 # Local port the webhook server binds to
-    allowlist: ["+12025550100"] # Extra allowed inbound callers (E.164)
-    voice: marin # Realtime voice (marin | cedar | shimmer | coral | alloy | ash | …)
+  phone:
+    enabled: true
+    from_number: "+13025480697" # Twilio number for voice
+    openai_api_key: sk-proj-... # For the Realtime voice loop
     realtime_model: gpt-realtime
+    voice: marin # marin | cedar | shimmer | coral | alloy | ash | …
+
+  sms:
+    enabled: true
+    from_number: "+13025480697" # Defaults to phone.from_number if omitted
+
+  whatsapp:
+    enabled: true
+    from_number: "+14155238886" # Twilio Sandbox shared number; replace once WABA is approved
 ```
 
 Env overrides (use these if you'd rather keep secrets in `.env`):
 
 ```
 TWILIO_SID, TWILIO_SECRET, TWILIO_AUTH_TOKEN
-PHONE_FROM_NUMBER, PRIMARY_PHONE_USER
-PUBLIC_BASE_URL, OPENAI_API_KEY
-PHONE_PORT, PHONE_ALLOWLIST (comma-separated), PHONE_VOICE, PHONE_REALTIME_MODEL
+PRIMARY_PHONE_USER (owner), PHONE_ALLOWLIST (comma-separated)
+PUBLIC_BASE_URL, PHONE_PORT
+PHONE_FROM_NUMBER, OPENAI_API_KEY, PHONE_VOICE, PHONE_REALTIME_MODEL
+SMS_FROM_NUMBER, WHATSAPP_FROM_NUMBER
 ```
 
-`nia phone status` prints which fields are set / missing.
+**Backward compat:** the previous `channels.phone.{twilio_sid, twilio_secret,
+twilio_auth_token, owner_number, allowlist, public_base_url, port}` shape
+is still read as a fallback for one release cycle. Migrate when convenient.
+
+`nia phone status` prints which fields are set across all three channels.
 
 ## Cloudflared named tunnel (production)
 
@@ -112,23 +138,47 @@ Then set in `.env`: `PUBLIC_BASE_URL=https://nia.example.com`.
 Verify with `curl https://nia.example.com/healthz` — should return `ok`
 once the daemon is running.
 
-## Twilio number webhook (inbound only)
+## Twilio Console webhook wiring
 
-Outbound calls do NOT need any Twilio Console config — `placeCall`
-controls the TwiML URL itself.
+Outbound paths (voice via `placeCall`, SMS/WhatsApp via Messages REST)
+control their own URLs and don't need Console config. Inbound paths do.
 
-Inbound calls need the Twilio number's Voice webhook pointed at your
-public URL:
+**Voice** (per phone number):
 
 1. Twilio Console → Phone Numbers → Active Numbers → click your number.
-2. Voice Configuration → "A call comes in" → Webhook.
-3. URL: `https://<PUBLIC_BASE_URL>/twilio/voice/incoming` — Method: POST.
-4. Status callback URL: `https://<PUBLIC_BASE_URL>/twilio/voice/status`
-   — Method: POST.
-5. Save.
+2. Voice Configuration → "A call comes in" → Webhook (POST).
+3. URL: `https://<PUBLIC_BASE_URL>/twilio/voice/incoming`
+4. Status callback: `https://<PUBLIC_BASE_URL>/twilio/voice/status` (POST)
 
-If the Twilio account is on trial, every destination number for
-outbound calls must be in the Verified Caller IDs list.
+**SMS** (per phone number):
+
+1. Same number → Messaging Configuration → "A message comes in" → Webhook (POST).
+2. URL: `https://<PUBLIC_BASE_URL>/twilio/sms/incoming`
+3. Status callback: `https://<PUBLIC_BASE_URL>/twilio/sms/status` (POST)
+
+You can also set both via REST in one shot:
+
+```bash
+curl -X POST "https://api.twilio.com/2010-04-01/Accounts/<AC...>/IncomingPhoneNumbers/<PN...>.json" \
+  -u "<SID>:<SECRET>" \
+  --data-urlencode "VoiceUrl=https://nia.example.com/twilio/voice/incoming" \
+  --data-urlencode "SmsUrl=https://nia.example.com/twilio/sms/incoming" \
+  --data-urlencode "StatusCallback=https://nia.example.com/twilio/voice/status"
+```
+
+**WhatsApp Sandbox**:
+
+1. Console → Messaging → Try it out → Send a WhatsApp message.
+2. Note the printed `join <two-words>` token.
+3. From your phone's WhatsApp, send `join <two-words>` to `+1 415 523 8886`. You're opted in.
+4. Sandbox settings → "When a message comes in" → Webhook (POST).
+5. URL: `https://<PUBLIC_BASE_URL>/twilio/whatsapp/incoming`
+6. Status callback: `https://<PUBLIC_BASE_URL>/twilio/whatsapp/status`
+
+Sandbox opt-in expires after 72h of inactivity — rejoin with the same code.
+
+If the Twilio account is on trial, every destination number (SMS,
+WhatsApp, outbound voice) must be in the Verified Caller IDs list.
 
 ## CLI
 
@@ -169,17 +219,31 @@ nia job add morning-standup "0 8 * * *" \
 Daily standup at 8 AM owner-local time. Same pattern for evening retro,
 weekly review, urgent escalation, etc.
 
-## Architecture (one-paragraph)
+## Architecture
 
-`src/channels/phone/index.ts` boots a Bun HTTP+WS server on `PHONE_PORT`.
-Twilio reaches it via cloudflared. `twiml.ts` builds the `<Connect><Stream>`
-TwiML. `twilio.ts` calls Twilio's REST API and validates webhook
-signatures (HMAC-SHA1 with the account Auth Token). `relay.ts` bridges
-Twilio's Media Streams (mulaw, JSON-enveloped) to OpenAI Realtime
-(same g711_ulaw format — no resampling). `tools.ts` exposes
-`consult_claude`, `send_telegram`, `save_memory`, and `end_call` to the
-voice agent. `consult.ts` is the Claude escape hatch for reasoning-heavy
-turns. `instructions.ts` builds the system prompts.
+`src/channels/twilio/server.ts` owns the Bun HTTP+WS server on
+`channels.twilio.port` (default 7079). All three Twilio channels register
+their routes on it during `start()`; the server handles signature
+validation, dedup, and rate-limit middleware before dispatching to the
+channel's handler.
+
+- `src/channels/twilio/signature.ts` — HMAC-SHA1 X-Twilio-Signature check.
+- `src/channels/twilio/dedup.ts` — TTL set for `MessageSid`/`CallSid`.
+- `src/channels/twilio/rate-limit.ts` — sliding-window per-key limiter.
+- `src/channels/twilio/rest.ts` — `placeCall`, `sendMessage`,
+  `updateIncomingPhoneNumber`, etc. (Twilio REST helpers, no SDK).
+- `src/channels/phone/` — voice channel: `twiml.ts` builds the
+  `<Connect><Stream>` TwiML, `relay.ts` bridges Twilio Media Streams
+  (mulaw 8 kHz) to OpenAI Realtime (same `g711_ulaw` format — no
+  resampling), `tools.ts` exposes `consult_claude` / `send_telegram` /
+  `save_memory` / `end_call` to the voice agent, `consult.ts` is the
+  Claude escape hatch, `instructions.ts` builds the system prompts.
+- `src/channels/sms.ts` — SMS channel. Inbound webhook → chat engine →
+  REST reply. One engine per remote E.164 (`sms-<E164>` room).
+- `src/channels/whatsapp.ts` — WhatsApp channel. Same shape, plus
+  `whatsapp:` prefix on Twilio addresses and `lastInboundAt` tracking
+  for the 24h customer-service window (outside it, replies are dropped
+  with a log entry — Twilio would reject them anyway).
 
 ## Cost model
 
@@ -221,3 +285,17 @@ prefer Telegram voice notes over live calls for long-form things.
    first, which defeats "Nia calling you".
 6. **Mac Mini sleep kills the daemon.** `sudo pmset -a sleep 0` keeps
    the host awake (display can still sleep).
+7. **WhatsApp 24-hour customer-service window is enforced.** Outside it,
+   Twilio rejects free-form replies (template-only). The whatsapp channel
+   tracks `lastInboundAt` per remote and fails closed with a log line
+   instead of sending what Twilio will reject.
+8. **WhatsApp Sandbox opt-in expires after 72h of inactivity.** Aman gets
+   silently disconnected mid-trip; rejoin by texting the same
+   `join <two-words>` code to +1 415 523 8886.
+9. **US-Twilio-long-code → India SMS outbound deliverability is unreliable.**
+   Meta's TRAI scrubbing rules + US-side A2P 10DLC throttling drop a
+   chunk of outbound. Inbound (India → US Twilio) is more reliable.
+   Treat outbound as best-effort; smoke-test empirically.
+10. **Shared WhatsApp Sandbox number means strangers can opt in.** The
+    allowlist + per-remote rate limit are the only defenses; both are
+    enforced by the channel/server layers — don't remove them.

@@ -4,6 +4,9 @@ import { log } from "../utils/log";
 import { createTelegramChannel } from "./telegram";
 import { createSlackChannel } from "./slack";
 import { createPhoneChannel } from "./phone";
+import { createSmsChannel } from "./sms";
+import { createWhatsAppChannel } from "./whatsapp";
+import { getTwilioServer } from "./twilio/server";
 
 export { getChannel, getStarted } from "./registry";
 
@@ -12,6 +15,8 @@ export function registerAllChannels(): void {
   registerChannel(() => createTelegramChannel());
   registerChannel(() => createSlackChannel());
   registerChannel(() => createPhoneChannel());
+  registerChannel(() => createSmsChannel());
+  registerChannel(() => createWhatsAppChannel());
 }
 
 export interface StartResult {
@@ -69,6 +74,13 @@ export async function stopChannels(channels: Channel[]): Promise<void> {
     } else {
       log.error({ err: result.reason, channel: channels[i].name }, "channel failed to stop");
     }
+  }
+  // Shared Twilio webhook server outlives any single channel; stop it once
+  // all channels are torn down.
+  try {
+    getTwilioServer().stop();
+  } catch (err) {
+    log.warn({ err }, "twilio-server stop failed");
   }
   clearStarted();
 }

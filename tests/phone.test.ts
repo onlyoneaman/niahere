@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createHmac } from "crypto";
 import { streamTwiML, sayAndHangupTwiML, rejectTwiML } from "../src/channels/phone/twiml";
-import { validateTwilioSignature } from "../src/channels/phone/twilio";
+import { validateTwilioSignature } from "../src/channels/twilio/signature";
 
 describe("phone/twiml", () => {
   test("streamTwiML embeds the wss URL and custom parameters", () => {
