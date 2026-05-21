@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, writeFileSync, unlinkSync } from "fs";
-import { join } from "path";
+import { join, resolve } from "path";
 import { homedir } from "os";
 import { getPaths } from "../utils/paths";
 import { findDaemonPids } from "../core/daemon";
@@ -29,6 +29,9 @@ function plistPath(): string {
 function buildPlist(): string {
   const paths = getPaths();
   const [execPath, cliPath] = getExecCommand();
+  // Bun auto-loads .env from cwd. Without WorkingDirectory, launchd
+  // spawns the daemon with cwd=/ and any credentials in .env never load.
+  const workingDir = resolve(cliPath, "../../..");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -42,6 +45,8 @@ function buildPlist(): string {
     <string>${cliPath}</string>
     <string>run</string>
   </array>
+  <key>WorkingDirectory</key>
+  <string>${workingDir}</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
@@ -108,6 +113,7 @@ function unitPath(): string {
 function buildUnit(): string {
   const paths = getPaths();
   const [execPath, cliPath] = getExecCommand();
+  const workingDir = resolve(cliPath, "../../..");
 
   return `[Unit]
 Description=nia personal AI assistant
@@ -115,6 +121,7 @@ After=network.target
 
 [Service]
 ExecStart=${execPath} ${cliPath} run
+WorkingDirectory=${workingDir}
 Restart=always
 RestartSec=5
 StandardOutput=append:${paths.daemonLog}
@@ -137,7 +144,10 @@ async function installSystemd(): Promise<void> {
   const reload = Bun.spawn(["systemctl", "--user", "daemon-reload"], { stdout: "pipe", stderr: "pipe" });
   await reload.exited;
 
-  const enable = Bun.spawn(["systemctl", "--user", "enable", "--now", SYSTEMD_UNIT], { stdout: "pipe", stderr: "pipe" });
+  const enable = Bun.spawn(["systemctl", "--user", "enable", "--now", SYSTEMD_UNIT], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const exitCode = await enable.exited;
 
   if (exitCode !== 0) {
@@ -150,10 +160,17 @@ async function uninstallSystemd(): Promise<void> {
   const path = unitPath();
   if (!existsSync(path)) return;
 
-  const disable = Bun.spawn(["systemctl", "--user", "disable", "--now", SYSTEMD_UNIT], { stdout: "pipe", stderr: "pipe" });
+  const disable = Bun.spawn(["systemctl", "--user", "disable", "--now", SYSTEMD_UNIT], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   await disable.exited;
 
-  try { unlinkSync(path); } catch { /* already gone */ }
+  try {
+    unlinkSync(path);
+  } catch {
+    /* already gone */
+  }
 
   const reload = Bun.spawn(["systemctl", "--user", "daemon-reload"], { stdout: "pipe", stderr: "pipe" });
   await reload.exited;
@@ -197,7 +214,7 @@ export async function restartService(opts: { force?: boolean } = {}): Promise<vo
     const path = plistPath();
     // Unload — sends SIGTERM and disables KeepAlive respawn
     const unload = Bun.spawn(["launchctl", "unload", path], { stdout: "pipe", stderr: "pipe" });
-    if (await unload.exited !== 0) {
+    if ((await unload.exited) !== 0) {
       const stderr = await new Response(unload.stderr).text();
       console.error(`  warning: launchctl unload failed: ${stderr.trim()}`);
     }
@@ -206,7 +223,7 @@ export async function restartService(opts: { force?: boolean } = {}): Promise<vo
     if (opts.force) clearForceShutdownRequest();
     // Load — starts a fresh single instance
     const load = Bun.spawn(["launchctl", "load", path], { stdout: "pipe", stderr: "pipe" });
-    if (await load.exited !== 0) {
+    if ((await load.exited) !== 0) {
       const stderr = await new Response(load.stderr).text();
       console.error(`  warning: launchctl load failed: ${stderr.trim()}`);
     }
@@ -227,6 +244,8 @@ async function waitForDaemonExit(timeoutMs: number): Promise<void> {
   }
   // Force kill any stragglers
   for (const pid of findDaemonPids()) {
-    try { process.kill(pid, "SIGKILL"); } catch {}
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {}
   }
 }

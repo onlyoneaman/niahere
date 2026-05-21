@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Service templates set `WorkingDirectory`** — launchd and systemd unit templates now point at the niahere install root, so Bun's automatic `.env` loading works. Before this, the daemon spawned by launchd ran with cwd=`/`, silently dropped any credentials in `.env`, and channels that depended on them quietly refused to start.
+
 ## [0.3.1] - 2026-05-22
 
 ### Added
