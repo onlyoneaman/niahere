@@ -18,7 +18,7 @@ import { createChatEngine } from "../chat/engine";
 import { getMcpServers } from "../mcp";
 import { Session } from "../db/models";
 import { runMigrations } from "../db/migrate";
-import type { Channel, ChatState, PhoneConfig, SmsConfig, TwilioConfig } from "../types";
+import type { Channel, ChatState, Outbound, PhoneConfig, SmsConfig, TwilioConfig } from "../types";
 import { getConfig } from "../utils/config";
 import { log } from "../utils/log";
 import { sendMessage as twilioSendMessage } from "./twilio/rest";
@@ -27,7 +27,7 @@ import { getTwilioServer } from "./twilio/server";
 const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
 
 class SmsChannel implements Channel {
-  name = "sms";
+  name = "sms" as const;
   private readonly twilio: TwilioConfig;
   private readonly sms: SmsConfig;
   /** Cached resolved "from" number: sms.from_number || phone.from_number */
@@ -77,10 +77,16 @@ class SmsChannel implements Channel {
     this.chats.clear();
   }
 
-  /** Outbound to the owner — used by send_message MCP tool. */
-  async sendMessage(text: string): Promise<void> {
+  /** Outbound — used by send_message MCP tool. SMS is text-only; media is dropped with a warning. */
+  async deliver(out: Outbound): Promise<void> {
     if (!this.twilio.owner_number) throw new Error("sms: owner_number not set");
-    await this.sendTo(this.twilio.owner_number, text);
+    // SMS has no threading; recipient kind is ignored.
+    if (out.media) {
+      log.warn({ filename: out.media.filename }, "sms: media payload dropped (channel is text-only)");
+    }
+    if (out.text) {
+      await this.sendTo(this.twilio.owner_number, out.text);
+    }
   }
 
   // --- Inbound webhook ---

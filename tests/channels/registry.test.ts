@@ -7,6 +7,7 @@ function makeChannel(name: string): Channel {
     name,
     start: async () => {},
     stop: async () => {},
+    deliver: async () => {},
   };
 }
 

@@ -35,7 +35,10 @@ describe("stopChannels", () => {
     const mockChannel: Channel = {
       name: "mock",
       start: async () => {},
-      stop: async () => { stopped = true; },
+      stop: async () => {
+        stopped = true;
+      },
+      deliver: async () => {},
     };
 
     await stopChannels([mockChannel]);
@@ -53,6 +56,7 @@ describe("stopChannels", () => {
       name: "test-clear",
       start: async () => {},
       stop: async () => {},
+      deliver: async () => {},
     };
     trackStarted(mockChannel);
     expect(getChannel("test-clear")).toBeDefined();

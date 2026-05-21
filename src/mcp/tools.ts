@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, appendFileSync, existsSync } from "fs";
-import type { ScheduleType } from "../types";
+import type { Recipient, ScheduleType } from "../types";
 import { basename, join } from "path";
 import { randomUUID } from "crypto";
 import { Job, Message, Session } from "../db/models";
@@ -312,42 +312,27 @@ export async function sendMessage(
   }
 
   try {
-    // Handle media attachment if provided
+    let media: { data: Uint8Array; mimeType: string; filename: string } | undefined;
     if (mediaPath) {
       if (!existsSync(mediaPath)) {
         if (messageId) await Message.updateDeliveryStatus(messageId, "failed").catch(() => {});
         return `Failed to send: file not found: ${mediaPath}`;
       }
-      const data = readFileSync(mediaPath);
-      const mimeType = guessMime(mediaPath);
-      const filename = basename(mediaPath);
+      const buf = readFileSync(mediaPath);
+      media = { data: new Uint8Array(buf), mimeType: guessMime(mediaPath), filename: basename(mediaPath) };
+    }
 
-      if (useThread && channel?.sendMediaToThread) {
-        await channel.sendMediaToThread(sourceCtx!.slackChannelId!, data, mimeType, filename, sourceCtx!.slackThreadTs);
-      } else if (channel?.sendMedia) {
-        await channel.sendMedia(data, mimeType, filename);
-      } else {
-        await sendMediaDirect(channelTarget, data, mimeType, filename);
-      }
+    const recipient: Recipient = useThread
+      ? { kind: "thread", channelId: sourceCtx!.slackChannelId!, threadTs: sourceCtx!.slackThreadTs }
+      : { kind: "owner" };
 
-      // Also send text if provided (as a separate message)
-      if (text) {
-        if (useThread && channel?.sendToThread) {
-          await channel.sendToThread(sourceCtx!.slackChannelId!, text, sourceCtx!.slackThreadTs);
-        } else if (channel?.sendMessage) {
-          await channel.sendMessage(text);
-        } else {
-          await sendDirect(channelTarget, text);
-        }
-      }
+    if (channel) {
+      await channel.deliver({ text: text || undefined, media, to: recipient });
     } else {
-      if (useThread && channel?.sendToThread) {
-        await channel.sendToThread(sourceCtx!.slackChannelId!, text, sourceCtx!.slackThreadTs);
-      } else if (channel?.sendMessage) {
-        await channel.sendMessage(text);
-      } else {
-        await sendDirect(channelTarget, text);
-      }
+      // No started channel in this process (e.g. CLI `nia send` outside the daemon).
+      // Fall back to API-direct send — text-only, no thread fan-out.
+      if (media) await sendMediaDirect(channelTarget, Buffer.from(media.data), media.mimeType, media.filename);
+      if (text) await sendDirect(channelTarget, text);
     }
 
     // Mark as sent

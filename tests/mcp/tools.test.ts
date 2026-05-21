@@ -66,26 +66,23 @@ describe("guessMime", () => {
 });
 
 describe("sendMessage", () => {
-  test("sends media to the active Slack thread when thread context is present", async () => {
+  test("delivers media to the active Slack thread when thread context is present", async () => {
     mkdirSync(`${TEST_DIR}/tmp`, { recursive: true });
     const mediaPath = `${TEST_DIR}/tmp/report.txt`;
     writeFileSync(mediaPath, "hello");
 
-    const mediaCalls: Array<Record<string, unknown>> = [];
+    const deliveries: Array<Record<string, unknown>> = [];
     trackStarted({
       name: "slack",
       start: async () => {},
       stop: async () => {},
-      sendMedia: async () => {
-        throw new Error("sendMedia should not be called for thread media");
-      },
-      sendMediaToThread: async (channelId, data, mimeType, filename, threadTs) => {
-        mediaCalls.push({
-          channelId,
-          data: data.toString(),
-          mimeType,
-          filename,
-          threadTs,
+      deliver: async (out) => {
+        deliveries.push({
+          text: out.text,
+          mediaData: out.media ? Buffer.from(out.media.data).toString() : undefined,
+          mediaMime: out.media?.mimeType,
+          mediaFilename: out.media?.filename,
+          to: out.to,
         });
       },
     });
@@ -98,13 +95,13 @@ describe("sendMessage", () => {
     });
 
     expect(result).toBe("Message with media sent.");
-    expect(mediaCalls).toEqual([
+    expect(deliveries).toEqual([
       {
-        channelId: "C123",
-        data: "hello",
-        mimeType: "text/plain",
-        filename: "report.txt",
-        threadTs: "1710000000.000000",
+        text: undefined,
+        mediaData: "hello",
+        mediaMime: "text/plain",
+        mediaFilename: "report.txt",
+        to: { kind: "thread", channelId: "C123", threadTs: "1710000000.000000" },
       },
     ]);
   });
@@ -170,10 +167,7 @@ describe("addMemory", () => {
   });
 
   test("preserves existing content from other dates", () => {
-    writeFileSync(
-      `${TEST_DIR}/self/memory.md`,
-      "# Memory\n\n---\n\n## 2026-01-01\n- old entry\n",
-    );
+    writeFileSync(`${TEST_DIR}/self/memory.md`, "# Memory\n\n---\n\n## 2026-01-01\n- old entry\n");
 
     addMemory("new entry");
 
@@ -229,14 +223,17 @@ describe("watch channel tools", () => {
   });
 
   test("removeWatchChannel removes entry", () => {
-    writeFileSync(`${TEST_DIR}/config.yaml`, [
-      "channels:",
-      "  slack:",
-      "    watch:",
-      "      C123#test:",
-      "        behavior: Monitor",
-      "        enabled: true",
-    ].join("\n"));
+    writeFileSync(
+      `${TEST_DIR}/config.yaml`,
+      [
+        "channels:",
+        "  slack:",
+        "    watch:",
+        "      C123#test:",
+        "        behavior: Monitor",
+        "        enabled: true",
+      ].join("\n"),
+    );
     resetConfig();
 
     const result = removeWatchChannel("C123#test");
@@ -254,14 +251,17 @@ describe("watch channel tools", () => {
   });
 
   test("enableWatchChannel sets enabled to true", () => {
-    writeFileSync(`${TEST_DIR}/config.yaml`, [
-      "channels:",
-      "  slack:",
-      "    watch:",
-      "      C123#test:",
-      "        behavior: Monitor",
-      "        enabled: false",
-    ].join("\n"));
+    writeFileSync(
+      `${TEST_DIR}/config.yaml`,
+      [
+        "channels:",
+        "  slack:",
+        "    watch:",
+        "      C123#test:",
+        "        behavior: Monitor",
+        "        enabled: false",
+      ].join("\n"),
+    );
     resetConfig();
 
     const result = enableWatchChannel("C123#test");
@@ -272,14 +272,17 @@ describe("watch channel tools", () => {
   });
 
   test("disableWatchChannel sets enabled to false", () => {
-    writeFileSync(`${TEST_DIR}/config.yaml`, [
-      "channels:",
-      "  slack:",
-      "    watch:",
-      "      C123#test:",
-      "        behavior: Monitor",
-      "        enabled: true",
-    ].join("\n"));
+    writeFileSync(
+      `${TEST_DIR}/config.yaml`,
+      [
+        "channels:",
+        "  slack:",
+        "    watch:",
+        "      C123#test:",
+        "        behavior: Monitor",
+        "        enabled: true",
+      ].join("\n"),
+    );
     resetConfig();
 
     const result = disableWatchChannel("C123#test");

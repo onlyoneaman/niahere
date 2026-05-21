@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from "fs
 import { join } from "path";
 import { createHash } from "crypto";
 import { createChatEngine } from "../chat/engine";
-import type { Channel, ChatState, Attachment, AttachmentType } from "../types";
+import type { Channel, ChatState, Attachment, AttachmentType, Outbound, Recipient } from "../types";
 import { getConfig, updateRawConfig, resetConfig } from "../utils/config";
 import { relativeTime } from "../utils/format";
 import { runMigrations } from "../db/migrate";
@@ -20,47 +20,39 @@ function cleanSentinel(text: string): string {
 }
 
 class SlackChannel implements Channel {
-  name = "slack";
+  name = "slack" as const;
   private app: App | null = null;
   private dmUserId: string | null = null;
   /** Timestamps of messages Nia posted proactively (used to detect replies to our own messages) */
   private outboundTs = new Set<string>();
 
-  async sendMessage(text: string): Promise<void> {
+  async deliver(out: Outbound): Promise<void> {
     if (!this.app) throw new Error("Slack not started");
-    const target = this.dmUserId;
-    if (!target) throw new Error("No Slack recipient — set dm_user_id in config");
-    const result = await this.app.client.chat.postMessage({ channel: target, text });
-    if (result.ts) this.outboundTs.add(result.ts);
+    const dest = this.resolveDest(out.to);
+
+    if (out.media) {
+      const buffer = Buffer.from(out.media.data);
+      const filename = out.media.filename || `file.${out.media.mimeType.split("/")[1] || "bin"}`;
+      await this.app.client.filesUploadV2({
+        channel_id: dest.channel,
+        file: buffer,
+        filename,
+        ...(dest.threadTs ? { thread_ts: dest.threadTs } : {}),
+      } as any);
+    }
+
+    if (out.text) {
+      const opts: Record<string, unknown> = { channel: dest.channel, text: out.text };
+      if (dest.threadTs) opts.thread_ts = dest.threadTs;
+      const result = await this.app.client.chat.postMessage(opts as any);
+      if (result.ts) this.outboundTs.add(result.ts);
+    }
   }
 
-  async sendToThread(channelId: string, text: string, threadTs?: string): Promise<void> {
-    if (!this.app) throw new Error("Slack not started");
-    const opts: Record<string, unknown> = { channel: channelId, text };
-    if (threadTs) opts.thread_ts = threadTs;
-    const result = await this.app.client.chat.postMessage(opts as any);
-    if (result.ts) this.outboundTs.add(result.ts);
-  }
-
-  async sendMedia(data: Buffer, mimeType: string, filename?: string): Promise<void> {
-    if (!this.app) throw new Error("Slack not started");
-    const target = this.dmUserId;
-    if (!target) throw new Error("No Slack recipient — set dm_user_id in config");
-    await this.app.client.filesUploadV2({
-      channel_id: target,
-      file: data,
-      filename: filename || `file.${mimeType.split("/")[1] || "bin"}`,
-    });
-  }
-
-  async sendMediaToThread(channelId: string, data: Buffer, mimeType: string, filename?: string, threadTs?: string): Promise<void> {
-    if (!this.app) throw new Error("Slack not started");
-    await this.app.client.filesUploadV2({
-      channel_id: channelId,
-      file: data,
-      filename: filename || `file.${mimeType.split("/")[1] || "bin"}`,
-      ...(threadTs ? { thread_ts: threadTs } : {}),
-    } as any);
+  private resolveDest(to: Recipient | undefined): { channel: string; threadTs?: string } {
+    if (to?.kind === "thread") return { channel: to.channelId, threadTs: to.threadTs };
+    if (!this.dmUserId) throw new Error("No Slack recipient — set dm_user_id in config");
+    return { channel: this.dmUserId };
   }
 
   async start(): Promise<void> {
@@ -100,7 +92,11 @@ class SlackChannel implements Channel {
       slackThreadTs?: string;
     }
 
-    async function getState(key: string, watchBehavior?: { channel: string; behavior: string }, slackCtx?: SlackContext): Promise<ChatState> {
+    async function getState(
+      key: string,
+      watchBehavior?: { channel: string; behavior: string },
+      slackCtx?: SlackContext,
+    ): Promise<ChatState> {
       let state = chats.get(key);
       if (!state) {
         const prefix = roomPrefix(key);
@@ -119,7 +115,11 @@ class SlackChannel implements Channel {
       return state;
     }
 
-    async function restartChat(key: string, watchBehavior?: { channel: string; behavior: string }, slackCtx?: SlackContext): Promise<ChatState> {
+    async function restartChat(
+      key: string,
+      watchBehavior?: { channel: string; behavior: string },
+      slackCtx?: SlackContext,
+    ): Promise<ChatState> {
       const old = chats.get(key);
       if (old) old.engine.close();
 
@@ -383,7 +383,13 @@ class SlackChannel implements Channel {
           const entry: CachedFile = { path: diskPath, type: attType, mimeType: finalMime, filename: file.name };
           fileIndex.set(indexedKey, entry);
 
-          attachments.push({ type: attType, data: finalData, mimeType: finalMime, filename: file.name, sourcePath: diskPath });
+          attachments.push({
+            type: attType,
+            data: finalData,
+            mimeType: finalMime,
+            filename: file.name,
+            sourcePath: diskPath,
+          });
         } catch (err) {
           log.warn({ err, file: file.name }, "failed to download slack file");
         }

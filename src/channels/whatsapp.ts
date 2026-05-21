@@ -21,7 +21,7 @@ import { createChatEngine } from "../chat/engine";
 import { getMcpServers } from "../mcp";
 import { Session, Message } from "../db/models";
 import { runMigrations } from "../db/migrate";
-import type { Attachment, Channel, ChatState, TwilioConfig, WhatsappConfig, PhoneConfig } from "../types";
+import type { Attachment, Channel, ChatState, Outbound, TwilioConfig, WhatsappConfig, PhoneConfig } from "../types";
 import { getConfig } from "../utils/config";
 import { log } from "../utils/log";
 import { classifyMime, prepareImage, validateAttachment } from "../utils/attachment";
@@ -38,7 +38,7 @@ const RESET_RE = /^\s*\/(reset|new)\s*$/i;
 const VOICE_MIME_PREFIX = "audio/";
 
 class WhatsAppChannel implements Channel {
-  name = "whatsapp";
+  name = "whatsapp" as const;
   private readonly twilio: TwilioConfig;
   private readonly whatsapp: WhatsappConfig;
   private readonly phone: PhoneConfig;
@@ -90,16 +90,16 @@ class WhatsAppChannel implements Channel {
     this.chats.clear();
   }
 
-  /** Outbound text to the owner — used by send_message MCP tool. */
-  async sendMessage(text: string): Promise<void> {
+  /** Outbound to the owner — used by send_message MCP tool. WhatsApp has no threading. */
+  async deliver(out: Outbound): Promise<void> {
     if (!this.twilio.owner_number) throw new Error("whatsapp: owner_number not set");
-    await this.sendTextTo(this.twilio.owner_number, text);
-  }
-
-  /** Outbound media to the owner — used by send_message MCP tool with attachments. */
-  async sendMedia(data: Buffer, mimeType: string, filename?: string): Promise<void> {
-    if (!this.twilio.owner_number) throw new Error("whatsapp: owner_number not set");
-    await this.sendMediaTo(this.twilio.owner_number, data, mimeType, filename);
+    const to = this.twilio.owner_number;
+    if (out.media) {
+      await this.sendMediaTo(to, Buffer.from(out.media.data), out.media.mimeType, out.media.filename);
+    }
+    if (out.text) {
+      await this.sendTextTo(to, out.text);
+    }
   }
 
   // --- Inbound webhook ---

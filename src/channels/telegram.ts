@@ -3,7 +3,7 @@ import { createHash } from "crypto";
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { createChatEngine } from "../chat/engine";
-import type { Channel, ChatState, Attachment } from "../types";
+import type { Channel, ChatState, Attachment, Outbound } from "../types";
 import { getConfig, updateRawConfig } from "../utils/config";
 import { runMigrations } from "../db/migrate";
 import { Session, Message } from "../db/models";
@@ -23,27 +23,27 @@ function cacheExtension(filename: string | undefined, mimeType: string): string 
 }
 
 class TelegramChannel implements Channel {
-  name = "telegram";
+  name = "telegram" as const;
   private bot: Bot | null = null;
   private outboundChatId: number | null = null;
 
-  async sendMessage(text: string): Promise<void> {
+  async deliver(out: Outbound): Promise<void> {
     if (!this.bot) throw new Error("Telegram not started");
     const chatId = this.outboundChatId;
     if (!chatId) throw new Error("No outbound chat ID registered");
-    await this.bot.api.sendMessage(chatId, text);
-  }
+    // Telegram has no native threading; thread recipients fall back to the
+    // configured DM chat (the same place we'd send to for `owner`).
 
-  async sendMedia(data: Buffer, mimeType: string, filename?: string): Promise<void> {
-    if (!this.bot) throw new Error("Telegram not started");
-    const chatId = this.outboundChatId;
-    if (!chatId) throw new Error("No outbound chat ID registered");
-
-    const file = new InputFile(data, filename);
-    if (mimeType.startsWith("image/")) {
-      await this.bot.api.sendPhoto(chatId, file);
-    } else {
-      await this.bot.api.sendDocument(chatId, file);
+    if (out.media) {
+      const file = new InputFile(Buffer.from(out.media.data), out.media.filename);
+      if (out.media.mimeType.startsWith("image/")) {
+        await this.bot.api.sendPhoto(chatId, file);
+      } else {
+        await this.bot.api.sendDocument(chatId, file);
+      }
+    }
+    if (out.text) {
+      await this.bot.api.sendMessage(chatId, out.text);
     }
   }
 
@@ -57,7 +57,13 @@ class TelegramChannel implements Channel {
     return Buffer.from(await resp.arrayBuffer());
   }
 
-  private cacheAttachment(chatId: number, roomIndex: number, data: Buffer, mimeType: string, filename?: string): string {
+  private cacheAttachment(
+    chatId: number,
+    roomIndex: number,
+    data: Buffer,
+    mimeType: string,
+    filename?: string,
+  ): string {
     const scope = `telegram-${chatId}-${roomIndex}`;
     const dir = join(getNiaHome(), "tmp", "attachments", scope);
     mkdirSync(dir, { recursive: true });
@@ -151,7 +157,10 @@ class TelegramChannel implements Channel {
 
     async function processMessage(ctx: any, state: ChatState, text: string, attachments?: Attachment[]): Promise<void> {
       const chatId = ctx.chatId;
-      log.info({ chatId, text: text.slice(0, 100), attachments: attachments?.length || 0 }, "telegram message received");
+      log.info(
+        { chatId, text: text.slice(0, 100), attachments: attachments?.length || 0 },
+        "telegram message received",
+      );
 
       // Show typing indicator throughout
       const typingInterval = setInterval(() => {
@@ -263,7 +272,13 @@ class TelegramChannel implements Channel {
             finalMime = prepared.mimeType;
           }
           const sourcePath = self.cacheAttachment(ctx.chatId, state.roomIndex, data, finalMime, doc.file_name);
-          const attachment: Attachment = { type: attType, data, mimeType: finalMime, filename: doc.file_name, sourcePath };
+          const attachment: Attachment = {
+            type: attType,
+            data,
+            mimeType: finalMime,
+            filename: doc.file_name,
+            sourcePath,
+          };
           const caption = ctx.message.caption || (attType === "image" ? "What's in this image?" : "Here's a file.");
           await processMessage(ctx, state, caption, [attachment]);
         } catch (err) {

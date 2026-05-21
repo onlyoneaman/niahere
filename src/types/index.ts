@@ -3,7 +3,7 @@ export type { JobStatus, JobStateStatus, JobLifecycle, ScheduleType, Mode, Attac
 export type { JobInput, JobPromptSource, JobResult, ResolvedJobPrompt } from "./job";
 export type { SendResult, StreamCallback, ActivityCallback, SendCallbacks, ChatEngine, EngineOptions } from "./engine";
 export type { AuditEntry, JobState, CronState } from "./audit";
-export type { Channel, ChannelFactory } from "./channel";
+export type { Channel, ChannelFactory, Outbound, OutboundMedia, Recipient } from "./channel";
 export type { ChatState } from "./chat-state";
 export type {
   Config,

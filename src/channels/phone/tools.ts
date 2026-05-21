@@ -47,8 +47,8 @@ export function buildPhoneTools(ctx: ToolContextOpts): PhoneToolDefinition[] {
       handler: async (args) => {
         const text = String(args.text || "").slice(0, 1000);
         const tg = getChannel("telegram");
-        if (!tg || !tg.sendMessage) return "telegram unavailable";
-        await tg.sendMessage(`[Phone] ${text}`);
+        if (!tg) return "telegram unavailable";
+        await tg.deliver({ text: `[Phone] ${text}` });
         return "sent";
       },
     },

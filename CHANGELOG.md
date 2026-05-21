@@ -4,8 +4,14 @@
 
 ### Changed
 
-- **`channels.twilio.*` is the only Twilio config shape** — removed the `channels.phone.twilio_*` legacy-keys fallback that shipped in 0.3.1 for migration. Configs that still use the pre-0.3.0 shape need to move credentials into a `channels.twilio` block (see the migration note for 0.3.0).
+- **Unified `Channel.deliver(out)` interface** — replaces the optional `sendMessage` / `sendMedia` / `sendToThread` / `sendMediaToThread` quartet with one required `deliver(out: Outbound)` method. `Outbound = { text?, media?, to?: Recipient }`; `Recipient = { kind: "owner" } | { kind: "thread", channelId, threadTs? }`. The MCP `send_message` tool collapses from a 5-arm capability matrix to a single call. Channels that don't support threads (telegram/sms/whatsapp/phone) fall back to the owner recipient; phone throws because voice can't render text.
+- **`channels.phone.{twilio_sid,…}` legacy fallback removed** — `channels.twilio.*` is the only Twilio config shape. The compat shim shipped in 0.3.1 (`twilioOrPhone()` + `chPh` port/allowlist fallback) is gone. Configs created before 0.3.0 must hand-migrate.
+- **`channels.slack.channel_id` legacy fallback removed** — `dm_user_id` is the only Slack DM-target key (it has been since 0.2.x; the fallback is now gone).
 - **`nia init` writes the new shape** — phone setup now writes Twilio creds to `channels.twilio` and voice-only fields to `channels.phone`.
+
+### Removed
+
+- Dead `loadSkills` / `loadSkillNames` re-exports from `chat/identity.ts` — the only remaining caller imports them directly from `core/skills`.
 
 ### Fixed
 

@@ -22,7 +22,7 @@
  *   - consult.ts           — escape hatch to Claude for memory-aware reasoning
  */
 import type { ServerWebSocket } from "bun";
-import type { Channel, PhoneConfig, TwilioConfig } from "../../types";
+import type { Channel, Outbound, PhoneConfig, TwilioConfig } from "../../types";
 import { getConfig } from "../../utils/config";
 import { log } from "../../utils/log";
 import { getChannel } from "../registry";
@@ -66,7 +66,7 @@ const HARD_MAX_MINUTES = 30;
 const WS_PATH = "/twilio/voice/stream";
 
 class PhoneChannel implements Channel {
-  name = "phone";
+  name = "phone" as const;
   private readonly phone: PhoneConfig;
   private readonly twilio: TwilioConfig;
   private readonly pending = new Map<string, PendingCall>();
@@ -125,6 +125,15 @@ class PhoneChannel implements Channel {
     this.pending.clear();
     // The shared server is stopped by the daemon's channel teardown — leaving
     // it running here would block SMS/WhatsApp if they're also bound to it.
+  }
+
+  /**
+   * Phone is voice-only — agent-initiated text/media doesn't have a sensible
+   * delivery shape over Twilio Voice. Callers that want a text notification
+   * about a call should target a text channel (telegram, slack, whatsapp).
+   */
+  async deliver(_out: Outbound): Promise<void> {
+    throw new Error("phone: text/media delivery is not supported — use a text channel or placeCall() for voice");
   }
 
   // --- Outbound entrypoint (used by the place_call MCP tool and CLI test) ---
@@ -186,7 +195,7 @@ class PhoneChannel implements Channel {
     if (!allowed) {
       log.warn({ from, callSid }, "phone: rejecting unauthorized caller");
       getChannel("telegram")
-        ?.sendMessage?.(`Phone: rejected call from ${from} (CallSid ${callSid})`)
+        ?.deliver({ text: `Phone: rejected call from ${from} (CallSid ${callSid})` })
         .catch(() => {});
       return twimlResponse(sayAndHangupTwiML("Sorry, this line is not currently accepting calls. Goodbye."));
     }
