@@ -59,11 +59,23 @@ cloudflared tunnel create nia-mac                 # creates the tunnel
 cloudflared tunnel route dns nia-mac nia.example.com   # CNAME on a Cloudflare-managed domain
 ```
 
-Create `~/.cloudflared/config.yml`:
+Keep the per-tunnel artifacts under `~/.niahere/cloudflared/` so the
+whole nia deploy lives in one backup target.
+
+`cloudflared tunnel create` writes the credentials JSON to
+`~/.cloudflared/<tunnel-id>.json` (because cloudflared's API cert lives
+there too — that part stays put). Move just the credentials file:
+
+```bash
+mkdir -p ~/.niahere/cloudflared
+mv ~/.cloudflared/<tunnel-id>.json ~/.niahere/cloudflared/
+```
+
+Then create `~/.niahere/cloudflared/config.yml`:
 
 ```yaml
 tunnel: nia-mac
-credentials-file: /Users/<you>/.cloudflared/<tunnel-id>.json
+credentials-file: /Users/<you>/.niahere/cloudflared/<tunnel-id>.json
 
 ingress:
   - hostname: nia.example.com
@@ -71,16 +83,24 @@ ingress:
   - service: http_status:404
 ```
 
-Install as a launchd service so it autostarts:
+Install as a launchd service, pointing at our config:
 
 ```bash
-sudo cloudflared service install
+sudo cloudflared --config ~/.niahere/cloudflared/config.yml service install
 ```
+
+If the generated plist at `/Library/LaunchDaemons/com.cloudflare.cloudflared.plist`
+doesn't include the `--config` arg in `ProgramArguments`, edit it in,
+then `sudo launchctl bootout system/com.cloudflare.cloudflared && sudo launchctl bootstrap system /Library/LaunchDaemons/com.cloudflare.cloudflared.plist`.
 
 Then set in `.env`: `PUBLIC_BASE_URL=https://nia.example.com`.
 
 Verify with `curl https://nia.example.com/healthz` — should return `ok`
 once the daemon is running.
+
+**What stays in `~/.cloudflared/`:** `cert.pem` (cloudflared's API auth
+cert from `tunnel login` — cloudflared looks there for `tunnel create`
+and similar commands). Don't move this; you'll break tunnel management.
 
 ## Twilio number webhook (inbound only)
 
