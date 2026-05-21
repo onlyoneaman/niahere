@@ -22,6 +22,7 @@ src/
     agent.ts             # Agent subcommands (list, show)
     employee.ts          # Employee subcommands (add, list, show, pause, resume, remove, approvals)
     channels.ts          # Channel CLI commands (send, telegram, slack)
+    phone.ts             # Phone subcommands (status, call) — outbound voice smoke-test
     self.ts              # Persona commands (rules, memory)
     watch.ts             # Slack watch channel management
     status.ts            # Status command output
@@ -43,6 +44,14 @@ src/
     registry.ts          # Channel factory registry
     telegram.ts          # Telegram bot (grammY) — typing indicator
     slack.ts             # Slack bot (Bolt, Socket Mode) — thinking emoji, thread awareness
+    phone/               # Voice calls — Twilio Voice + OpenAI Realtime bridge
+      index.ts           # Channel class + Bun HTTP/WS server + outbound placeCall
+      twiml.ts           # TwiML XML response builders
+      twilio.ts          # Twilio REST + webhook signature validation
+      relay.ts           # Twilio Media Streams ↔ OpenAI Realtime audio bridge
+      instructions.ts    # System-prompt builders (inbound/outbound)
+      tools.ts           # consult_claude/send_telegram/save_memory/end_call (model-callable)
+      consult.ts         # Single-shot Claude escape hatch for reasoning-heavy turns
   commands/
     init.ts              # Interactive setup wizard (db, channels, persona, agents, active hours)
     service.ts           # OS service registration (launchd/systemd), service-aware restart
@@ -63,7 +72,7 @@ src/
       active_engine.ts   # Active engine registry
   mcp/
     index.ts             # MCP factory (per-query Protocol instances)
-    server.ts            # MCP tool definitions (20 tools: jobs, messaging, memory, rules, agents, watch)
+    server.ts            # MCP tool definitions (21 tools: jobs, messaging, memory, rules, agents, watch, place_call)
     tools.ts             # MCP tool handlers
   prompts/
     index.ts             # Prompt loading and interpolation
@@ -155,7 +164,7 @@ channels:
     dm_user_id: U06PBA2P680
 ```
 
-Env vars override config: `DATABASE_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_CHANNEL_ID`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, `LOG_LEVEL`.
+Env vars override config: `DATABASE_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_CHANNEL_ID`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, `LOG_LEVEL`, `TWILIO_SID`, `TWILIO_SECRET`, `TWILIO_AUTH_TOKEN`, `PHONE_FROM_NUMBER`, `PRIMARY_PHONE_USER`, `PUBLIC_BASE_URL`, `PHONE_PORT`, `PHONE_ALLOWLIST`, `PHONE_VOICE`, `PHONE_REALTIME_MODEL`.
 
 Config can be managed via CLI: `nia config list`, `nia config get <key>`, `nia config set <key> <value>`. Supports dot notation for nested keys (e.g. `channels.default`).
 

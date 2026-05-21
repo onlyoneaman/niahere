@@ -26,26 +26,43 @@ Voice to the OpenAI Realtime API. It exposes:
 Transcripts persist to the `messages` table with `channel = 'phone'` and
 `room = phone-<callSid>`.
 
-## Required env vars
+## Configuration
 
-```bash
-TWILIO_SID            # Account SID (AC…) — or an API Key SID (SK…)
-TWILIO_SECRET         # Auth Token (if SID is AC) — or API Key Secret (if SID is SK)
-TWILIO_AUTH_TOKEN     # Required when SID is an API Key — signs webhooks.
-                      # Omit if TWILIO_SECRET is already the Auth Token.
-PRIMARY_PHONE_USER    # Owner's number in E.164 (e.g. +917667078414).
-PHONE_FROM_NUMBER     # Your Twilio number in E.164 (e.g. +13025480697).
-PUBLIC_BASE_URL       # https://<your-tunnel-hostname>  — NO trailing slash.
-OPENAI_API_KEY        # For the Realtime voice loop.
+Phone config lives in `~/.niahere/config.yaml` under `channels.phone` —
+same place as `channels.telegram` and `channels.slack`. Every field is
+overridable by the matching env var if you prefer `.env` for secrets.
 
-# Optional
-PHONE_PORT=7079       # Local port the webhook server binds to.
-PHONE_ALLOWLIST=+12025550100,+14155551234   # Extra allowed inbound callers.
-PHONE_VOICE=marin     # Realtime voice (marin | cedar | shimmer | coral | alloy | ash | …).
-PHONE_REALTIME_MODEL=gpt-realtime   # Override if you want a specific model.
+```yaml
+# ~/.niahere/config.yaml
+channels:
+  phone:
+    twilio_sid: AC... # Account SID — or an API Key SID (SK…)
+    twilio_secret: ... # Auth Token if SID is AC, API Key Secret if SID is SK
+    twilio_auth_token:
+      ... # Required when twilio_sid is an API Key (SK…); signs webhooks.
+      # Omit if twilio_secret is already the Auth Token.
+    from_number: "+1..." # Your Twilio number (E.164)
+    owner_number: "+91..." # Owner's phone (E.164) — highest-trust caller
+    public_base_url: https://nia.example.com # No trailing slash
+    openai_api_key: sk-proj-... # For the Realtime voice loop
+
+    # Optional
+    port: 7079 # Local port the webhook server binds to
+    allowlist: ["+12025550100"] # Extra allowed inbound callers (E.164)
+    voice: marin # Realtime voice (marin | cedar | shimmer | coral | alloy | ash | …)
+    realtime_model: gpt-realtime
 ```
 
-`nia phone status` prints which vars are set / missing.
+Env overrides (use these if you'd rather keep secrets in `.env`):
+
+```
+TWILIO_SID, TWILIO_SECRET, TWILIO_AUTH_TOKEN
+PHONE_FROM_NUMBER, PRIMARY_PHONE_USER
+PUBLIC_BASE_URL, OPENAI_API_KEY
+PHONE_PORT, PHONE_ALLOWLIST (comma-separated), PHONE_VOICE, PHONE_REALTIME_MODEL
+```
+
+`nia phone status` prints which fields are set / missing.
 
 ## Cloudflared named tunnel (production)
 

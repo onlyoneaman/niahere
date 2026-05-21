@@ -149,16 +149,29 @@ Phase 2 (not in this work):
 - Smoke (manual, post-1B): outbound call from `place_call` plays a static greeting.
 - Smoke (manual, post-1C): inbound call from owner number reaches realtime model, model can invoke `consult_claude` and `send_telegram`.
 
-## Env vars (added)
+## Configuration
 
+Phone config lives in `~/.niahere/config.yaml` under `channels.phone`
+(same pattern as `channels.telegram` and `channels.slack`). Env vars
+override each field if the operator prefers `.env` for secrets.
+
+```yaml
+channels:
+  phone:
+    twilio_sid: AC... # or API Key SID (SK…)
+    twilio_secret: ... # Auth Token (if AC) or API Key Secret (if SK)
+    twilio_auth_token: ... # required when twilio_sid is SK… (signs webhooks)
+    from_number: "+1..." # Twilio number Nia dials from
+    owner_number: "+91..." # Owner — highest-trust caller
+    public_base_url: https://nia.example.com
+    openai_api_key: sk-proj-...
+    port: 7079 # optional
+    allowlist: [] # optional (extra E.164 callers)
+    voice: marin # optional
+    realtime_model: gpt-realtime # optional
 ```
-TWILIO_SID            # already set
-TWILIO_SECRET         # already set
-PRIMARY_PHONE_USER    # already set — owner's number (E.164)
-PHONE_FROM_NUMBER     # NEW — Twilio number Nia dials from (+13025480697)
-PHONE_PORT            # NEW — local HTTP port (default 7079)
-PUBLIC_BASE_URL       # NEW — cloudflared public hostname, no trailing slash
-OPENAI_API_KEY        # NEW — for Realtime API
-PHONE_ALLOWLIST       # NEW (optional) — comma-separated extra E.164 numbers
-PHONE_VOICE           # NEW (optional) — realtime voice name, default "marin"
-```
+
+Env overrides:
+`TWILIO_SID`, `TWILIO_SECRET`, `TWILIO_AUTH_TOKEN`, `PHONE_FROM_NUMBER`,
+`PRIMARY_PHONE_USER`, `PUBLIC_BASE_URL`, `OPENAI_API_KEY`, `PHONE_PORT`,
+`PHONE_ALLOWLIST` (comma-separated), `PHONE_VOICE`, `PHONE_REALTIME_MODEL`.

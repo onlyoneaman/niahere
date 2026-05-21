@@ -370,17 +370,20 @@ class PhoneChannel implements Channel {
   private requireCreds(): { accountSid: string; authToken: string } {
     const sid = this.cfg.twilio_sid;
     const secret = this.cfg.twilio_secret;
-    if (!sid || !secret) throw new Error("phone: TWILIO_SID/TWILIO_SECRET not configured");
+    if (!sid || !secret)
+      throw new Error("phone: channels.phone.twilio_sid and twilio_secret not set (config.yaml or env)");
     return { accountSid: sid, authToken: secret };
   }
 
   private requirePublicBaseUrl(): string {
-    if (!this.cfg.public_base_url) throw new Error("phone: PUBLIC_BASE_URL not configured");
+    if (!this.cfg.public_base_url)
+      throw new Error("phone: channels.phone.public_base_url not set (config.yaml or PUBLIC_BASE_URL env)");
     return this.cfg.public_base_url;
   }
 
   private requireFromNumber(): string {
-    if (!this.cfg.from_number) throw new Error("phone: PHONE_FROM_NUMBER not configured");
+    if (!this.cfg.from_number)
+      throw new Error("phone: channels.phone.from_number not set (config.yaml or PHONE_FROM_NUMBER env)");
     return this.cfg.from_number;
   }
 

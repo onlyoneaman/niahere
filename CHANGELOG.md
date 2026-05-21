@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-21
+
+### Changed
+
+- **Phone config moves to `config.yaml`** — `channels.phone` block in `~/.niahere/config.yaml` is now the canonical home for Twilio + OpenAI Realtime credentials (matching how `channels.telegram` and `channels.slack` already work). Env vars still override field-by-field if you prefer `.env` for secrets.
+- **`nia init` prompts for phone setup** — Optional Twilio + OpenAI Realtime block in the init wizard. Asks for SID/secret, auto-prompts for the account Auth Token when the SID is an API Key (SK…), and writes the whole thing into `channels.phone`.
+- **Phone error messages and `nia phone status` / `nia phone help`** — Now lead with the `config.yaml` path and list env vars as the override option.
+- **Docs** — README adds Phone to "What It Supports" (MCP tool count bumped 20 → 21). AGENTS.md adds the `src/channels/phone/` subtree and CLI subcommand, plus the new phone env-override list. `nia-phone` skill restructured to show the yaml block first.
+
 ## [0.2.91] - 2026-05-21
 
 ### Added

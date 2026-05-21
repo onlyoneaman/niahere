@@ -36,13 +36,14 @@ nia start               # starts daemon + registers OS service
 
 - **Telegram** — message your agent from your phone, typing indicator while processing
 - **Slack** — Socket Mode bot with thread awareness, thinking emoji, watch channels for proactive monitoring
+- **Phone (voice)** — Twilio + OpenAI Realtime. Inbound calls from allowlisted contacts and outbound calls via `place_call` MCP tool. Scheduled jobs can dial you (morning standup, evening retro, escalation). See `/nia-phone` skill.
 - **Terminal chat** — REPL with session resume support
 - **Scheduled jobs** — recurring jobs and crons that run Claude and can message you back. Stateful by default (working memory), per-job model routing for cost savings
 - **Persona system** — customizable identity, soul, owner profile, rules, and memory (preloaded every session)
 - **Agents** — domain specialists (marketer, senior-dev) via Claude Agent SDK subagents
 - **Skills** — loads skills from multiple directories, invokable as slash commands
 - **Cross-platform service** — launchd (macOS), systemd (Linux), service-aware restart
-- **MCP tools** — 20 tools for job management, messaging, memory, rules, and channel control
+- **MCP tools** — 21 tools for job management, messaging, memory, rules, channel control, and outbound phone calls
 - **Background memory consolidation** — stages memory candidates from conversations automatically
 - **Session summaries** — optional handoff notes between sessions for continuity
 - **Backups** — `nia backup` with auto-backup before updates

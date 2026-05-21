@@ -215,6 +215,60 @@ export async function runInit(): Promise<void> {
       }
     }
 
+    // Phone (Twilio Voice + OpenAI Realtime)
+    const exPh = (exCh.phone || {}) as Record<string, unknown>;
+    let phoneTwilioSid = (exPh.twilio_sid as string) || "";
+    let phoneTwilioSecret = (exPh.twilio_secret as string) || "";
+    let phoneTwilioAuthToken = (exPh.twilio_auth_token as string) || "";
+    let phoneFromNumber = (exPh.from_number as string) || "";
+    let phoneOwnerNumber = (exPh.owner_number as string) || "";
+    let phonePublicBaseUrl = (exPh.public_base_url as string) || "";
+    let phoneOpenAiKey = (exPh.openai_api_key as string) || "";
+    let phoneVoice = (exPh.voice as string) || "";
+
+    const existingPhoneSid = phoneTwilioSid;
+    if (existingPhoneSid) {
+      const masked = `...${existingPhoneSid.slice(-6)}`;
+      const reconfigure = await ask(rl, `\nPhone (Twilio + Realtime): configured (${masked}). Reconfigure? (y/n)`, "n");
+      if (reconfigure.toLowerCase() === "y") {
+        phoneTwilioSid = (await ask(rl, "Twilio SID (AC… or SK…)", phoneTwilioSid)) || phoneTwilioSid;
+        phoneTwilioSecret =
+          (await ask(rl, "Twilio Secret (Auth Token if AC, API Key Secret if SK)", phoneTwilioSecret)) ||
+          phoneTwilioSecret;
+        if (phoneTwilioSid.startsWith("SK")) {
+          phoneTwilioAuthToken =
+            (await ask(rl, "Twilio Auth Token (account-level — needed for webhook signing)", phoneTwilioAuthToken)) ||
+            phoneTwilioAuthToken;
+        }
+        phoneFromNumber =
+          (await ask(rl, "Twilio number to dial from (E.164, e.g. +13025551234)", phoneFromNumber)) || phoneFromNumber;
+        phoneOwnerNumber = (await ask(rl, "Your phone (E.164)", phoneOwnerNumber)) || phoneOwnerNumber;
+        phonePublicBaseUrl =
+          (await ask(rl, "Public base URL (cloudflared/ngrok https://…)", phonePublicBaseUrl)) || phonePublicBaseUrl;
+        phoneOpenAiKey = (await ask(rl, "OpenAI API key (for Realtime voice loop)", phoneOpenAiKey)) || phoneOpenAiKey;
+        phoneVoice =
+          (await ask(rl, "Realtime voice (marin, cedar, shimmer, coral, alloy…)", phoneVoice || "marin")) || phoneVoice;
+      }
+    } else {
+      const setupPhone = await ask(rl, "\nSet up phone (Twilio + OpenAI Realtime voice calls)? (y/n)", "n");
+      if (setupPhone.toLowerCase() === "y") {
+        console.log("  You'll need: a Twilio voice number, your phone number, an OpenAI API key, and a public tunnel.");
+        console.log("  See /nia-phone skill for the full deploy walkthrough.\n");
+        phoneTwilioSid = await ask(rl, "Twilio SID (AC… or SK…)", "");
+        if (phoneTwilioSid) {
+          phoneTwilioSecret = await ask(rl, "Twilio Secret (Auth Token if AC, API Key Secret if SK)", "");
+          if (phoneTwilioSid.startsWith("SK")) {
+            phoneTwilioAuthToken = await ask(rl, "Twilio Auth Token (account-level — for webhook signing)", "");
+          }
+          phoneFromNumber = await ask(rl, "Twilio number to dial from (E.164, e.g. +13025551234)", "");
+          phoneOwnerNumber = await ask(rl, "Your phone (E.164)", "");
+          phonePublicBaseUrl = await ask(rl, "Public base URL (cloudflared/ngrok https://…)", "");
+          phoneOpenAiKey = await ask(rl, "OpenAI API key", "");
+          phoneVoice = await ask(rl, "Realtime voice", "marin");
+        }
+      }
+    }
+
     // Gemini API key (for image generation)
     let geminiApiKey = "";
     const existingGemini = (existing.gemini_api_key as string) || "";
@@ -429,6 +483,19 @@ export async function runInit(): Promise<void> {
     }
     if (slackBotToken && !telegramToken) {
       channels.default = "slack";
+    }
+    if (phoneTwilioSid && phoneTwilioSecret && phoneFromNumber) {
+      const ph: Record<string, unknown> = {
+        twilio_sid: phoneTwilioSid,
+        twilio_secret: phoneTwilioSecret,
+        from_number: phoneFromNumber,
+      };
+      if (phoneTwilioAuthToken) ph.twilio_auth_token = phoneTwilioAuthToken;
+      if (phoneOwnerNumber) ph.owner_number = phoneOwnerNumber;
+      if (phonePublicBaseUrl) ph.public_base_url = phonePublicBaseUrl.replace(/\/$/, "");
+      if (phoneOpenAiKey) ph.openai_api_key = phoneOpenAiKey;
+      if (phoneVoice && phoneVoice !== "marin") ph.voice = phoneVoice;
+      channels.phone = ph;
     }
     if (Object.keys(channels).length > 0) {
       config.channels = channels;

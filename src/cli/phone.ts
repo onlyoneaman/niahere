@@ -45,7 +45,7 @@ async function phoneCallCommand(): Promise<void> {
   const channel = createPhoneChannel();
   if (!channel) {
     fail(
-      "Phone channel not configured. Need TWILIO_SID, TWILIO_SECRET, PHONE_FROM_NUMBER in .env (plus OPENAI_API_KEY and PUBLIC_BASE_URL for the realtime voice loop).",
+      "Phone channel not configured. Set channels.phone.{twilio_sid,twilio_secret,from_number} in ~/.niahere/config.yaml (also channels.phone.{openai_api_key,public_base_url} for the realtime voice loop). Env vars TWILIO_SID / TWILIO_SECRET / PHONE_FROM_NUMBER / OPENAI_API_KEY / PUBLIC_BASE_URL override if you prefer .env.",
     );
   }
 
@@ -53,13 +53,13 @@ async function phoneCallCommand(): Promise<void> {
   const cfg = getConfig().channels.phone;
   console.log(`${ICON_PASS} phone server up on :${cfg.port}`);
   if (!cfg.public_base_url) {
-    console.log(`${ICON_WARN} PUBLIC_BASE_URL not set — Twilio cannot reach this server.`);
-    console.log(`         Start cloudflared (or your tunnel) and set PUBLIC_BASE_URL in .env first.`);
+    console.log(`${ICON_WARN} public_base_url not set — Twilio cannot reach this server.`);
+    console.log(`         Start cloudflared (or your tunnel) and set channels.phone.public_base_url in config.yaml.`);
     await channel!.stop();
     process.exit(1);
   }
   if (!cfg.openai_api_key) {
-    console.log(`${ICON_WARN} OPENAI_API_KEY not set — realtime voice loop will fall back to TwiML <Say>.`);
+    console.log(`${ICON_WARN} openai_api_key not set — realtime voice loop will fall back to TwiML <Say>.`);
   }
 
   console.log(`  dialing ${number} ...`);
@@ -119,9 +119,13 @@ function helpText(): string {
     "                                phone server, dials, waits, prints transcript.",
     "  status                        Show phone channel configuration.",
     "",
-    "Required env:",
-    "  TWILIO_SID, TWILIO_SECRET, PHONE_FROM_NUMBER",
-    "  OPENAI_API_KEY (for realtime voice loop)",
-    "  PUBLIC_BASE_URL (cloudflared/ngrok tunnel pointing at PHONE_PORT)",
+    "Config lives in ~/.niahere/config.yaml under channels.phone:",
+    "  twilio_sid, twilio_secret, from_number          (required)",
+    "  openai_api_key, public_base_url                 (required for realtime voice loop)",
+    "  twilio_auth_token                               (required if twilio_sid is an API Key SID)",
+    "  port, voice, realtime_model, allowlist          (optional)",
+    "",
+    "Each field can be overridden by the matching env var (TWILIO_SID, OPENAI_API_KEY, etc.)",
+    "if you prefer .env. See the nia-phone skill for full deploy walkthrough.",
   ].join("\n");
 }
