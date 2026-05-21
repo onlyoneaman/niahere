@@ -2,7 +2,6 @@ import { App } from "@slack/bolt";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from "fs";
 import { join } from "path";
 import { createHash } from "crypto";
-import { createChatEngine } from "../chat/engine";
 import type { Channel, ChatState, Attachment, AttachmentType, Outbound, Recipient } from "../types";
 import { getConfig, updateRawConfig, resetConfig } from "../utils/config";
 import { relativeTime } from "../utils/format";
@@ -13,6 +12,7 @@ import { getMcpServers } from "../mcp";
 import { getNiaHome, getPaths } from "../utils/paths";
 import { classifyMime, validateAttachment, prepareImage } from "../utils/attachment";
 import { resolveWatchBehavior } from "../utils/watches";
+import { chainLock, openChatEngine, rotateRoom } from "./common/chat-session";
 
 /** Strip markdown backticks so sentinel tokens like [NO_REPLY] match even when the LLM wraps them. */
 function cleanSentinel(text: string): string {
@@ -79,17 +79,25 @@ class SlackChannel implements Channel {
       return name;
     }
 
-    function roomPrefix(key: string): string {
-      return `slack-${key}`;
-    }
-
-    function roomName(key: string, index: number): string {
-      return `slack-${key}-${index}`;
-    }
-
     interface SlackContext {
       slackChannelId?: string;
       slackThreadTs?: string;
+    }
+
+    function roomPrefix(k: string): string {
+      return `slack-${k}`;
+    }
+
+    function roomName(k: string, index: number): string {
+      return `slack-${k}-${index}`;
+    }
+
+    function buildEngineOpts(watchBehavior?: { channel: string; behavior: string }, slackCtx?: SlackContext) {
+      return (room: string) => ({
+        channel: "slack",
+        mcpServers: getMcpServers({ channel: "slack", room, ...slackCtx }),
+        watchBehavior,
+      });
     }
 
     async function getState(
@@ -98,20 +106,9 @@ class SlackChannel implements Channel {
       slackCtx?: SlackContext,
     ): Promise<ChatState> {
       let state = chats.get(key);
-      if (!state) {
-        const prefix = roomPrefix(key);
-        const idx = await Session.getLatestRoomIndex(prefix);
-        const room = roomName(key, idx);
-        const engine = await createChatEngine({
-          room,
-          channel: "slack",
-          resume: true,
-          mcpServers: getMcpServers({ channel: "slack", room, ...slackCtx }),
-          watchBehavior,
-        });
-        state = { engine, roomIndex: idx, lock: Promise.resolve() };
-        chats.set(key, state);
-      }
+      if (state) return state;
+      state = await openChatEngine(roomPrefix(key), buildEngineOpts(watchBehavior, slackCtx));
+      chats.set(key, state);
       return state;
     }
 
@@ -120,29 +117,8 @@ class SlackChannel implements Channel {
       watchBehavior?: { channel: string; behavior: string },
       slackCtx?: SlackContext,
     ): Promise<ChatState> {
-      const old = chats.get(key);
-      if (old) old.engine.close();
-
-      const prefix = roomPrefix(key);
-      const prevIdx = await Session.getLatestRoomIndex(prefix);
-      const newIdx = prevIdx + 1;
-      const room = roomName(key, newIdx);
-
-      // Persist a placeholder session immediately so the room index survives
-      // daemon restarts (otherwise getState falls back to the old room).
-      await Session.create(`placeholder-${room}`, room);
-
-      log.info({ key, room }, "slack: creating chat engine");
-      const engine = await createChatEngine({
-        room,
-        channel: "slack",
-        resume: false,
-        mcpServers: getMcpServers({ channel: "slack", room, ...slackCtx }),
-        watchBehavior,
-      });
-      const state: ChatState = { engine, roomIndex: newIdx, lock: Promise.resolve() };
+      const state = await rotateRoom(roomPrefix(key), chats.get(key), buildEngineOpts(watchBehavior, slackCtx));
       chats.set(key, state);
-      log.info({ key, room, activeSessions: chats.size }, "slack: engine ready");
       return state;
     }
 
@@ -152,9 +128,7 @@ class SlackChannel implements Channel {
         fn().catch((err) => log.error({ err, key }, "unhandled error in locked handler"));
         return;
       }
-      const queued = state.lock !== Promise.resolve();
-      if (queued) log.debug({ key }, "slack: message queued behind active lock");
-      state.lock = state.lock.then(fn, fn).catch((err) => log.error({ err, key }, "unhandled error in locked handler"));
+      chainLock(state, fn);
     }
 
     const self = this;

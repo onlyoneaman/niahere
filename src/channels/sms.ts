@@ -14,15 +14,14 @@
  * variable deliverability under TRAI scrubbing rules. Test empirically;
  * if outbound fails, the inbound leg (Aman → Nia) is more reliable.
  */
-import { createChatEngine } from "../chat/engine";
 import { getMcpServers } from "../mcp";
-import { Session } from "../db/models";
 import { runMigrations } from "../db/migrate";
 import type { Channel, ChatState, Outbound, TwilioConfig } from "../types";
 import { getConfig } from "../utils/config";
 import { log } from "../utils/log";
 import { sendMessage as twilioSendMessage } from "./twilio/rest";
 import { getTwilioServer } from "./twilio/server";
+import { chainLock, openChatEngine } from "./common/chat-session";
 
 const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
 
@@ -101,19 +100,16 @@ class SmsChannel implements Channel {
     const state = await this.getState(from);
     // Ack the webhook immediately; reply via REST asynchronously to avoid
     // Twilio's ~15s webhook timeout when the engine takes longer.
-    state.lock = state.lock.then(
-      async () => {
-        try {
-          const { result } = await state.engine.send(body);
-          const reply = result.trim() || "(no response)";
-          await this.sendTo(from, reply);
-        } catch (err) {
-          log.error({ err, from }, "sms: engine error");
-          await this.sendTo(from, `[error] ${err instanceof Error ? err.message : String(err)}`).catch(() => {});
-        }
-      },
-      (err) => log.error({ err, from }, "sms: lock chain error"),
-    );
+    chainLock(state, async () => {
+      try {
+        const { result } = await state.engine.send(body);
+        const reply = result.trim() || "(no response)";
+        await this.sendTo(from, reply);
+      } catch (err) {
+        log.error({ err, from }, "sms: engine error");
+        await this.sendTo(from, `[error] ${err instanceof Error ? err.message : String(err)}`).catch(() => {});
+      }
+    });
 
     return new Response(EMPTY_TWIML, { status: 200, headers: { "Content-Type": "text/xml" } });
   }
@@ -164,17 +160,7 @@ class SmsChannel implements Channel {
   private async getState(remoteE164: string): Promise<ChatState> {
     let state = this.chats.get(remoteE164);
     if (state) return state;
-    const prefix = `sms-${remoteE164}`;
-    const idx = await Session.getLatestRoomIndex(prefix);
-    const room = `${prefix}-${idx}`;
-    log.info({ remoteE164, room }, "sms: creating chat engine");
-    const engine = await createChatEngine({
-      room,
-      channel: "sms",
-      resume: true,
-      mcpServers: getMcpServers(),
-    });
-    state = { engine, roomIndex: idx, lock: Promise.resolve() };
+    state = await openChatEngine(`sms-${remoteE164}`, () => ({ channel: "sms", mcpServers: getMcpServers() }));
     this.chats.set(remoteE164, state);
     return state;
   }

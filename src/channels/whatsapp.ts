@@ -17,10 +17,10 @@
  * expires after 72h of inactivity; the join code stays valid. Outbound
  * is further gated by Meta's 24-hour customer-service window.
  */
-import { createChatEngine } from "../chat/engine";
 import { getMcpServers } from "../mcp";
-import { Session, Message } from "../db/models";
+import { Message } from "../db/models";
 import { runMigrations } from "../db/migrate";
+import { chainLock, openChatEngine, rotateRoom } from "./common/chat-session";
 import type { Attachment, Channel, ChatState, Outbound, TwilioConfig, WhatsappConfig, PhoneConfig } from "../types";
 import { getConfig } from "../utils/config";
 import { log } from "../utils/log";
@@ -119,107 +119,98 @@ class WhatsAppChannel implements Channel {
       // Serialize through the same lock so a /reset chasing an in-flight
       // engine.send() waits its turn instead of yanking the engine away.
       const state = await this.getState(from);
-      state.lock = state.lock.then(
-        async () => {
-          const newState = await this.restartChat(from);
-          await this.sendTextTo(
-            from,
-            `New conversation started (room ${this.roomPrefix(from)}-${newState.roomIndex}).`,
-          );
-        },
-        (err) => log.error({ err, from }, "whatsapp: /reset lock chain error"),
-      );
+      chainLock(state, async () => {
+        const newState = await this.restartChat(from);
+        await this.sendTextTo(from, `New conversation started (room ${this.roomPrefix(from)}-${newState.roomIndex}).`);
+      });
       return new Response(EMPTY_TWIML, { status: 200, headers: { "Content-Type": "text/xml" } });
     }
 
     const descriptors = extractMedia(params);
 
     const state = await this.getState(from);
-    state.lock = state.lock.then(
-      async () => {
-        let userText = body;
-        let attachments: Attachment[] | undefined;
+    chainLock(state, async () => {
+      let userText = body;
+      let attachments: Attachment[] | undefined;
 
-        if (descriptors.length > 0) {
-          const downloaded = await downloadInboundMedia(descriptors, {
-            accountSid: this.twilio.sid!,
-            authSid: this.twilio.sid!,
-            authSecret: this.twilio.secret!,
-          });
+      if (descriptors.length > 0) {
+        const downloaded = await downloadInboundMedia(descriptors, {
+          accountSid: this.twilio.sid!,
+          authSid: this.twilio.sid!,
+          authSecret: this.twilio.secret!,
+        });
 
-          const voiceParts: string[] = [];
-          const built: Attachment[] = [];
+        const voiceParts: string[] = [];
+        const built: Attachment[] = [];
 
-          for (const item of downloaded) {
-            if (item.mime.startsWith(VOICE_MIME_PREFIX)) {
-              if (!this.phone.openai_api_key) {
-                voiceParts.push("[voice note: transcription unavailable — channels.phone.openai_api_key not set]");
-                continue;
-              }
-              try {
-                const transcript = await transcribeAudio({
-                  apiKey: this.phone.openai_api_key,
-                  data: item.data,
-                  mime: item.mime,
-                });
-                voiceParts.push(transcript || "[empty voice note]");
-              } catch (err) {
-                log.error({ err, from }, "whatsapp: voice transcription failed");
-                voiceParts.push(
-                  `[voice note: transcription failed — ${err instanceof Error ? err.message : String(err)}]`,
-                );
-              }
+        for (const item of downloaded) {
+          if (item.mime.startsWith(VOICE_MIME_PREFIX)) {
+            if (!this.phone.openai_api_key) {
+              voiceParts.push("[voice note: transcription unavailable — channels.phone.openai_api_key not set]");
               continue;
             }
-
-            const error = validateAttachment(item.data);
-            if (error) {
-              log.warn({ from, mime: item.mime, error }, "whatsapp: rejecting attachment");
-              await this.sendTextTo(from, `[error] ${error}`).catch(() => {});
-              continue;
+            try {
+              const transcript = await transcribeAudio({
+                apiKey: this.phone.openai_api_key,
+                data: item.data,
+                mime: item.mime,
+              });
+              voiceParts.push(transcript || "[empty voice note]");
+            } catch (err) {
+              log.error({ err, from }, "whatsapp: voice transcription failed");
+              voiceParts.push(
+                `[voice note: transcription failed — ${err instanceof Error ? err.message : String(err)}]`,
+              );
             }
-
-            const attType = classifyMime(item.mime) || "file";
-            let data = item.data;
-            let mime = item.mime;
-            if (attType === "image") {
-              const prepared = await prepareImage(data, mime);
-              data = prepared.data;
-              mime = prepared.mimeType;
-            }
-            built.push({ type: attType, data, mimeType: mime });
+            continue;
           }
 
-          if (voiceParts.length > 0) {
-            const joined = voiceParts.join("\n\n");
-            userText = userText ? `${userText}\n\n${joined}` : joined;
+          const error = validateAttachment(item.data);
+          if (error) {
+            log.warn({ from, mime: item.mime, error }, "whatsapp: rejecting attachment");
+            await this.sendTextTo(from, `[error] ${error}`).catch(() => {});
+            continue;
           }
-          if (built.length > 0) attachments = built;
+
+          const attType = classifyMime(item.mime) || "file";
+          let data = item.data;
+          let mime = item.mime;
+          if (attType === "image") {
+            const prepared = await prepareImage(data, mime);
+            data = prepared.data;
+            mime = prepared.mimeType;
+          }
+          built.push({ type: attType, data, mimeType: mime });
         }
 
-        if (!userText && !attachments) {
-          log.debug({ from }, "whatsapp: empty inbound (no body, no usable media)");
-          return;
+        if (voiceParts.length > 0) {
+          const joined = voiceParts.join("\n\n");
+          userText = userText ? `${userText}\n\n${joined}` : joined;
         }
+        if (built.length > 0) attachments = built;
+      }
 
+      if (!userText && !attachments) {
+        log.debug({ from }, "whatsapp: empty inbound (no body, no usable media)");
+        return;
+      }
+
+      try {
+        const { result, messageId } = await state.engine.send(userText || "(media only)", {}, attachments);
+        const reply = result.trim() || "(no response)";
         try {
-          const { result, messageId } = await state.engine.send(userText || "(media only)", {}, attachments);
-          const reply = result.trim() || "(no response)";
-          try {
-            await this.sendTextTo(from, reply);
-            if (messageId) await Message.updateDeliveryStatus(messageId, "sent").catch(() => {});
-          } catch (sendErr) {
-            if (messageId) await Message.updateDeliveryStatus(messageId, "failed").catch(() => {});
-            throw sendErr;
-          }
-        } catch (err) {
-          log.error({ err, from }, "whatsapp: engine error");
-          const errText = err instanceof Error ? err.message : String(err);
-          await this.sendTextTo(from, `[error] ${errText}`).catch(() => {});
+          await this.sendTextTo(from, reply);
+          if (messageId) await Message.updateDeliveryStatus(messageId, "sent").catch(() => {});
+        } catch (sendErr) {
+          if (messageId) await Message.updateDeliveryStatus(messageId, "failed").catch(() => {});
+          throw sendErr;
         }
-      },
-      (err) => log.error({ err, from }, "whatsapp: lock chain error"),
-    );
+      } catch (err) {
+        log.error({ err, from }, "whatsapp: engine error");
+        const errText = err instanceof Error ? err.message : String(err);
+        await this.sendTextTo(from, `[error] ${errText}`).catch(() => {});
+      }
+    });
 
     return new Response(EMPTY_TWIML, { status: 200, headers: { "Content-Type": "text/xml" } });
   }
@@ -321,43 +312,20 @@ class WhatsAppChannel implements Channel {
   private async getState(remoteE164: string): Promise<ChatState> {
     let state = this.chats.get(remoteE164);
     if (state) return state;
-    const prefix = this.roomPrefix(remoteE164);
-    const idx = await Session.getLatestRoomIndex(prefix);
-    const room = `${prefix}-${idx}`;
-    log.info({ remoteE164, room }, "whatsapp: creating chat engine");
-    const engine = await createChatEngine({
-      room,
+    state = await openChatEngine(this.roomPrefix(remoteE164), () => ({
       channel: "whatsapp",
-      resume: true,
       mcpServers: getMcpServers(),
-    });
-    state = { engine, roomIndex: idx, lock: Promise.resolve() };
+    }));
     this.chats.set(remoteE164, state);
     return state;
   }
 
   private async restartChat(remoteE164: string): Promise<ChatState> {
-    const old = this.chats.get(remoteE164);
-    if (old) old.engine.close();
-
-    const prefix = this.roomPrefix(remoteE164);
-    const prevIdx = await Session.getLatestRoomIndex(prefix);
-    const newIdx = prevIdx + 1;
-    const room = `${prefix}-${newIdx}`;
-
-    // Persist a placeholder session so the room index survives daemon
-    // restarts (otherwise getState falls back to the old room).
-    await Session.create(`placeholder-${room}`, room);
-
-    const engine = await createChatEngine({
-      room,
+    const state = await rotateRoom(this.roomPrefix(remoteE164), this.chats.get(remoteE164), () => ({
       channel: "whatsapp",
-      resume: false,
       mcpServers: getMcpServers(),
-    });
-    const state: ChatState = { engine, roomIndex: newIdx, lock: Promise.resolve() };
+    }));
     this.chats.set(remoteE164, state);
-    log.info({ remoteE164, room }, "whatsapp: new conversation started");
     return state;
   }
 }

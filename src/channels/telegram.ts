@@ -2,15 +2,15 @@ import { Bot, InputFile } from "grammy";
 import { createHash } from "crypto";
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
-import { createChatEngine } from "../chat/engine";
 import type { Channel, ChatState, Attachment, Outbound } from "../types";
 import { getConfig, updateRawConfig } from "../utils/config";
 import { runMigrations } from "../db/migrate";
-import { Session, Message } from "../db/models";
+import { Message } from "../db/models";
 import { log } from "../utils/log";
 import { getMcpServers } from "../mcp";
 import { classifyMime, validateAttachment, prepareImage } from "../utils/attachment";
 import { getNiaHome } from "../utils/paths";
+import { chainLock, openChatEngine, rotateRoom } from "./common/chat-session";
 
 function safeExtension(filename?: string): string {
   const ext = filename?.split(".").pop();
@@ -84,44 +84,23 @@ class TelegramChannel implements Channel {
 
     const chats = new Map<number, ChatState>();
 
-    function roomPrefix(chatId: number): string {
+    function keyOf(chatId: number): string {
       return `tg-${chatId}`;
-    }
-
-    function roomName(chatId: number, index: number): string {
-      return `tg-${chatId}-${index}`;
     }
 
     async function getState(chatId: number): Promise<ChatState> {
       let state = chats.get(chatId);
-      if (!state) {
-        const prefix = roomPrefix(chatId);
-        const idx = await Session.getLatestRoomIndex(prefix);
-        const room = roomName(chatId, idx);
-        log.info({ chatId, room }, "telegram: creating chat engine");
-        const engine = await createChatEngine({ room, channel: "telegram", resume: true, mcpServers: getMcpServers() });
-        state = { engine, roomIndex: idx, lock: Promise.resolve() };
-        chats.set(chatId, state);
-        log.info({ chatId, room, activeSessions: chats.size }, "telegram: engine ready");
-      }
+      if (state) return state;
+      state = await openChatEngine(keyOf(chatId), () => ({ channel: "telegram", mcpServers: getMcpServers() }));
+      chats.set(chatId, state);
       return state;
     }
 
     async function restartChat(chatId: number): Promise<ChatState> {
-      const old = chats.get(chatId);
-      if (old) old.engine.close();
-
-      const prefix = roomPrefix(chatId);
-      const prevIdx = await Session.getLatestRoomIndex(prefix);
-      const newIdx = prevIdx + 1;
-      const room = roomName(chatId, newIdx);
-
-      // Persist a placeholder session immediately so the room index survives
-      // daemon restarts (otherwise getState falls back to the old room).
-      await Session.create(`placeholder-${room}`, room);
-
-      const engine = await createChatEngine({ room, channel: "telegram", resume: false, mcpServers: getMcpServers() });
-      const state: ChatState = { engine, roomIndex: newIdx, lock: Promise.resolve() };
+      const state = await rotateRoom(keyOf(chatId), chats.get(chatId), () => ({
+        channel: "telegram",
+        mcpServers: getMcpServers(),
+      }));
       chats.set(chatId, state);
       return state;
     }
@@ -132,9 +111,7 @@ class TelegramChannel implements Channel {
         fn().catch((err) => log.error({ err, chatId }, "unhandled error in locked handler"));
         return;
       }
-      const queued = state.lock !== Promise.resolve();
-      if (queued) log.debug({ chatId }, "telegram: message queued behind active lock");
-      state.lock = state.lock.then(fn, fn);
+      chainLock(state, fn);
     }
 
     const isOpen = config.channels.telegram.open;
