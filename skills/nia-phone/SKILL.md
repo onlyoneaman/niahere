@@ -59,9 +59,14 @@ cloudflared tunnel create nia-mac                 # creates the tunnel
 cloudflared tunnel route dns nia-mac nia.example.com   # CNAME on a Cloudflare-managed domain
 ```
 
-Create `~/.cloudflared/config.yml`:
+Keep nia's tunnel config in nia's home as a single flat file:
+`~/.niahere/cloudflared-config.yaml`. The cloudflared-internal artifacts
+(`cert.pem`, the per-tunnel credentials JSON written by `tunnel create`)
+stay where cloudflared put them — those are cloudflared's territory, not
+nia's.
 
 ```yaml
+# ~/.niahere/cloudflared-config.yaml
 tunnel: nia-mac
 credentials-file: /Users/<you>/.cloudflared/<tunnel-id>.json
 
@@ -71,10 +76,18 @@ ingress:
   - service: http_status:404
 ```
 
-Install as a launchd service so it autostarts:
+Install as a launchd service, pointing it at our config:
 
 ```bash
-sudo cloudflared service install
+sudo cloudflared --config ~/.niahere/cloudflared-config.yaml service install
+```
+
+If the generated plist at `/Library/LaunchDaemons/com.cloudflare.cloudflared.plist`
+doesn't include the `--config` arg in `ProgramArguments`, edit it in, then:
+
+```bash
+sudo launchctl bootout system/com.cloudflare.cloudflared
+sudo launchctl bootstrap system /Library/LaunchDaemons/com.cloudflare.cloudflared.plist
 ```
 
 Then set in `.env`: `PUBLIC_BASE_URL=https://nia.example.com`.
