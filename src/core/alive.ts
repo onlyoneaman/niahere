@@ -107,6 +107,7 @@ async function notifyUser(message: string): Promise<void> {
         method: "POST",
         headers: { Authorization: `Bearer ${slToken}`, "Content-Type": "application/json" },
         body: JSON.stringify({ channel: slRecipient, text: message }),
+        signal: AbortSignal.timeout(10_000),
       });
       if (resp.ok) {
         log.info("alive: notified user via slack");

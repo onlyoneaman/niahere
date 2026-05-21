@@ -98,7 +98,10 @@ export async function setSummary(id: string, summary: string): Promise<void> {
   await sql`UPDATE sessions SET summary = ${summary} WHERE id = ${id}`;
 }
 
-export async function getRecentSummaries(room: string, limit = 3): Promise<Array<{ summary: string; updatedAt: string }>> {
+export async function getRecentSummaries(
+  room: string,
+  limit = 3,
+): Promise<Array<{ summary: string; updatedAt: string }>> {
   const sql = getSql();
   // Match summaries from sessions in the same channel (e.g. slack-dm-U...-*)
   // by extracting the room prefix (everything before the last -N index)
@@ -171,17 +174,16 @@ export async function accumulateMetadata(id: string, resultMeta: Record<string, 
   `;
 }
 
+/** Max numeric suffix among rooms matching `${prefix}-N`. Used by rotateRoom() to allocate idx+1 without collisions. */
 export async function getLatestRoomIndex(prefix: string): Promise<number> {
   const sql = getSql();
   const pattern = `^${escapeRegex(prefix)}-\\d+$`;
-  const rows = await sql`
-    SELECT room FROM sessions
-    WHERE room ~ ${pattern}
-    ORDER BY updated_at DESC
-    LIMIT 1
-  `;
-  if (rows.length === 0) return 0;
-  const parts = rows[0].room.split("-");
-  const idx = parseInt(parts[parts.length - 1], 10);
-  return isNaN(idx) ? 0 : idx;
+  const rows = await sql`SELECT room FROM sessions WHERE room ~ ${pattern}`;
+  let max = 0;
+  for (const row of rows) {
+    const parts = (row.room as string).split("-");
+    const idx = parseInt(parts[parts.length - 1], 10);
+    if (!isNaN(idx) && idx > max) max = idx;
+  }
+  return max;
 }

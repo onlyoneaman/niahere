@@ -33,6 +33,7 @@ async function twilioPost<T = unknown>(creds: TwilioCreds, suffix: string, body:
     method: "POST",
     headers: { Authorization: basicAuth(creds), "Content-Type": "application/x-www-form-urlencoded" },
     body: body.toString(),
+    signal: AbortSignal.timeout(15_000),
   });
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");

@@ -135,7 +135,10 @@ export class SlackAttachmentCache {
   }
 
   private async download(url: string): Promise<Buffer> {
-    const resp = await fetch(url, { headers: { Authorization: `Bearer ${this.botToken}` } });
+    const resp = await fetch(url, {
+      headers: { Authorization: `Bearer ${this.botToken}` },
+      signal: AbortSignal.timeout(30_000),
+    });
     if (!resp.ok) throw new Error(`Slack file download failed: ${resp.status}`);
     return Buffer.from(await resp.arrayBuffer());
   }

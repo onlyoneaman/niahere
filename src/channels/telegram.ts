@@ -184,11 +184,7 @@ class TelegramChannel implements Channel {
       const { result, messageId } = await state.engine.send(text, {}, attachments);
       const reply = result.trim() || "(no response)";
       try {
-        try {
-          await bot.api.sendMessage(chatId, reply, { parse_mode: "MarkdownV2" });
-        } catch {
-          await bot.api.sendMessage(chatId, reply);
-        }
+        await bot.api.sendMessage(chatId, reply);
         if (messageId) await Message.updateDeliveryStatus(messageId, "sent").catch(() => {});
         log.info({ chatId, chars: result.length }, "telegram reply sent");
       } catch (sendErr) {
@@ -266,7 +262,7 @@ class TelegramChannel implements Channel {
     const file = await this.bot.api.getFile(fileId);
     const token = getConfig().channels.telegram.bot_token!;
     const url = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
-    const resp = await fetch(url);
+    const resp = await fetch(url, { signal: AbortSignal.timeout(30_000) });
     if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
     return Buffer.from(await resp.arrayBuffer());
   }

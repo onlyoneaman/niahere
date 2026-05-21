@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`getLatestRoomIndex` returns max suffix, not most-recently-updated** — the prior SQL (`ORDER BY updated_at DESC LIMIT 1`) returned the room the user had last interacted with, which `rotateRoom()` then `+1`'d. If the user touched an older room after creating a newer one, `/reset` could allocate an index that collided with an existing room. Now returns the actual max numeric suffix.
+- **Telegram MarkdownV2 round-trip tax removed** — outbound now sends plaintext directly. The prior try/MarkdownV2/catch/plain dance failed and retried on every reply since raw LLM output essentially never satisfies MarkdownV2's escape rules.
+- **AbortSignal.timeout on critical-path fetches** — telegram file download (30s), slack file download (30s), Twilio REST (15s), and alive Slack notifier (10s). Without these, a stuck remote freezes the per-sender `chainLock` chain indefinitely — blocking that sender's next message too.
+
 ### Changed
 
 - **Telegram channel restructured into class methods** — the inline `start()` closures (`getState`/`restartChat`/`withLock`/`processMessage`/`registerOutbound`/`isAllowed` and the four `bot.on`/`bot.command` handler bodies) are now proper private methods on `TelegramChannel`. Behavior unchanged; file is scannable end-to-end.
