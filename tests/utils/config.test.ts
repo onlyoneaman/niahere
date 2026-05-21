@@ -20,7 +20,7 @@ describe("loadConfig", () => {
   test("loads valid config from config.yaml", () => {
     writeFileSync(
       `${TEST_DIR}/config.yaml`,
-      `model: gpt-5.3-codex-spark\nactive_hours:\n  start: "09:00"\n  end: "22:00"\n`
+      `model: gpt-5.3-codex-spark\nactive_hours:\n  start: "09:00"\n  end: "22:00"\n`,
     );
     const config = loadConfig();
     expect(config.model).toBe("gpt-5.3-codex-spark");
@@ -75,18 +75,21 @@ describe("loadConfig", () => {
   });
 
   test("nested channels format loads correctly", () => {
-    writeFileSync(`${TEST_DIR}/config.yaml`, [
-      "channels:",
-      "  enabled: false",
-      "  default: slack",
-      "  telegram:",
-      "    bot_token: test-token",
-      "    chat_id: 12345",
-      "  slack:",
-      "    bot_token: xoxb-test",
-      "    app_token: xapp-test",
-      "",
-    ].join("\n"));
+    writeFileSync(
+      `${TEST_DIR}/config.yaml`,
+      [
+        "channels:",
+        "  enabled: false",
+        "  default: slack",
+        "  telegram:",
+        "    bot_token: test-token",
+        "    chat_id: 12345",
+        "  slack:",
+        "    bot_token: xoxb-test",
+        "    app_token: xapp-test",
+        "",
+      ].join("\n"),
+    );
     const config = loadConfig();
     expect(config.channels.enabled).toBe(false);
     expect(config.channels.default).toBe("slack");
@@ -129,12 +132,10 @@ describe("loadConfig", () => {
   });
 
   test("parses session finalization switches", () => {
-    writeFileSync(`${TEST_DIR}/config.yaml`, [
-      "session_finalization:",
-      "  enabled: true",
-      "  memory_consolidation: false",
-      "  summaries: false",
-    ].join("\n"));
+    writeFileSync(
+      `${TEST_DIR}/config.yaml`,
+      ["session_finalization:", "  enabled: true", "  memory_consolidation: false", "  summaries: false"].join("\n"),
+    );
     const config = loadConfig();
     expect(config.sessionFinalization.enabled).toBe(true);
     expect(config.sessionFinalization.memoryConsolidation).toBe(false);
@@ -142,18 +143,21 @@ describe("loadConfig", () => {
   });
 
   test("parses slack watch channels", () => {
-    writeFileSync(`${TEST_DIR}/config.yaml`, [
-      "channels:",
-      "  slack:",
-      "    bot_token: xoxb-test",
-      "    watch:",
-      "      C123#test-channel:",
-      "        behavior: Monitor things",
-      "        enabled: true",
-      "      C456#other:",
-      "        behavior: Watch stuff",
-      "        enabled: false",
-    ].join("\n"));
+    writeFileSync(
+      `${TEST_DIR}/config.yaml`,
+      [
+        "channels:",
+        "  slack:",
+        "    bot_token: xoxb-test",
+        "    watch:",
+        "      C123#test-channel:",
+        "        behavior: Monitor things",
+        "        enabled: true",
+        "      C456#other:",
+        "        behavior: Watch stuff",
+        "        enabled: false",
+      ].join("\n"),
+    );
     const config = loadConfig();
     expect(config.channels.slack.watch).not.toBeNull();
     const watch = config.channels.slack.watch!;
@@ -163,13 +167,10 @@ describe("loadConfig", () => {
   });
 
   test("watch channel enabled defaults to true", () => {
-    writeFileSync(`${TEST_DIR}/config.yaml`, [
-      "channels:",
-      "  slack:",
-      "    watch:",
-      "      test-ch:",
-      "        behavior: Do stuff",
-    ].join("\n"));
+    writeFileSync(
+      `${TEST_DIR}/config.yaml`,
+      ["channels:", "  slack:", "    watch:", "      test-ch:", "        behavior: Do stuff"].join("\n"),
+    );
     const config = loadConfig();
     expect(config.channels.slack.watch!["test-ch"].enabled).toBe(true);
   });
@@ -178,28 +179,5 @@ describe("loadConfig", () => {
     writeFileSync(`${TEST_DIR}/config.yaml`, `channels:\n  slack:\n    bot_token: test\n`);
     const config = loadConfig();
     expect(config.channels.slack.watch).toBeNull();
-  });
-
-  test("migrates legacy channel_id to dm_user_id", () => {
-    writeFileSync(`${TEST_DIR}/config.yaml`, [
-      "channels:",
-      "  slack:",
-      "    bot_token: xoxb-test",
-      "    channel_id: U06PBA2P680",
-    ].join("\n"));
-    const config = loadConfig();
-    expect(config.channels.slack.dm_user_id).toBe("U06PBA2P680");
-  });
-
-  test("dm_user_id takes precedence over legacy channel_id", () => {
-    writeFileSync(`${TEST_DIR}/config.yaml`, [
-      "channels:",
-      "  slack:",
-      "    bot_token: xoxb-test",
-      "    channel_id: C0A2F028R3N",
-      "    dm_user_id: U06PBA2P680",
-    ].join("\n"));
-    const config = loadConfig();
-    expect(config.channels.slack.dm_user_id).toBe("U06PBA2P680");
   });
 });

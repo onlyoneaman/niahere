@@ -8,8 +8,7 @@ import { getEmployeesSummary } from "../core/employees";
 import { Session } from "../db/models";
 import type { Mode } from "../types";
 
-// Re-export for backwards compat
-export { scanSkills as loadSkills, getSkillNames as loadSkillNames, type SkillInfo } from "../core/skills";
+export { type SkillInfo } from "../core/skills";
 
 function loadFile(dir: string, name: string): string {
   const filePath = join(dir, name);
