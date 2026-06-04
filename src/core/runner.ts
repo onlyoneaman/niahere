@@ -18,6 +18,7 @@ import { log } from "../utils/log";
 import { isRetryableApiError, sleep } from "../utils/retry";
 import { registerActiveHandle, unregisterActiveHandle } from "./active-handles";
 import { getSdkSkillsSetting } from "./skills";
+import { getSdkHooks } from "./sdk-hooks";
 
 export { buildWorkingMemory } from "./job-prompt";
 
@@ -121,6 +122,7 @@ export async function runJobWithClaude(
     permissionMode: "bypassPermissions",
     sessionId,
     skills: getSdkSkillsSetting(),
+    hooks: getSdkHooks(),
   };
 
   if (model && model !== "default") {

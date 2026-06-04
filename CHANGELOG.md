@@ -1,34 +1,32 @@
 # Changelog
 
-## [Unreleased]
+## [0.3.5] - 2026-06-04
 
-### Fixed
+### Added
 
-- **`getLatestRoomIndex` returns max suffix, not most-recently-updated** — the prior SQL (`ORDER BY updated_at DESC LIMIT 1`) returned the room the user had last interacted with, which `rotateRoom()` then `+1`'d. If the user touched an older room after creating a newer one, `/reset` could allocate an index that collided with an existing room. Now returns the actual max numeric suffix.
-- **Telegram MarkdownV2 round-trip tax removed** — outbound now sends plaintext directly. The prior try/MarkdownV2/catch/plain dance failed and retried on every reply since raw LLM output essentially never satisfies MarkdownV2's escape rules.
-- **AbortSignal.timeout on critical-path fetches** — telegram file download (30s), slack file download (30s), Twilio REST (15s), and alive Slack notifier (10s). Without these, a stuck remote freezes the per-sender `chainLock` chain indefinitely — blocking that sender's next message too.
+- SDK `PreToolUse` hook warns when an agent attempts `gh pr merge`, nudging toward the `gh-stamp` skill (LGTM approval) instead. Wired into both the chat engine and the job runner so it covers every SDK code path.
 
 ### Changed
 
-- **Telegram channel restructured into class methods** — the inline `start()` closures (`getState`/`restartChat`/`withLock`/`processMessage`/`registerOutbound`/`isAllowed` and the four `bot.on`/`bot.command` handler bodies) are now proper private methods on `TelegramChannel`. Behavior unchanged; file is scannable end-to-end.
-- **Slack channel split into focused modules** — the disk-backed file cache and the watch-channels mtime reloader move into `src/channels/slack/attachments.ts` (`SlackAttachmentCache`) and `src/channels/slack/watch.ts` (`SlackWatchReloader`). `slack.ts` shrinks from 694 to 510 lines and the auxiliary subsystems are testable in isolation.
-- **`src/mcp/tools.ts` split per-domain** — the 481-line catch-all becomes `src/mcp/tools/{jobs,send,messages,watch,misc}.ts` plus an `index.ts` barrel. Callers (`mcp/server.ts`, `cli/watch.ts`, tests) keep `import * as handlers from "./tools"` / `from "../mcp/tools"` — the barrel preserves the import surface.
-
-### Changed
-
-- **Unified `Channel.deliver(out)` interface** — replaces the optional `sendMessage` / `sendMedia` / `sendToThread` / `sendMediaToThread` quartet with one required `deliver(out: Outbound)` method. `Outbound = { text?, media?, to?: Recipient }`; `Recipient = { kind: "owner" } | { kind: "thread", channelId, threadTs? }`. The MCP `send_message` tool collapses from a 5-arm capability matrix to a single call. Channels that don't support threads (telegram/sms/whatsapp/phone) fall back to the owner recipient; phone throws because voice can't render text.
-- **Extracted chat-session helpers** — `src/channels/common/chat-session.ts` exposes `openChatEngine` / `rotateRoom` / `chainLock`. The four message-driven channels (telegram, slack, sms, whatsapp) now share the engine-creation, room-rotation, and per-sender-lock-chain code that used to be copy-pasted (~95 lines of duplication gone). SMS picked up `rotateRoom` for free (was missing `/reset` support). Telegram's `withLock` "queued behind active lock" debug log was dead (`state.lock !== Promise.resolve()` compares two freshly-resolved promises and is always true) — removed alongside the consolidation.
-- **`channels.phone.{twilio_sid,…}` legacy fallback removed** — `channels.twilio.*` is the only Twilio config shape. The compat shim shipped in 0.3.1 (`twilioOrPhone()` + `chPh` port/allowlist fallback) is gone. Configs created before 0.3.0 must hand-migrate.
-- **`channels.slack.channel_id` legacy fallback removed** — `dm_user_id` is the only Slack DM-target key (it has been since 0.2.x; the fallback is now gone).
-- **`nia init` writes the new shape** — phone setup now writes Twilio creds to `channels.twilio` and voice-only fields to `channels.phone`.
+- Telegram channel restructured into private class methods; the inline `start()` closures are gone and the file reads top-to-bottom.
+- Slack channel split into `src/channels/slack/attachments.ts` and `src/channels/slack/watch.ts`; `slack.ts` shrinks from 694 to 510 lines.
+- `src/mcp/tools.ts` split per-domain into `tools/{jobs,send,messages,watch,misc}.ts` with an `index.ts` barrel; import surface unchanged.
+- Unified `Channel.deliver(out: Outbound)` replaces the optional `sendMessage`/`sendMedia`/`sendToThread`/`sendMediaToThread` quartet; the MCP `send_message` tool collapses from a 5-arm capability matrix to a single call.
+- Extracted `src/channels/common/chat-session.ts` (`openChatEngine` / `rotateRoom` / `chainLock`) so telegram/slack/sms/whatsapp share engine creation, room rotation, and per-sender lock chain; SMS picked up `/reset` for free.
+- `nia init` writes the new config shape — Twilio creds under `channels.twilio`, voice-only fields under `channels.phone`.
 
 ### Removed
 
-- Dead `loadSkills` / `loadSkillNames` re-exports from `chat/identity.ts` — the only remaining caller imports them directly from `core/skills`.
+- **Breaking:** `channels.phone.{twilio_sid,…}` legacy fallback gone; `channels.twilio.*` is now the only Twilio config shape. Pre-0.3.0 configs must hand-migrate.
+- **Breaking:** `channels.slack.channel_id` legacy fallback gone; `dm_user_id` is the only Slack DM-target key.
+- Dead `loadSkills` / `loadSkillNames` re-exports from `chat/identity.ts`.
 
 ### Fixed
 
-- **Service templates set `WorkingDirectory`** — launchd and systemd unit templates now point at the niahere install root, so Bun's automatic `.env` loading works. Before this, the daemon spawned by launchd ran with cwd=`/`, silently dropped any credentials in `.env`, and channels that depended on them quietly refused to start.
+- `getLatestRoomIndex` returns the max numeric suffix instead of the most-recently-updated room, so `/reset` no longer collides with an existing room when the user touched an older room after a newer one.
+- Telegram channel sends plaintext directly; the MarkdownV2 try/catch/retry dance was failing on essentially every reply since raw LLM output never satisfies MarkdownV2's escape rules.
+- `AbortSignal.timeout` added to Telegram/Slack file downloads (30s), Twilio REST (15s), and Slack alive notifier (10s) so a stuck remote no longer freezes the per-sender `chainLock` chain indefinitely.
+- Service templates set `WorkingDirectory` to the niahere install root so Bun's automatic `.env` loading works; the daemon previously spawned with cwd=`/` and silently dropped credentials.
 
 ## [0.3.1] - 2026-05-22
 

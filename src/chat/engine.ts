@@ -27,6 +27,7 @@ import { isRetryableApiError, sleep } from "../utils/retry";
 import { registerActiveHandle, unregisterActiveHandle } from "../core/active-handles";
 import { resolveJobPrompt } from "../core/job-prompt";
 import { getSdkSkillsSetting } from "../core/skills";
+import { getSdkHooks } from "../core/sdk-hooks";
 
 const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const LONG_RUNNING_WARN = 30 * 60 * 1000; // 30 minutes
@@ -332,6 +333,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
       includePartialMessages: true,
       settingSources: ["project", "user"],
       skills: getSdkSkillsSetting(),
+      hooks: getSdkHooks(),
     };
     const model = resolveSdkModel(contextModel);
     if (model) {
