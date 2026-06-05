@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.6] - 2026-06-05
+
+### Fixed
+
+- Slack `[NO_REPLY]` sentinel now matches as a substring, so replies that mix real content with the sentinel are suppressed instead of posted with `[NO_REPLY]` visible to users; logs at `warn` with the full reply so the mixed-content rate is visible.
+
 ## [0.3.5] - 2026-06-04
 
 ### Added

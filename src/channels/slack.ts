@@ -430,10 +430,20 @@ class SlackChannel implements Channel {
           );
 
           const reply = result.trim();
+          const cleaned = cleanSentinel(reply);
 
-          // [NO_REPLY] or empty = agent chose not to respond (thread judgement)
-          if (!reply || cleanSentinel(reply) === "[NO_REPLY]") {
-            log.info({ channel: msg.channel, key }, "slack: agent chose not to reply");
+          // [NO_REPLY] anywhere in the reply suppresses the send. If it appeared
+          // alongside real content the model got confused — warn so we can spot it.
+          if (!reply || cleaned.includes("[NO_REPLY]")) {
+            const exact = !reply || cleaned === "[NO_REPLY]";
+            if (exact) {
+              log.info({ channel: msg.channel, key }, "slack: agent chose not to reply");
+            } else {
+              log.warn(
+                { channel: msg.channel, key, reply },
+                "slack: [NO_REPLY] sentinel mixed with content; suppressing send",
+              );
+            }
             if (messageId) await Message.updateDeliveryStatus(messageId, "sent").catch(() => {});
             return;
           }
