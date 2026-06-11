@@ -56,10 +56,24 @@ async function runJobWithCodex(fullPrompt: string, cwd: string, model: string): 
     args.splice(3, 0, "-m", model);
   }
 
+  const CODEX_EXCLUDED = new Set([
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "GEMINI_API_KEY",
+    "SLACK_BOT_TOKEN",
+    "SLACK_APP_TOKEN",
+    "TELEGRAM_BOT_TOKEN",
+    "TWILIO_AUTH_TOKEN",
+    "DATABASE_URL",
+  ]);
+  const codexEnv = Object.fromEntries(
+    Object.entries(process.env).filter(([k]) => !CODEX_EXCLUDED.has(k))
+  );
+
   const proc = Bun.spawn(args, {
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env },
+    env: codexEnv,
   });
 
   const stdout = await new Response(proc.stdout).text();
