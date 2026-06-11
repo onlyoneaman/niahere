@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.7] - 2026-06-11
+
+### Security
+
+- `runner.ts`: filtered sensitive env vars before passing environment to Codex subprocess. Full `process.env` spread was exposing `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TWILIO_AUTH_TOKEN`, and `DATABASE_URL` to Codex. Fixed with a `CODEX_EXCLUDED` set that strips credentials before the spread.
+
 ## [0.3.6] - 2026-06-05
 
 ### Fixed
