@@ -136,6 +136,7 @@ class SlackChannel implements Channel {
     });
 
     let botUserId: string | undefined;
+    let botId: string | undefined;
 
     const watchReloader = new SlackWatchReloader();
     const attachmentCache = new SlackAttachmentCache(botToken);
@@ -237,7 +238,7 @@ class SlackChannel implements Channel {
               inclusive: true,
             });
             const parentMsg = parent.messages?.[0];
-            if (parentMsg && (parentMsg.user === botUserId || parentMsg.bot_id)) {
+            if (parentMsg && (parentMsg.user === botUserId || (botId && parentMsg.bot_id === botId))) {
               isActiveThread = true;
               log.debug(
                 { channel: msg.channel, thread_ts: msg.thread_ts },
@@ -493,7 +494,8 @@ class SlackChannel implements Channel {
     try {
       const auth = await app.client.auth.test();
       botUserId = auth.user_id as string | undefined;
-      log.info({ botUserId }, "slack bot authenticated");
+      botId = auth.bot_id as string | undefined;
+      log.info({ botUserId, botId }, "slack bot authenticated");
     } catch (err) {
       log.warn({ err }, "could not get slack bot user ID");
     }
