@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.9] - 2026-06-12
+
+### Fixed
+
+- **Slack thread activation** — Restricts bot-authored thread activation to Nia's own bot ID so other Slack bots no longer wake Nia in unrelated threads.
+
 ## [0.3.8] - 2026-06-12
 
 ### Added
