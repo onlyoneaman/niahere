@@ -120,10 +120,11 @@ defaults/
 agents/
   marketer/AGENT.md      # Marketing specialist agent
   senior-dev/AGENT.md    # Senior developer agent
-skills/                  # 20+ skills — run `nia skills` for full list
+skills/                  # 40+ skills — run `nia skills` for full list
   nia-image/             # Visual identity generation skill (Gemini)
   image-generation/      # General-purpose image generation (OpenAI + Gemini)
   llms-txt/              # Create/improve llms.txt for LLM-aware content indexing
+  programmatic-seo/      # Plan/audit scalable programmatic SEO systems
   pr-reviewer/           # Language-aware PR review
   slack/                 # Slack messaging primitives
   docx/                  # Word document generation

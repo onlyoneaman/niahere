@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.8] - 2026-06-12
+
+### Added
+
+- **Programmatic SEO skill** — Adds a gated PSEO workflow covering URL inventory, content quality, Next.js inspection, sitemap strategy, and launch validation.
+
 ## [0.3.7] - 2026-06-11
 
 ### Security

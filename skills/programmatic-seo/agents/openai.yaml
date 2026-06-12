@@ -1,0 +1,4 @@
+interface:
+  display_name: "Programmatic SEO"
+  short_description: "Plan and audit scalable PSEO systems"
+  default_prompt: "Use $programmatic-seo to audit this codebase for scalable programmatic SEO."
