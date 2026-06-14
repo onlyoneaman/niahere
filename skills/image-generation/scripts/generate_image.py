@@ -105,13 +105,15 @@ def encode_file(path: str) -> str:
         return base64.b64encode(f.read()).decode("utf-8")
 
 
-def resolve_output_path(output: str | None, ext: str = ".png") -> Path:
+def resolve_output_path(output: str | None, ext: str = ".png", index: int | None = None) -> Path:
+    # For multi-image output, append _1, _2, ... before the extension.
+    suffix = f"_{index + 1}" if index is not None else ""
     if output:
         out = Path(output).expanduser()
         if out.suffix:
-            return out
-        return out / f"image_{time.strftime(TIMESTAMP_FORMAT)}{ext}"
-    return Path(f"/tmp/image_{time.strftime(TIMESTAMP_FORMAT)}{ext}")
+            return out.with_name(f"{out.stem}{suffix}{out.suffix}")
+        return out / f"image_{time.strftime(TIMESTAMP_FORMAT)}{suffix}{ext}"
+    return Path(f"/tmp/image_{time.strftime(TIMESTAMP_FORMAT)}{suffix}{ext}")
 
 
 def read_config_key(key: str) -> str:
@@ -159,14 +161,14 @@ def generate_openai(
     quality: str,
     reference_path: str | None = None,
     n: int = 1,
-) -> tuple[bytes, str]:
-    """Generate image via OpenAI Images API."""
+) -> list[tuple[bytes, str]]:
+    """Generate image(s) via OpenAI Images API. Returns one entry per image."""
     if reference_path and Path(reference_path).is_file():
         return _openai_edit(api_key, prompt, reference_path, model, size, quality, n)
     return _openai_generate(api_key, prompt, model, size, quality, n)
 
 
-def _openai_generate(api_key: str, prompt: str, model: str, size: str, quality: str, n: int) -> tuple[bytes, str]:
+def _openai_generate(api_key: str, prompt: str, model: str, size: str, quality: str, n: int) -> list[tuple[bytes, str]]:
     url = "https://api.openai.com/v1/images/generations"
     payload: dict = {
         "model": model,
@@ -191,7 +193,7 @@ def _openai_generate(api_key: str, prompt: str, model: str, size: str, quality: 
 
 def _openai_edit(
     api_key: str, prompt: str, reference_path: str, model: str, size: str, quality: str, n: int
-) -> tuple[bytes, str]:
+) -> list[tuple[bytes, str]]:
     """Use OpenAI images/edits endpoint with a reference image."""
     import io
 
@@ -235,7 +237,7 @@ def _openai_edit(
     return _openai_request(req)
 
 
-def _openai_request(req: urllib.request.Request) -> tuple[bytes, str]:
+def _openai_request(req: urllib.request.Request) -> list[tuple[bytes, str]]:
     try:
         with urllib.request.urlopen(req, timeout=180) as resp:
             response = json.loads(resp.read().decode("utf-8"))
@@ -247,11 +249,11 @@ def _openai_request(req: urllib.request.Request) -> tuple[bytes, str]:
     if not data_list:
         raise RuntimeError(f"No data in OpenAI response: {json.dumps(response, indent=2)}")
 
-    b64 = data_list[0].get("b64_json")
-    if not b64:
+    images = [(base64.b64decode(item["b64_json"]), "image/png") for item in data_list if item.get("b64_json")]
+    if not images:
         raise RuntimeError("No b64_json in OpenAI response.")
 
-    return base64.b64decode(b64), "image/png"
+    return images
 
 
 # --- Gemini Generation ---
@@ -422,7 +424,7 @@ Examples:
                 raise SystemExit(f"2K is only supported on gpt-image-2 (got --model {model}).")
             size_map = OPENAI_SIZE_MAP_2K if args.resolution == "2K" else OPENAI_SIZE_MAP_1K
             size = size_map.get(args.aspect_ratio, size_map["1:1"])
-            image_data, mime = generate_openai(
+            images = generate_openai(
                 api_key=api_key,
                 prompt=args.prompt,
                 model=model,
@@ -432,21 +434,27 @@ Examples:
                 n=args.n,
             )
         else:
-            image_data, mime = generate_gemini(
-                api_key=api_key,
-                prompt=args.prompt,
-                model=model,
-                aspect_ratio=args.aspect_ratio,
-                resolution=args.resolution,
-                reference_path=ref,
-            )
+            images = [
+                generate_gemini(
+                    api_key=api_key,
+                    prompt=args.prompt,
+                    model=model,
+                    aspect_ratio=args.aspect_ratio,
+                    resolution=args.resolution,
+                    reference_path=ref,
+                )
+            ]
 
-        ext = ".png" if "png" in mime else ".jpg"
-        out = resolve_output_path(args.output, ext)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_bytes(image_data)
-        print(f"Saved: {out}")
-        print(f"Provider: {provider} | Model: {model} | Ratio: {args.aspect_ratio} | Resolution: {args.resolution}")
+        multiple = len(images) > 1
+        for idx, (image_data, mime) in enumerate(images):
+            ext = ".png" if "png" in mime else ".jpg"
+            out = resolve_output_path(args.output, ext, index=idx if multiple else None)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_bytes(image_data)
+            print(f"Saved: {out}")
+        print(
+            f"Provider: {provider} | Model: {model} | Ratio: {args.aspect_ratio} | Resolution: {args.resolution} | Images: {len(images)}"
+        )
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
