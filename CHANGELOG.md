@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.10] - 2026-06-15
+
+### Fixed
+
+- **Image generation multi-image output** — `--n` now saves every image the model returns (`name_1.png`, `name_2.png`, …) instead of silently keeping only the first.
+
 ## [0.3.9] - 2026-06-12
 
 ### Fixed
