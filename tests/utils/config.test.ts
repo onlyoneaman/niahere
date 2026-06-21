@@ -74,6 +74,22 @@ describe("loadConfig", () => {
     expect(config.channels.telegram.open).toBe(false);
   });
 
+  test("channel enabled flags default to true", () => {
+    const config = loadConfig();
+    expect(config.channels.telegram.enabled).toBe(true);
+    expect(config.channels.slack.enabled).toBe(true);
+  });
+
+  test("parses channel enabled flags", () => {
+    writeFileSync(
+      `${TEST_DIR}/config.yaml`,
+      ["channels:", "  telegram:", "    enabled: false", "  slack:", "    enabled: false"].join("\n"),
+    );
+    const config = loadConfig();
+    expect(config.channels.telegram.enabled).toBe(false);
+    expect(config.channels.slack.enabled).toBe(false);
+  });
+
   test("nested channels format loads correctly", () => {
     writeFileSync(
       `${TEST_DIR}/config.yaml`,

@@ -114,6 +114,7 @@ export function validateConfig(): Result {
     // Telegram
     const tg = ch.telegram as Record<string, unknown> | undefined;
     if (tg) {
+      if (tg.enabled === false) messages.push(`${WARN} telegram disabled`);
       if (tg.bot_token) {
         messages.push(`${PASS} telegram.bot_token set`);
       } else {
@@ -124,6 +125,7 @@ export function validateConfig(): Result {
     // Slack
     const sl = ch.slack as Record<string, unknown> | undefined;
     if (sl) {
+      if (sl.enabled === false) messages.push(`${WARN} slack disabled`);
       if (!sl.bot_token) {
         messages.push(`${WARN} slack.bot_token missing — slack won't start`);
       } else {

@@ -163,10 +163,12 @@ channels:
   enabled: true
   default: telegram
   telegram:
+    enabled: true
     bot_token: ...
     chat_id: 823887567
     open: false
   slack:
+    enabled: true
     bot_token: xoxb-...
     app_token: xapp-...
     dm_user_id: U06PBA2P680
@@ -174,7 +176,7 @@ channels:
 
 Env vars override config: `DATABASE_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_CHANNEL_ID`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, `LOG_LEVEL`, `TWILIO_SID`, `TWILIO_SECRET`, `TWILIO_AUTH_TOKEN`, `PHONE_FROM_NUMBER`, `PRIMARY_PHONE_USER`, `PUBLIC_BASE_URL`, `PHONE_PORT`, `PHONE_ALLOWLIST`, `PHONE_VOICE`, `PHONE_REALTIME_MODEL`, `SMS_FROM_NUMBER`, `WHATSAPP_FROM_NUMBER`.
 
-Config can be managed via CLI: `nia config list`, `nia config get <key>`, `nia config set <key> <value>`. Supports dot notation for nested keys (e.g. `channels.default`).
+Config can be managed via CLI: `nia config list`, `nia config get <key>`, `nia config set <key> <value>`. Supports dot notation for nested keys (e.g. `channels.default`). Use `nia channels off telegram` or `nia channels off slack` to disable a single configured channel without removing credentials.
 
 ## Build & Test
 
@@ -226,7 +228,7 @@ Test isolation: tests set `NIA_HOME` env var to a temp dir and call `resetConfig
 - **Runtime OS context:** Environment prompts include safe OS metadata (OS/type/release, platform, architecture, shell basename) so agents choose platform-appropriate commands without dumping arbitrary env vars or home paths.
 - **Paths:** All from `getPaths()` → `getNiaHome()` (`NIA_HOME` env or `~/.niahere/`)
 - **One-shot jobs:** `once` schedule type auto-disables (sets status to `disabled`) after execution, hidden from `nia status`
-- **Dev mode:** `nia channels off` disables Telegram/Slack for local development
+- **Dev mode:** `nia channels off` disables all channels for local development; `nia channels off <name>` disables one configured channel (`telegram`, `slack`, `phone`, `sms`, `whatsapp`) without removing credentials.
 - **DB setup:** `nia db setup` installs PostgreSQL (brew on macOS), creates database, runs migrations. Also offered during `nia init` if DB connection fails.
 - **npm install:** `bin/nia` shell wrapper checks for Bun, offers to install it, resolves package path via realpath for nvm/global installs
 

@@ -8,7 +8,7 @@ import { isRunning, readPid, removePid, writePid } from "../utils/pid";
 import { ActiveEngine, Job } from "../db/models";
 import { runMigrations } from "../db/migrate";
 import { closeDb, getSql } from "../db/connection";
-import { registerAllChannels, startChannels, stopChannels, getStarted } from "../channels";
+import { registerAllChannels, startChannels, stopChannels, getStarted, getConfiguredChannelNames } from "../channels";
 import type { Channel } from "../types";
 import { startScheduler, stopScheduler, recomputeAllNextRuns } from "./scheduler";
 import { startAlive, stopAlive } from "./alive";
@@ -346,11 +346,16 @@ export async function runDaemon(): Promise<void> {
   process.on("SIGHUP", async () => {
     log.info("received SIGHUP, reloading config");
     resetConfig();
-    const fresh = getConfig();
 
     const running = getStarted();
-    const wantChannels = fresh.channels.enabled;
+    const wantedNames = getConfiguredChannelNames();
+    const runningNames = running.map((channel) => channel.name).sort();
+    const wantChannels = wantedNames.length > 0;
     const haveChannels = running.length > 0;
+    const needsReconcile =
+      wantChannels &&
+      haveChannels &&
+      (wantedNames.length !== runningNames.length || wantedNames.sort().some((name, i) => name !== runningNames[i]));
 
     if (wantChannels && !haveChannels) {
       log.info("SIGHUP: starting channels");
@@ -360,6 +365,11 @@ export async function runDaemon(): Promise<void> {
       log.info("SIGHUP: stopping channels");
       await stopChannels(running);
       channels = [];
+    } else if (needsReconcile) {
+      log.info({ wantedNames, runningNames }, "SIGHUP: reconciling channels");
+      await stopChannels(running);
+      const result = await startChannels();
+      channels = result.started;
     }
 
     await recomputeAllNextRuns().catch(() => {});

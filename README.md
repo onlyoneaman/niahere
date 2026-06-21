@@ -86,7 +86,8 @@ nia agent show <name>          — show agent details and prompt
 nia skills [source]            — list available skills
 
 nia channels                   — show channel status (on/off)
-nia channels on / off          — enable/disable channels (applied via SIGHUP, no restart)
+nia channels on / off          — enable/disable all channels (applied via SIGHUP, no restart)
+nia channels off telegram      — disable one channel without removing its token
 nia watch list                 — list Slack watch channels
 nia watch add/remove/enable/disable — manage watch channels
 

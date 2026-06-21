@@ -517,6 +517,8 @@ class SlackChannel implements Channel {
 
 export function createSlackChannel(): SlackChannel | null {
   const config = getConfig();
-  if (!config.channels.slack.bot_token || !config.channels.slack.app_token) return null;
+  if (!config.channels.slack.enabled || !config.channels.slack.bot_token || !config.channels.slack.app_token) {
+    return null;
+  }
   return new SlackChannel();
 }

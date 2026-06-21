@@ -1,7 +1,24 @@
-import { describe, expect, test, beforeEach } from "bun:test";
-import { registerAllChannels, startChannels, stopChannels } from "../../src/channels";
+import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+import { mkdirSync, rmSync, writeFileSync } from "fs";
+import { getConfiguredChannelNames, registerAllChannels, startChannels, stopChannels } from "../../src/channels";
 import { getFactories, clearStarted, getChannel } from "../../src/channels/registry";
+import { resetConfig } from "../../src/utils/config";
 import type { Channel } from "../../src/types";
+
+const TEST_DIR = "/tmp/test-nia-channels";
+
+beforeEach(() => {
+  mkdirSync(TEST_DIR, { recursive: true });
+  process.env.NIA_HOME = TEST_DIR;
+  resetConfig();
+});
+
+afterEach(() => {
+  rmSync(TEST_DIR, { recursive: true, force: true });
+  delete process.env.NIA_HOME;
+  resetConfig();
+  clearStarted();
+});
 
 describe("registerAllChannels", () => {
   test("registers telegram and slack factories", () => {
@@ -22,6 +39,44 @@ describe("startChannels", () => {
     const result = await startChannels();
     expect(Array.isArray(result.started)).toBe(true);
     expect(Array.isArray(result.failed)).toBe(true);
+  });
+});
+
+describe("getConfiguredChannelNames", () => {
+  test("does not include disabled configured channels", () => {
+    writeFileSync(
+      `${TEST_DIR}/config.yaml`,
+      [
+        "channels:",
+        "  telegram:",
+        "    enabled: false",
+        "    bot_token: test-token",
+        "  slack:",
+        "    enabled: false",
+        "    bot_token: xoxb-test",
+        "    app_token: xapp-test",
+      ].join("\n"),
+    );
+    resetConfig();
+
+    expect(getConfiguredChannelNames()).toEqual([]);
+  });
+
+  test("includes enabled channels with required credentials", () => {
+    writeFileSync(
+      `${TEST_DIR}/config.yaml`,
+      [
+        "channels:",
+        "  telegram:",
+        "    bot_token: test-token",
+        "  slack:",
+        "    bot_token: xoxb-test",
+        "    app_token: xapp-test",
+      ].join("\n"),
+    );
+    resetConfig();
+
+    expect(getConfiguredChannelNames()).toEqual(["telegram", "slack"]);
   });
 });
 

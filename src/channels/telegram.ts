@@ -286,6 +286,7 @@ class TelegramChannel implements Channel {
 }
 
 export function createTelegramChannel(): TelegramChannel | null {
-  if (!getConfig().channels.telegram.bot_token) return null;
+  const telegram = getConfig().channels.telegram;
+  if (!telegram.enabled || !telegram.bot_token) return null;
   return new TelegramChannel();
 }

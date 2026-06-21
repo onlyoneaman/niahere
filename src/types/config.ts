@@ -1,4 +1,5 @@
 export interface TelegramConfig {
+  enabled: boolean;
   bot_token: string | null;
   chat_id: number | null;
   open: boolean;
@@ -17,6 +18,7 @@ export interface SlackWatchChannel {
 }
 
 export interface SlackConfig {
+  enabled: boolean;
   bot_token: string | null;
   app_token: string | null;
   dm_user_id: string | null;

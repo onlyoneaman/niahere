@@ -49,8 +49,10 @@ async function awaitStartup(timeout = 60_000): Promise<void> {
   const config = getConfig();
   const expecting = new Set<string>();
   if (config.channels.enabled) {
-    if (config.channels.telegram.bot_token) expecting.add("telegram");
-    if (config.channels.slack.bot_token && config.channels.slack.app_token) expecting.add("slack");
+    if (config.channels.telegram.enabled && config.channels.telegram.bot_token) expecting.add("telegram");
+    if (config.channels.slack.enabled && config.channels.slack.bot_token && config.channels.slack.app_token) {
+      expecting.add("slack");
+    }
   }
   expecting.add("scheduler");
 
@@ -445,16 +447,29 @@ switch (command) {
 
   case "channels": {
     const sub = process.argv[3];
+    const target = process.argv[4];
     const { updateRawConfig } = await import("../utils/config");
     if (sub === "on" || sub === "off") {
       const enabled = sub === "on";
-      updateRawConfig({ channels: { enabled } });
+      if (target) {
+        const supported = new Set(["telegram", "slack", "phone", "sms", "whatsapp"]);
+        if (!supported.has(target)) fail("Usage: nia channels <on|off> [telegram|slack|phone|sms|whatsapp]");
+        updateRawConfig({ channels: { ...(enabled ? { enabled: true } : {}), [target]: { enabled } } });
+      } else {
+        updateRawConfig({ channels: { enabled } });
+      }
       const pid = readPid();
       if (pid && isRunning()) {
         process.kill(pid, "SIGHUP");
-        console.log(`channels ${enabled ? "enabled" : "disabled"}`);
+        console.log(
+          target ? `${target} ${enabled ? "enabled" : "disabled"}` : `channels ${enabled ? "enabled" : "disabled"}`,
+        );
       } else {
-        console.log(`channels ${enabled ? "enabled" : "disabled"} — start nia to apply`);
+        console.log(
+          target
+            ? `${target} ${enabled ? "enabled" : "disabled"} — start nia to apply`
+            : `channels ${enabled ? "enabled" : "disabled"} — start nia to apply`,
+        );
       }
     } else {
       console.log(`channels: ${getConfig().channels.enabled ? "on" : "off"}`);
@@ -605,7 +620,7 @@ Persona:
   skills [source]                 List available skills
 
 Channels:
-  channels [on|off]               Toggle channels
+  channels [on|off] [name]        Toggle all channels or one channel
   watch <sub>                     Manage Slack watch channels
   telegram [setup]                Configure telegram
   slack [setup]                   Configure slack

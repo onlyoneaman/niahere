@@ -84,7 +84,7 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
       configured: Boolean(config.channels.telegram.bot_token),
       status: !config.channels.telegram.bot_token
         ? "not configured"
-        : !config.channels.enabled
+        : !config.channels.enabled || !config.channels.telegram.enabled
           ? "disabled"
           : running
             ? "active"
@@ -96,7 +96,7 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
       appTokenConfigured: Boolean(config.channels.slack.app_token),
       status: !config.channels.slack.bot_token
         ? "not configured"
-        : !config.channels.enabled
+        : !config.channels.enabled || !config.channels.slack.enabled
           ? "disabled"
           : running
             ? config.channels.slack.app_token

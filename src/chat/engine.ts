@@ -33,8 +33,7 @@ const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const LONG_RUNNING_WARN = 30 * 60 * 1000; // 30 minutes
 const MAX_SEND_RETRIES = 2;
 const SEND_RETRY_DELAYS = [3_000, 8_000];
-const GENERIC_CHAT_ERROR =
-  "Claude/Anthropic returned an error without details. This is usually temporary; please try again shortly.";
+const GENERIC_CHAT_ERROR = "💀";
 
 interface SDKUserMessage {
   type: "user";

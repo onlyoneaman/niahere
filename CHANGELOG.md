@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **Per-channel toggles** — `nia channels off <name>` can disable a configured channel without removing its credentials.
+
+### Changed
+
+- **Provider outage fallback** — Blank Claude/Anthropic errors now post a skull emoji instead of a verbose temporary-failure message.
+
 ## [0.3.10] - 2026-06-15
 
 ### Fixed

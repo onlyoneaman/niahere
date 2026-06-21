@@ -20,15 +20,11 @@ afterEach(() => {
 
 describe("formatChatError", () => {
   test("replaces unknown SDK errors with a user-facing transient message", () => {
-    expect(formatChatError("unknown error")).toBe(
-      "Claude/Anthropic returned an error without details. This is usually temporary; please try again shortly.",
-    );
+    expect(formatChatError("unknown error")).toBe("💀");
   });
 
   test("replaces blank SDK errors with a user-facing transient message", () => {
-    expect(formatChatError("")).toBe(
-      "Claude/Anthropic returned an error without details. This is usually temporary; please try again shortly.",
-    );
+    expect(formatChatError("")).toBe("💀");
   });
 
   test("keeps detailed errors visible", () => {

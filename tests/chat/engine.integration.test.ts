@@ -6,6 +6,8 @@ import { tmpdir } from "os";
 import { join } from "path";
 
 const TEST_CWD = mkdtempSync(join(tmpdir(), "nia-sdk-integration-"));
+const runClaudeIntegration = process.env.NIA_RUN_CLAUDE_INTEGRATION === "1";
+const describeClaudeIntegration = runClaudeIntegration ? describe : describe.skip;
 
 // Strip nested-session env vars so tests work inside Claude Code
 beforeAll(() => {
@@ -17,7 +19,7 @@ beforeAll(() => {
 /**
  * Integration tests for the SDK query() path used by Slack/Telegram/Terminal.
  */
-describe("chat engine SDK integration", () => {
+describeClaudeIntegration("chat engine SDK integration", () => {
   test("query() spawns claude and gets a response", async () => {
     const handle = query({
       prompt: "Reply with exactly: PONG",

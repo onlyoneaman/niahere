@@ -24,8 +24,9 @@ const DEFAULTS: Config = {
   channels: {
     enabled: true,
     default: "telegram",
-    telegram: { bot_token: null, chat_id: null, open: false },
+    telegram: { enabled: true, bot_token: null, chat_id: null, open: false },
     slack: {
+      enabled: true,
       bot_token: null,
       app_token: null,
       dm_user_id: null,
@@ -157,6 +158,8 @@ export function loadConfig(): Config {
   const defaultChannel = typeof ch.default === "string" ? ch.default : DEFAULTS.channels.default;
 
   // Telegram — env vars override config
+  const tgEnabled = chTg.enabled !== false;
+
   const tgBotToken = process.env.TELEGRAM_BOT_TOKEN || (typeof chTg.bot_token === "string" ? chTg.bot_token : null);
 
   const tgChatId =
@@ -166,6 +169,8 @@ export function loadConfig(): Config {
   const tgOpen = chTg.open === true;
 
   // Slack — env vars override config
+  const slEnabled = chSl.enabled !== false;
+
   const slBotToken = process.env.SLACK_BOT_TOKEN || (typeof chSl.bot_token === "string" ? chSl.bot_token : null);
 
   const slAppToken = process.env.SLACK_APP_TOKEN || (typeof chSl.app_token === "string" ? chSl.app_token : null);
@@ -254,8 +259,9 @@ export function loadConfig(): Config {
     channels: {
       enabled: channelsEnabled,
       default: defaultChannel,
-      telegram: { bot_token: tgBotToken, chat_id: tgChatId, open: tgOpen },
+      telegram: { enabled: tgEnabled, bot_token: tgBotToken, chat_id: tgChatId, open: tgOpen },
       slack: {
+        enabled: slEnabled,
         bot_token: slBotToken,
         app_token: slAppToken,
         dm_user_id: slDmUserId,

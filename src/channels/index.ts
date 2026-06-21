@@ -1,6 +1,7 @@
 import type { Channel } from "../types";
 import { registerChannel, getFactories, trackStarted, clearStarted } from "./registry";
 import { log } from "../utils/log";
+import { getConfig } from "../utils/config";
 import { createTelegramChannel } from "./telegram";
 import { createSlackChannel } from "./slack";
 import { createPhoneChannel } from "./phone";
@@ -57,6 +58,24 @@ export async function startChannels(): Promise<StartResult> {
   }
 
   return { started, failed };
+}
+
+export function getConfiguredChannelNames(): string[] {
+  const { channels } = getConfig();
+  if (!channels.enabled) return [];
+
+  const names: string[] = [];
+  if (channels.telegram.enabled && channels.telegram.bot_token) names.push("telegram");
+  if (channels.slack.enabled && channels.slack.bot_token && channels.slack.app_token) names.push("slack");
+  if (channels.phone.enabled && channels.twilio.sid && channels.twilio.secret && channels.phone.from_number) {
+    names.push("phone");
+  }
+  const smsFromNumber = channels.sms.from_number ?? channels.phone.from_number;
+  if (channels.sms.enabled && channels.twilio.sid && channels.twilio.secret && smsFromNumber) names.push("sms");
+  if (channels.whatsapp.enabled && channels.twilio.sid && channels.twilio.secret && channels.whatsapp.from_number) {
+    names.push("whatsapp");
+  }
+  return names;
 }
 
 export async function stopChannels(channels: Channel[]): Promise<void> {
