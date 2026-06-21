@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "fs";
-import { buildContentBlocks, formatChatError, resolveSdkModel } from "../../src/chat/engine";
+import { buildContentBlocks, formatChatError, getChatErrorSignal, resolveSdkModel } from "../../src/chat/engine";
 import { resetConfig } from "../../src/utils/config";
 import type { Attachment } from "../../src/types/attachment";
 
@@ -29,6 +29,15 @@ describe("formatChatError", () => {
 
   test("keeps detailed errors visible", () => {
     expect(formatChatError("rate limit exceeded")).toBe("[error] rate limit exceeded");
+  });
+
+  test("marks blank and unknown errors as provider down", () => {
+    expect(getChatErrorSignal("")).toBe("provider_down");
+    expect(getChatErrorSignal("unknown error")).toBe("provider_down");
+  });
+
+  test("does not mark detailed errors as provider down", () => {
+    expect(getChatErrorSignal("rate limit exceeded")).toBeUndefined();
   });
 
   test("explains OAuth organization access failures", () => {

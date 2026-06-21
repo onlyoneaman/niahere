@@ -101,13 +101,18 @@ export function buildContentBlocks(text: string, attachments?: Attachment[]): Me
 /** Convert SDK error text into a channel-safe chat response. */
 export function formatChatError(rawError: string | null | undefined): string {
   const error = rawError?.trim();
-  if (!error || error.toLowerCase() === "unknown error") {
+  if (getChatErrorSignal(error) === "provider_down") {
     return GENERIC_CHAT_ERROR;
   }
   if (error === "oauth_org_not_allowed") {
     return "[error] This Claude account is not allowed to access the configured organization. Check your Claude login or organization access.";
   }
   return `[error] ${error}`;
+}
+
+export function getChatErrorSignal(rawError: string | null | undefined): SendResult["signal"] | undefined {
+  const error = rawError?.trim();
+  return !error || error.toLowerCase() === "unknown error" ? "provider_down" : undefined;
 }
 
 export function resolveSdkModel(contextModel?: string | null): string | undefined {
@@ -559,7 +564,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
                 );
                 await ActiveEngine.unregister(room);
                 clearLongRunningTimer();
-                pending.resolve({ result: errorText, costUsd: 0, turns: 0 });
+                pending.resolve({ result: errorText, costUsd: 0, turns: 0, signal: getChatErrorSignal(rawError) });
                 pending = null;
                 retryCount = 0;
                 resetIdleTimer();

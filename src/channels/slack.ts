@@ -15,6 +15,21 @@ function cleanSentinel(text: string): string {
   return text.replace(/`/g, "").trim();
 }
 
+interface SlackReactionClient {
+  reactions: {
+    add(args: { channel: string; timestamp: string; name: string }): Promise<unknown>;
+  };
+}
+
+export async function reactToSlackMessage(
+  client: SlackReactionClient,
+  channel: string,
+  timestamp: string,
+  name: string,
+): Promise<void> {
+  await client.reactions.add({ channel, timestamp, name });
+}
+
 class SlackChannel implements Channel {
   name = "slack" as const;
   private app: App | null = null;
@@ -415,12 +430,11 @@ class SlackChannel implements Channel {
         }
 
         // Add thinking reaction inside the lock so cleanup is guaranteed
-        await client.reactions
-          .add({ channel: msg.channel, timestamp: msg.ts, name: "thinking_face" })
+        await reactToSlackMessage(client, msg.channel, msg.ts, "thinking_face")
           .catch((err) => log.debug({ err, channel: msg.channel }, "slack: failed to add thinking reaction"));
 
         try {
-          const { result, messageId } = await state.engine.send(
+          const { result, messageId, signal } = await state.engine.send(
             text,
             {
               onActivity(status) {
@@ -429,6 +443,15 @@ class SlackChannel implements Channel {
             },
             attachments,
           );
+
+          if (signal === "provider_down") {
+            await reactToSlackMessage(client, msg.channel, msg.ts, "skull").catch((err) =>
+              log.debug({ err, channel: msg.channel }, "slack: failed to add provider-down reaction"),
+            );
+            if (messageId) await Message.updateDeliveryStatus(messageId, "sent").catch(() => {});
+            log.info({ channel: msg.channel, key, reaction: "skull" }, "slack provider failure sent as reaction");
+            return;
+          }
 
           const reply = result.trim();
           const cleaned = cleanSentinel(reply);

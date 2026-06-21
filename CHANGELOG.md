@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Slack provider outage signal** — Generic provider failures now add a skull reaction to the triggering Slack message instead of posting a separate skull message.
+
 ## [0.3.11] - 2026-06-21
 
 ### Added

@@ -2,6 +2,8 @@ export interface SendResult {
   result: string;
   costUsd: number;
   turns: number;
+  /** Optional channel-level signal for transports with richer UI than plain text. */
+  signal?: "provider_down";
   /** DB message ID for delivery status tracking (only set for agent replies) */
   messageId?: number;
 }
