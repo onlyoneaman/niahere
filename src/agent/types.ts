@@ -41,7 +41,16 @@ export type AgentEvent =
   | { type: "text"; delta: string }
   | { type: "thinking"; delta: string }
   | { type: "tool"; name: string; summary?: string }
-  | { type: "result"; text: string; usage: AgentUsage; backendSessionId: string }
+  | {
+      type: "result";
+      text: string;
+      usage: AgentUsage;
+      backendSessionId: string;
+      /** Backend-native metadata the consumer persists to the session/message DB
+       *  row (Claude: total_cost_usd, num_turns, duration_ms, usage, modelUsage…).
+       *  Opaque to the orchestrator. */
+      metadata?: Record<string, unknown>;
+    }
   | { type: "error"; message: string; retryable: boolean; providerDown: boolean };
 
 export function isResultEvent(ev: AgentEvent): ev is Extract<AgentEvent, { type: "result" }> {

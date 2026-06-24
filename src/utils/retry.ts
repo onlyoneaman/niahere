@@ -21,6 +21,16 @@ export function isRetryableApiError(error: string): boolean {
   return RETRYABLE_PATTERNS.some((p) => p.test(error));
 }
 
+/**
+ * A blank or opaque ("unknown error") failure means the provider is down rather
+ * than a specific, surfaceable error — the signal that should trigger failover.
+ * Distinct from `isRetryableApiError` (a transient error worth an in-backend retry).
+ */
+export function isProviderDownError(error: string | null | undefined): boolean {
+  const trimmed = error?.trim();
+  return !trimmed || trimmed.toLowerCase() === "unknown error";
+}
+
 /** Sleep for ms milliseconds. */
 export function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
