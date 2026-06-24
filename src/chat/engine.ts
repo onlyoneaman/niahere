@@ -10,7 +10,7 @@ import { finalizeSession, cancelPending } from "../core/finalizer";
 import { log } from "../utils/log";
 import { registerActiveHandle, unregisterActiveHandle } from "../core/active-handles";
 import { resolveJobPrompt } from "../core/job-prompt";
-import { getBackend, type AgentSession } from "../agent";
+import { resolveBackends, type AgentSession } from "../agent";
 
 const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const LONG_RUNNING_WARN = 30 * 60 * 1000; // 30 minutes
@@ -92,6 +92,12 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
     systemPrompt += `\n\n## Watch Mode — #${watchChannel}\n\nYou are monitoring this Slack channel. Follow the behavior instructions below.\nRespond with [NO_REPLY] if no action is needed — do not explain why.\n\n${behavior}`;
   }
 
+  // The backend chain: configured primary first, then provider-down fallbacks.
+  // Chat normally runs on the primary; a provider-down turn fails over to the
+  // next backend (answering the current message — see send()).
+  const backends = resolveBackends();
+  let backendIndex = 0;
+
   let sessionId: string | null = null;
   if (typeof resume === "string") {
     // Specific session ID provided
@@ -100,9 +106,9 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
     sessionId = await Session.getLatest(room);
   }
 
-  // Verify the backend can actually resume this session before attempting it
-  // (Claude probes the on-disk jsonl; other backends use their own check).
-  if (sessionId && !(await getBackend().canResume(sessionId, cwd))) {
+  // Verify the primary backend can actually resume this session before
+  // attempting it (Claude probes the on-disk jsonl; others use their own check).
+  if (sessionId && !(await backends[0]!.canResume(sessionId, cwd))) {
     sessionId = null;
   }
 
@@ -161,10 +167,11 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
     unregisterActiveHandle(room);
   }
 
-  /** Lazily open (and reuse) one warm backend session for this engine. */
+  /** Lazily open (and reuse) the current backend's session for this engine. */
   async function ensureSession(): Promise<AgentSession> {
     if (session) return session;
-    const s = await getBackend().openSession({
+    const backend = backends[backendIndex] ?? backends[0]!;
+    const s = await backend.openSession({
       room,
       channel,
       systemPrompt,
@@ -203,7 +210,6 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
       }
 
       await ActiveEngine.register(room, channel);
-      const sess = await ensureSession();
 
       // Save the user message eagerly for an already-known (resumed) session;
       // for a brand-new session we save it once on the `session` event below.
@@ -215,88 +221,104 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
         messageCount++;
       }
 
-      let accumulated = "";
       let result: SendResult = { result: "", costUsd: 0, turns: 0 };
-      try {
-        for await (const ev of sess.send(userMessage, attachments)) {
-          switch (ev.type) {
-            case "session": {
-              if (!sessionId || ev.backendSessionId !== sessionId) {
-                sessionId = ev.backendSessionId;
-                await Session.create(sessionId, room);
-              }
-              if (!userSaved) {
-                await Message.save({ sessionId, room, sender: "user", content: userMessage, isFromAgent: false });
-                userSaved = true;
-                messageCount++;
-              }
-              break;
-            }
-            case "text":
-              accumulated += ev.delta;
-              callbacks?.onStream?.(accumulated);
-              break;
-            case "thinking":
-              callbacks?.onActivity?.(ev.delta);
-              break;
-            case "tool":
-              callbacks?.onActivity?.(ev.summary ?? ev.name);
-              break;
-            case "result": {
-              const costUsd = ev.usage.costUsd ?? 0;
-              const turns = ev.usage.turns ?? 0;
-              let messageId: number | undefined;
-              if (sessionId && ev.text) {
-                const saveParams = {
-                  sessionId,
-                  room,
-                  sender: "nia",
-                  content: ev.text,
-                  isFromAgent: true,
-                  deliveryStatus: "pending" as const,
-                  metadata: ev.metadata,
-                };
-                try {
-                  messageId = await Message.save(saveParams);
-                } catch {
-                  messageId = await Message.save({ ...saveParams, metadata: undefined });
+
+      // Run the turn on the current backend; on a provider-down result, fail over
+      // to the next backend and answer the current message there.
+      while (true) {
+        const sess = await ensureSession();
+        let accumulated = "";
+        let providerDown = false;
+
+        try {
+          for await (const ev of sess.send(userMessage, attachments)) {
+            switch (ev.type) {
+              case "session": {
+                if (!sessionId || ev.backendSessionId !== sessionId) {
+                  sessionId = ev.backendSessionId;
+                  await Session.create(sessionId, room);
                 }
-                await Session.touch(sessionId);
-                Session.accumulateMetadata(sessionId, { ...(ev.metadata ?? {}), channel }).catch(() => {});
+                if (!userSaved) {
+                  await Message.save({ sessionId, room, sender: "user", content: userMessage, isFromAgent: false });
+                  userSaved = true;
+                  messageCount++;
+                }
+                break;
               }
-              await ActiveEngine.unregister(room);
-              clearLongRunningTimer();
-              result = { result: ev.text, costUsd, turns, messageId };
-              break;
-            }
-            case "error": {
-              log.error(
-                { room, error: ev.message, terminal_reason: ev.terminalReason },
-                "chat send failed with backend error",
-              );
-              await ActiveEngine.unregister(room);
-              clearLongRunningTimer();
-              result = {
-                result: formatChatError(ev.message),
-                costUsd: 0,
-                turns: 0,
-                signal: ev.providerDown ? "provider_down" : undefined,
-              };
-              break;
+              case "text":
+                accumulated += ev.delta;
+                callbacks?.onStream?.(accumulated);
+                break;
+              case "thinking":
+                callbacks?.onActivity?.(ev.delta);
+                break;
+              case "tool":
+                callbacks?.onActivity?.(ev.summary ?? ev.name);
+                break;
+              case "result": {
+                const costUsd = ev.usage.costUsd ?? 0;
+                const turns = ev.usage.turns ?? 0;
+                let messageId: number | undefined;
+                if (sessionId && ev.text) {
+                  const saveParams = {
+                    sessionId,
+                    room,
+                    sender: "nia",
+                    content: ev.text,
+                    isFromAgent: true,
+                    deliveryStatus: "pending" as const,
+                    metadata: ev.metadata,
+                  };
+                  try {
+                    messageId = await Message.save(saveParams);
+                  } catch {
+                    messageId = await Message.save({ ...saveParams, metadata: undefined });
+                  }
+                  await Session.touch(sessionId);
+                  Session.accumulateMetadata(sessionId, { ...(ev.metadata ?? {}), channel }).catch(() => {});
+                }
+                result = { result: ev.text, costUsd, turns, messageId };
+                break;
+              }
+              case "error": {
+                providerDown = ev.providerDown;
+                log.error(
+                  { room, error: ev.message, terminal_reason: ev.terminalReason },
+                  "chat send failed with backend error",
+                );
+                result = {
+                  result: formatChatError(ev.message),
+                  costUsd: 0,
+                  turns: 0,
+                  signal: ev.providerDown ? "provider_down" : undefined,
+                };
+                break;
+              }
             }
           }
+        } catch (err) {
+          await ActiveEngine.unregister(room).catch(() => {});
+          clearLongRunningTimer();
+          inFlight = false;
+          if (sess.backendSessionId) sessionId = sess.backendSessionId;
+          throw err instanceof Error ? err : new Error(String(err));
         }
-      } catch (err) {
-        await ActiveEngine.unregister(room).catch(() => {});
-        clearLongRunningTimer();
-        inFlight = false;
+
+        // Re-read the backend session id post-send so finalize/DB target it.
         if (sess.backendSessionId) sessionId = sess.backendSessionId;
-        throw err instanceof Error ? err : new Error(String(err));
+
+        if (providerDown && backendIndex < backends.length - 1) {
+          backendIndex++;
+          log.warn({ room, to: backends[backendIndex]!.name }, "chat provider down, failing over to next backend");
+          await teardown(); // close the dead session so ensureSession opens the next backend
+          sessionId = null; // a cross-backend session id is meaningless; start fresh
+          continue;
+        }
+        break;
       }
 
-      // Re-read the backend session id post-send (a new session assigns it; a
-      // retry may re-issue it) so finalize/DB target the right session.
-      if (sess.backendSessionId) sessionId = sess.backendSessionId;
+      await ActiveEngine.unregister(room);
+      clearLongRunningTimer();
       inFlight = false;
       resetIdleTimer();
       return result;

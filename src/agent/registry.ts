@@ -14,6 +14,7 @@ import { getConfig } from "../utils/config";
 let claudeBackend: ClaudeBackend | null = null;
 let codexBackend: CodexBackend | null = null;
 let override: AgentBackend | null = null;
+let chainOverride: AgentBackend[] | null = null;
 
 export function getBackend(name?: "claude" | "codex" | "gemini"): AgentBackend {
   if (override) return override;
@@ -30,12 +31,18 @@ export function setBackend(backend: AgentBackend | null): void {
   override = backend;
 }
 
+/** Test seam: force `resolveBackends()` to return a specific chain; null resets. */
+export function setBackendChain(backends: AgentBackend[] | null): void {
+  chainOverride = backends;
+}
+
 /**
  * The ordered backend chain for a run: the configured primary first, then any
  * fallbacks (provider-down failover), de-duplicated. Consumers try each in order
  * until one isn't provider-down.
  */
 export function resolveBackends(): AgentBackend[] {
+  if (chainOverride) return chainOverride;
   if (override) return [override];
   const cfg = getConfig();
   const seen = new Set<string>();
