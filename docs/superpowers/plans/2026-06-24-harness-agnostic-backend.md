@@ -14,7 +14,7 @@
 - **DRY:** exactly one tool table (`NIA_TOOLS`); both transports consume it. One shared subprocess-spawn/env-scrub helper for Codex+Gemini. One JSONL-line reader shared by the CLI adapters.
 - **SOLID:** the orchestrator depends on the `AgentBackend`/`AgentSession` abstractions only. Adding a backend = adding one adapter file under `src/agent/backends/`, with no edit to consumers. No `if (backend === …)` outside `src/agent/registry.ts`.
 - **No patchwork:** raw CLI/SDK output is normalized to `AgentEvent` inside the adapter; backend session ids are opaque; resume is a per-backend `canResume()` boolean. No copy-pasted env-scrub or output-parsing.
-- **No backwards-compat shims** (project rule): remove `config.runner`, `runJobWithCodex` dead path by hand; no fallback aliases.
+- **No backwards-compat shims** (project rule): remove `config.runner` and the `runJobWithCodex` dead path by hand; no fallback aliases. `config.runner` survives (read-but-ignored) through Phases 1–2 and is removed wholesale in Phase 3 when the `backends` selector replaces it — its five sites: `runner.ts:362`, `types/config.ts:104`, `config.ts` defaults (`13,99,252`), `commands/validate.ts:80-85`.
 - **Test command:** `LOG_LEVEL=silent bun test <path>` for a file; `bun run test` for the full gate (`tsc --noEmit && check:cycles && bun test`). Run the full gate before each phase's final commit.
 
 ---
@@ -22,6 +22,21 @@
 ## Phase 1 — The seam + one tool table + Claude extraction (behavior-preserving)
 
 Delivers the `AgentBackend` abstraction and routes Claude through it, with the tool table extracted DRY. No new capability, zero behavior change — this de-risks the core rewrite before any CLI backend exists.
+
+### Phase 1 corrections (from plan review — MUST apply; these cross-cut the tasks)
+
+Behavior-preservation is only real if these are honored — they are where the engine's entangled state crosses the new seam:
+
+1. **Characterization tests FIRST (new Task 1.0).** Before any extraction, write three tests against the _current_ `engine.ts` that pin the hard behaviors, so "stay green" is a real gate: (a) a brand-new session saves the user message **once** at init and increments `messageCount` once; (b) a transient-error retry does **not** double-save the user message or double-count; (c) the resumed-session id used by finalize matches the post-init id. Run them green against today's code, then keep them green through 1.5.
+2. **One `session` event per `send()`, across internal retries (Blocker 1).** `ClaudeSession.send()` must emit at most one `session` event even when it internally tears down and restarts the query on a retryable error (it swallows the post-retry SDK `init`). The engine then saves the user message idempotently on the first `session` event. This is what prevents the retry double-save (`engine.ts:382–392,526–551`).
+3. **`backendSessionId` re-read contract (Blocker 2).** The engine reads `session.backendSessionId` **after** each `send()` drains, and threads that value into finalizer/`cancelPending`/close (`engine.ts:277,619,662`). Never cache the id from before the send.
+4. **`AgentSession.abort(reason)` (Blocker 3).** The engine registers `registerActiveHandle(room, () => session.abort(reason))` instead of the old closure. `ClaudeSession` makes retry teardown+restart atomic w.r.t. abort. (Interface already updated in the spec.)
+5. **Enumerate all three `runJobWithClaude` consumers (Blocker 4).** `src/core/alive.ts:127` (recovery agent) and `runTask` (`runner.ts:294`, consolidator/summarizer) both call `runJobWithClaude` directly, plus `runJob`. Task 1.5 **keeps `runJobWithClaude`'s exact exported signature** (re-implemented over `ClaudeBackend`) so all three keep compiling. Do NOT collapse it away in Phase 1. `runTask` stays Claude-only in Phase 1 (failover is Phase 3).
+6. **Reconcile the two MCP-wiring paths (Major 5).** Chat passes a pre-built `mcpServers` blob down via `EngineOptions.mcpServers` (built by the channel through `getMcpServers(slackCtx)`, `slack.ts:109`); jobs pass a raw `McpSourceContext`. So `AgentSessionContext` carries an optional pre-built `mcpServers?` (chat path) AND `source?: McpSourceContext` (job path); `ClaudeBackend` uses whichever is present and never calls `getMcpServers` itself (or chat loses Slack thread ctx). Settle this in 1.2's interface before 1.5.
+7. **`retryable` ≠ `providerDown` (Major 6).** In `SdkNormalizer`, set them from **different** predicates: `retryable = isRetryableApiError(raw)` (transient 5xx/overloaded → in-backend retry), `providerDown = getChatErrorSignal(raw) === "provider_down"` (blank/"unknown error" → failover). A transient 529 is `{retryable:true, providerDown:false}`; a blank error is `{retryable:false, providerDown:true}`. Test both axes on distinct inputs.
+8. **Normalizers share an interface (DRY/SOLID).** Declare `interface Normalizer { consume(msg: unknown): AgentEvent[] }` in `src/agent/types.ts`; `SdkNormalizer` (and later `CodexNormalizer`/`GeminiNormalizer`) implement it. Keep normalizers **pure** (no I/O, no timers) so `ClaudeSession` stays just orchestration.
+9. **Drop the `buildContentBlocks` re-export (Minor 9).** Move it to `message-stream.ts` and update `tests/chat/engine.test.ts` to import from the new home — no re-export shim (project rule: no backwards-compat).
+10. **`handler` arg type:** prefer `unknown` over `any` in `NiaTool` where cheap; it's a serialization boundary.
 
 ### Task 1.1: `NIA_TOOLS` — one tool table (DRY)
 
@@ -297,9 +312,13 @@ Detailed steps authored when Phase 1 lands (the `AgentSession` contract must be 
 - **2.2 Round-trip spike** — point a real `codex exec` (or a minimal MCP client) at the endpoint; confirm a tool call executes in-daemon and returns. Gate before building the adapter.
 - **2.3 `src/agent/backends/spawn.ts`** — shared helper: spawn a CLI with an env allowlist-scrub (replacing `CODEX_EXCLUDED`), register an `active-handle` that SIGKILLs the PID + revokes the token on close, and a shared async JSONL line-reader. (DRY for Codex+Gemini.)
 - **2.4 `src/agent/backends/codex.ts`** — `CodexBackend`: write a per-run `[mcp_servers.nia]` config (url+token) and a system prompt; spawn `codex exec --json`; normalize JSONL → `AgentEvent` (one `CodexNormalizer`, mirroring `SdkNormalizer`); `canResume` via thread-id. Register `codex` in the registry.
-- **2.5 DB** — `sessions.backend` + `backend_session_id` migration; `Session.getLatestWithBackend`; backend-matched resume in the consumer.
+- **2.5 DB + cost mapping** — `sessions.backend` + `backend_session_id` migration; `Session.getLatestWithBackend`; backend-matched resume. **Cost is NOT a free passthrough** (review Minor 10): `accumulateMetadata` (`session.ts:125-175`) is hard-coded to Anthropic's `modelUsage`/`cost_usd` shape. Each normalizer maps its native usage into the unified `AgentUsage`, and the consumer maps `AgentUsage` → the metadata keys `accumulateMetadata` expects (Codex/Gemini → token counts, `cost_usd: 0`). Keep this mapping inside the normalizer/consumer, never an `if (backend)` in the accumulator.
 
-**Phase 2 done:** a Codex job runs end-to-end with full Nia tools via the endpoint.
+**Phase 2 acceptance gate (pulled forward from spec criterion 5):** a Slack-thread chat and a background job calling `send_message` concurrently each route to the correct destination — this is _the_ test that justifies the per-run frozen-context token design, so it gates Phase 2, not Phase 4. Also: token revocation is tied to the subprocess **PID exit** (reap → revoke via the `active-handle`), not only to a clean `close()`, so a crashed CLI can't leave a live bearer.
+
+**Attachments (v1 limitation, note in 2.4/3.1):** `buildContentBlocks` makes Anthropic base64 image blocks for Claude; CLI backends get **path-hints only** (codex/gemini read the file off disk). Don't imply base64 cross-backend support the CLIs can't take.
+
+**Phase 2 done:** a Codex job runs end-to-end with full Nia tools via the endpoint; concurrent routing verified.
 
 ---
 

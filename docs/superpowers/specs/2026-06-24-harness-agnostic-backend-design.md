@@ -98,8 +98,17 @@ export interface AgentUsage {
 }
 
 export interface AgentSession {
+  /** Re-read after each send(): a new session assigns it on the first turn,
+   *  and an internal retry may rotate it. Engine threads this value into
+   *  finalizer/DB. */
   readonly backendSessionId: string | null;
+  /** Streams the turn's events. Emits exactly ONE `session` event per send
+   *  even across internal retries, so the consumer can save the user message
+   *  idempotently. Ends with `result` or `error`. */
   send(text: string, attachments?: Attachment[]): AsyncIterable<AgentEvent>;
+  /** Interrupt an in-flight send; teardown+restart on retry is atomic w.r.t.
+   *  this. Engine registers it via registerActiveHandle. */
+  abort(reason: string): void;
   close(): Promise<void>;
 }
 
