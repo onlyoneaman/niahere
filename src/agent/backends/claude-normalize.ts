@@ -1,5 +1,5 @@
 import type { AgentEvent, Normalizer } from "../types";
-import { truncate, formatToolUse } from "../../utils/format-activity";
+import { truncate } from "../../utils/format-activity";
 import { isRetryableApiError, isProviderDownError } from "../../utils/retry";
 
 /**
@@ -30,22 +30,14 @@ export class SdkNormalizer implements Normalizer {
     }
 
     if (msg.type === "tool_use_summary") {
-      return [
-        {
-          type: "tool",
-          name: msg.tool_name || "tool",
-          summary: formatToolUse(msg.tool_name || "tool", msg.tool_input),
-        },
-      ];
+      // The SDK provides a ready-made human-readable summary (e.g. "Read foo.ts").
+      // (Older code read tool_name/tool_input, which this event does not carry.)
+      return msg.summary ? [{ type: "tool", name: "tool", summary: truncate(msg.summary, 70) }] : [];
     }
 
     if (msg.type === "tool_progress") {
-      if (msg.tool_name === "Bash" && msg.content) {
-        return [{ type: "tool", name: "Bash", summary: `$ ${truncate(msg.content, 60)}` }];
-      }
-      if (msg.content) {
-        return [{ type: "tool", name: msg.tool_name || "tool", summary: truncate(msg.content, 70) }];
-      }
+      // Carries only tool_use_id/tool_name/elapsed_time — no displayable content,
+      // and fires repeatedly. tool_use_summary already covers tool activity.
       return [];
     }
 
