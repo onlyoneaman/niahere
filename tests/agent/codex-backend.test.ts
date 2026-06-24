@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { CodexBackend, type CliProc, type SpawnFn } from "../../src/agent/backends/codex";
+import { existsSync } from "fs";
+import { CodexBackend, resolveCodexBin, type CliProc, type SpawnFn } from "../../src/agent/backends/codex";
 import { startMcpEndpoint, stopMcpEndpoint, liveRunCount } from "../../src/agent/mcp-endpoint";
 import type { AgentEvent, AgentSessionContext } from "../../src/agent/types";
 
@@ -34,6 +35,16 @@ beforeAll(async () => {
   await startMcpEndpoint();
 });
 afterAll(() => stopMcpEndpoint());
+
+describe("resolveCodexBin", () => {
+  test("resolves to an absolute path that exists, or the bare 'codex' fallback", () => {
+    const bin = resolveCodexBin();
+    expect(typeof bin).toBe("string");
+    expect(bin.length).toBeGreaterThan(0);
+    // If it resolved an absolute path (not the PATH fallback), the file must exist.
+    if (bin !== "codex") expect(existsSync(bin)).toBe(true);
+  });
+});
 
 describe("CodexSession", () => {
   test("normalizes a codex run to session → text → result and revokes the token", async () => {
