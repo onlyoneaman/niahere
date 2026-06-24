@@ -1,8 +1,36 @@
+import { existsSync, readdirSync } from "fs";
+import { homedir } from "os";
+import { join, dirname } from "path";
 import type { AgentBackend, AgentSession, AgentSessionContext, AgentEvent } from "../types";
 import type { Attachment } from "../../types/attachment";
 import type { McpSourceContext } from "../../mcp";
 import { CodexNormalizer } from "./codex-normalize";
 import { mintRun, revokeRun } from "../mcp-endpoint";
+
+/**
+ * Resolve the codex binary's absolute path. The daemon runs under launchd with a
+ * minimal PATH (`/usr/bin:/bin:...`) that excludes nvm/homebrew bins, so a bare
+ * `codex` spawn would fail. Search the likely install locations (env override,
+ * the runtime's own bin, homebrew, every nvm node bin, bun) and fall back to
+ * PATH only as a last resort. Cached after first resolution.
+ */
+let cachedCodexBin: string | null = null;
+export function resolveCodexBin(): string {
+  if (cachedCodexBin) return cachedCodexBin;
+  const candidates: string[] = [];
+  if (process.env.CODEX_PATH) candidates.push(process.env.CODEX_PATH);
+  candidates.push(join(dirname(process.execPath), "codex")); // sibling of bun/node
+  candidates.push("/opt/homebrew/bin/codex", "/usr/local/bin/codex");
+  try {
+    const nvm = join(homedir(), ".nvm", "versions", "node");
+    for (const v of readdirSync(nvm)) candidates.push(join(nvm, v, "bin", "codex"));
+  } catch {
+    /* no nvm */
+  }
+  candidates.push(join(homedir(), ".bun", "bin", "codex"));
+  cachedCodexBin = candidates.find((p) => existsSync(p)) ?? "codex";
+  return cachedCodexBin;
+}
 
 /** Minimal spawned-process surface, injectable so the session is unit-testable. */
 export interface CliProc {
@@ -33,7 +61,12 @@ function scrubbedEnv(extra: Record<string, string>): Record<string, string> {
 }
 
 function defaultSpawn(args: string[], opts: { cwd: string; env: Record<string, string> }): CliProc {
-  const proc = Bun.spawn(["codex", ...args], { cwd: opts.cwd, env: opts.env, stdout: "pipe", stderr: "pipe" });
+  const proc = Bun.spawn([resolveCodexBin(), ...args], {
+    cwd: opts.cwd,
+    env: opts.env,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   return {
     stdout: proc.stdout as ReadableStream<Uint8Array>,
     stderr: proc.stderr as ReadableStream<Uint8Array>,
