@@ -1,6 +1,8 @@
 import { z } from "zod";
 import * as handlers from "./index";
-import type { McpSourceContext } from "../index";
+import type { NiaTool } from "./types";
+
+export type { NiaTool };
 
 /**
  * One declarative tool table, consumed by both transports:
@@ -11,14 +13,6 @@ import type { McpSourceContext } from "../index";
  * DRY. Handlers live in the domain modules under `src/mcp/tools/*` and are
  * untouched; only `send_message` reads the per-run `McpSourceContext`.
  */
-export interface NiaTool {
-  name: string;
-  description: string;
-  /** A zod raw shape (the object of field schemas), as the SDK `tool()` expects. */
-  schema: z.ZodRawShape;
-  /** Returns the user-facing text result. `ctx` is the frozen per-run routing identity. */
-  handler: (args: any, ctx?: McpSourceContext) => Promise<string> | string;
-}
 
 export const NIA_TOOLS: NiaTool[] = [
   {

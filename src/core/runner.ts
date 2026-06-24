@@ -15,7 +15,7 @@ import { ActiveEngine } from "../db/models";
 import { log } from "../utils/log";
 import { isRetryableApiError, sleep } from "../utils/retry";
 import { registerActiveHandle, unregisterActiveHandle } from "./active-handles";
-import { getBackend } from "../agent";
+import { getBackend, type AgentSession } from "../agent";
 
 export { buildWorkingMemory } from "./job-prompt";
 
@@ -29,102 +29,20 @@ interface RunnerOutput {
 }
 
 // ---------------------------------------------------------------------------
-// Codex runner
+// Shared backend run consumer
 // ---------------------------------------------------------------------------
 
-function resolveCodexPath(): string {
-  const candidates = ["/opt/homebrew/bin/codex", "/usr/local/bin/codex"];
-  return candidates.find((p) => existsSync(p)) || "codex";
-}
-
-async function runJobWithCodex(fullPrompt: string, cwd: string, model: string): Promise<RunnerOutput> {
-  const codexPath = resolveCodexPath();
-  const args = [
-    codexPath,
-    "exec",
-    fullPrompt,
-    "-C",
-    cwd,
-    "--json",
-    "--skip-git-repo-check",
-    "--dangerously-bypass-approvals-and-sandbox",
-  ];
-  if (model && model !== "default") {
-    args.splice(3, 0, "-m", model);
-  }
-
-  const CODEX_EXCLUDED = new Set([
-    "ANTHROPIC_API_KEY",
-    "OPENAI_API_KEY",
-    "GEMINI_API_KEY",
-    "SLACK_BOT_TOKEN",
-    "SLACK_APP_TOKEN",
-    "TELEGRAM_BOT_TOKEN",
-    "TWILIO_AUTH_TOKEN",
-    "DATABASE_URL",
-  ]);
-  const codexEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !CODEX_EXCLUDED.has(k)));
-
-  const proc = Bun.spawn(args, {
-    stdout: "pipe",
-    stderr: "pipe",
-    env: codexEnv,
-  });
-
-  const stdout = await new Response(proc.stdout).text();
-  const stderr = await new Response(proc.stderr).text();
-  const exitCode = await proc.exited;
-
-  let agentText = "";
-  let sessionId = "";
-  for (const line of stdout.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      const event = JSON.parse(line);
-      if (event.type === "thread.started" && event.thread_id) {
-        sessionId = event.thread_id;
-      }
-      if (event.type === "item.completed" && event.item?.type === "agent_message") {
-        agentText = event.item.text || "";
-      }
-    } catch {}
-  }
-
-  if (exitCode !== 0) {
-    return {
-      agentText,
-      sessionId,
-      error: stderr.trim() || `exit code ${exitCode}`,
-    };
-  }
-  return { agentText, sessionId };
-}
-
-// ---------------------------------------------------------------------------
-// Claude Agent SDK runner
-// ---------------------------------------------------------------------------
-
-export async function runJobWithClaude(
-  systemPrompt: string,
-  jobPrompt: string,
-  cwd: string,
+/**
+ * Drive one backend session to a `RunnerOutput`: map `AgentEvent`s to activity +
+ * result/error, and handle abort. Shared by the Claude and Codex job paths so
+ * the consume logic lives in exactly one place.
+ */
+async function consumeBackendRun(
+  session: AgentSession,
+  prompt: string,
   onActivity?: ActivityCallback,
-  model?: string,
-  sourceCtx?: McpSourceContext,
   activeRoom?: string,
 ): Promise<RunnerOutput> {
-  const mcpServers = (getMcpServers(sourceCtx) as Record<string, unknown> | undefined) ?? undefined;
-  const session = await getBackend().openSession({
-    room: activeRoom ?? `_oneshot/${randomUUID()}`,
-    channel: "system",
-    systemPrompt,
-    cwd,
-    model,
-    mcpServers,
-    source: sourceCtx,
-    resume: false,
-  });
-
   let abortReason: string | null = null;
   if (activeRoom) {
     registerActiveHandle(activeRoom, (reason) => {
@@ -138,7 +56,7 @@ export async function runJobWithClaude(
   let error: string | undefined;
 
   try {
-    for await (const ev of session.send(jobPrompt)) {
+    for await (const ev of session.send(prompt)) {
       if (ev.type === "thinking") onActivity?.(ev.delta);
       else if (ev.type === "tool") onActivity?.(ev.summary ?? ev.name);
       else if (ev.type === "result") {
@@ -169,6 +87,33 @@ export async function runJobWithClaude(
   }
 
   return { agentText, sessionId: session.backendSessionId ?? "", terminalReason, error };
+}
+
+/**
+ * Run a one-shot job on the in-process Claude backend. Kept as a named export
+ * (signature stable) because `alive.ts` and `runTask` call it directly.
+ */
+export async function runJobWithClaude(
+  systemPrompt: string,
+  jobPrompt: string,
+  cwd: string,
+  onActivity?: ActivityCallback,
+  model?: string,
+  sourceCtx?: McpSourceContext,
+  activeRoom?: string,
+): Promise<RunnerOutput> {
+  const mcpServers = (getMcpServers(sourceCtx) as Record<string, unknown> | undefined) ?? undefined;
+  const session = await getBackend().openSession({
+    room: activeRoom ?? `_oneshot/${randomUUID()}`,
+    channel: "system",
+    systemPrompt,
+    cwd,
+    model,
+    mcpServers,
+    source: sourceCtx,
+    resume: false,
+  });
+  return consumeBackendRun(session, jobPrompt, onActivity, activeRoom);
 }
 
 // ---------------------------------------------------------------------------
@@ -262,8 +207,18 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
     const jobSourceCtx: McpSourceContext = { jobName: job.name, channel: "system" };
 
     if (config.runner === "codex") {
-      const fullPrompt = `${systemPrompt}\n\n---\n\n${jobPrompt}`;
-      output = await runJobWithCodex(fullPrompt, cwd, resolvedModel);
+      // Codex runs as a CLI peer and reaches Nia's tools (incl. send_message)
+      // over the loopback MCP endpoint — full parity with the Claude job path.
+      const session = await getBackend("codex").openSession({
+        room,
+        channel: "system",
+        systemPrompt,
+        cwd,
+        model: resolvedModel,
+        source: jobSourceCtx,
+        resume: false,
+      });
+      output = await consumeBackendRun(session, jobPrompt, onActivity, room);
     } else {
       output = await runJobWithClaude(systemPrompt, jobPrompt, cwd, onActivity, resolvedModel, jobSourceCtx, room);
 

@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { randomBytes, randomUUID } from "crypto";
-import { NIA_TOOLS, type NiaTool } from "../mcp/tools/table";
+import type { NiaTool } from "../mcp/tools/types";
 import type { McpSourceContext } from "../mcp";
 import { log } from "../utils/log";
 
@@ -26,6 +26,9 @@ interface RunEntry {
 const runs = new Map<string, RunEntry>();
 let server: ReturnType<typeof Bun.serve> | null = null;
 let port = 0;
+// Injected by the daemon (the composition root) so this module never imports the
+// tool table — which would create a cycle (handlers → runner → agent → here).
+let endpointTools: NiaTool[] = [];
 
 /** Build a per-run MCP server whose tool closures bake in the frozen context. */
 function buildRunServer(ctx: McpSourceContext, tools: NiaTool[]): McpServer {
@@ -38,8 +41,9 @@ function buildRunServer(ctx: McpSourceContext, tools: NiaTool[]): McpServer {
   return mcp;
 }
 
-/** Start the loopback endpoint (idempotent). Call once at daemon startup. */
-export async function startMcpEndpoint(): Promise<void> {
+/** Start the loopback endpoint (idempotent). The daemon passes `NIA_TOOLS`. */
+export async function startMcpEndpoint(tools: NiaTool[] = []): Promise<void> {
+  endpointTools = tools;
   if (server) return;
   server = Bun.serve({
     hostname: "127.0.0.1",
@@ -70,13 +74,10 @@ export function stopMcpEndpoint(): void {
  * token to hand to the CLI backend (e.g. `mcp_servers.nia.url` + a bearer env
  * var). Throws if the endpoint isn't started.
  */
-export async function mintRun(
-  ctx: McpSourceContext,
-  tools: NiaTool[] = NIA_TOOLS,
-): Promise<{ url: string; token: string }> {
+export async function mintRun(ctx: McpSourceContext, tools?: NiaTool[]): Promise<{ url: string; token: string }> {
   if (!server) throw new Error("mcp-endpoint not started");
   const token = randomBytes(32).toString("base64url");
-  const mcp = buildRunServer(ctx, tools);
+  const mcp = buildRunServer(ctx, tools ?? endpointTools);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: () => randomUUID() });
   await mcp.connect(transport);
   runs.set(token, { ctx, server: mcp, transport });
