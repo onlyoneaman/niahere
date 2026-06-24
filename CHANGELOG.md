@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.2] - 2026-06-24
+
+### Changed
+
+- **Claude Agent SDK 0.2.126 → 0.3.190** — plus @anthropic-ai/sdk and @modelcontextprotocol/sdk bumped to the SDK's current peer ranges. No API changes for Nia; verified with live Claude job and chat runs.
+
+### Fixed
+
+- **Tool activity labels** — read the SDK's real `tool_use_summary.summary` string instead of fields the event never carried, so tool status lines render properly instead of a generic `tool`.
+- **Failover on persistent overload** — a retryable Claude error (overload/5xx) that survives all in-backend retries now triggers failover to the fallback backend, instead of being treated as non-failover.
+
 ## [0.4.1] - 2026-06-24
 
 ### Fixed
