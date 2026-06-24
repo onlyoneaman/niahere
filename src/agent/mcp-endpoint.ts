@@ -48,6 +48,9 @@ export async function startMcpEndpoint(tools: NiaTool[] = []): Promise<void> {
   server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0, // OS-assigned ephemeral port
+    // MCP Streamable-HTTP keeps a long-lived server→client stream open; without
+    // a high idle timeout Bun cuts it (default 10s) mid-job. 255s is Bun's max.
+    idleTimeout: 255,
     async fetch(req) {
       const url = new URL(req.url);
       if (url.pathname !== "/mcp") return new Response("not found", { status: 404 });
