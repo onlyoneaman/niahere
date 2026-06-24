@@ -8,7 +8,6 @@ import { Session, Message, ActiveEngine, Job } from "../db/models";
 import type { Attachment, SendResult, SendCallbacks, ChatEngine, EngineOptions } from "../types";
 import { finalizeSession, cancelPending } from "../core/finalizer";
 import { log } from "../utils/log";
-import { getConfig } from "../utils/config";
 import { registerActiveHandle, unregisterActiveHandle } from "../core/active-handles";
 import { resolveJobPrompt } from "../core/job-prompt";
 import { getBackend, type AgentSession } from "../agent";
@@ -32,11 +31,6 @@ export function formatChatError(rawError: string | null | undefined): string {
 export function getChatErrorSignal(rawError: string | null | undefined): SendResult["signal"] | undefined {
   const error = rawError?.trim();
   return !error || error.toLowerCase() === "unknown error" ? "provider_down" : undefined;
-}
-
-export function resolveSdkModel(contextModel?: string | null): string | undefined {
-  const model = contextModel || getConfig().model;
-  return model && model !== "default" ? model : undefined;
 }
 
 export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine> {
@@ -179,6 +173,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
       mcpServers,
       resume: sessionId ?? false,
       subagents: getAgentDefinitions(),
+      interactive: true,
     });
     registerActiveHandle(room, (reason) => {
       s.abort(reason);

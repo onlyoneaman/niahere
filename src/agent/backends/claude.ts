@@ -27,7 +27,7 @@ function sessionFileExists(sessionId: string, cwd: string): boolean {
 }
 
 /** Resolve a context/config model to the SDK's `model` option ("default" → unset). */
-function resolveSdkModel(model?: string): string | undefined {
+export function resolveSdkModel(model?: string | null): string | undefined {
   const m = model || getConfig().model;
   return m && m !== "default" ? m : undefined;
 }
@@ -86,20 +86,24 @@ class ClaudeSession implements AgentSession {
       systemPrompt: this.ctx.systemPrompt,
       cwd: this.ctx.cwd,
       permissionMode: "bypassPermissions",
-      includePartialMessages: true,
-      settingSources: ["project", "user"],
       skills: getSdkSkillsSetting(),
       hooks: getSdkHooks(),
     };
+    // Interactive (chat) sessions stream partials and load project/user settings;
+    // headless one-shot jobs keep the leaner option set they had pre-refactor.
+    if (this.ctx.interactive) {
+      options.includePartialMessages = true;
+      options.settingSources = ["project", "user"];
+    }
     const model = resolveSdkModel(this.ctx.model);
     if (model) options.model = model;
     if (this._sessionId) {
       options.resume = this._sessionId;
     } else {
-      // Force a brand-new session id so the subprocess can't auto-continue a
-      // prior session in the same cwd.
-      options.continue = false;
       options.sessionId = randomUUID();
+      // Interactive sessions also forbid auto-continue of a prior session in the
+      // same cwd; jobs always run with a unique id and never auto-continued.
+      if (this.ctx.interactive) options.continue = false;
     }
     if (this.ctx.mcpServers) options.mcpServers = this.ctx.mcpServers;
     if (this.ctx.subagents && Object.keys(this.ctx.subagents).length > 0) options.agents = this.ctx.subagents;
@@ -141,6 +145,7 @@ class ClaudeSession implements AgentSession {
           }
           if (ev.type === "error" && ev.retryable && this.retryCount < MAX_SEND_RETRIES) {
             this.retryCount++;
+            yield { type: "thinking", delta: "retrying after API error..." };
             await this.teardown();
             await sleep(this.retryDelays[this.retryCount - 1] ?? 8_000);
             retry = true;

@@ -143,7 +143,7 @@ export async function runJobWithClaude(
       else if (ev.type === "tool") onActivity?.(ev.summary ?? ev.name);
       else if (ev.type === "result") {
         agentText = ev.text;
-        terminalReason = ev.metadata?.terminal_reason as string | undefined;
+        terminalReason = ev.terminalReason;
       } else if (ev.type === "error") {
         error = ev.message;
         terminalReason = ev.terminalReason;

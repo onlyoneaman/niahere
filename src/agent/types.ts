@@ -46,6 +46,7 @@ export type AgentEvent =
       text: string;
       usage: AgentUsage;
       backendSessionId: string;
+      terminalReason?: string;
       /** Backend-native metadata the consumer persists to the session/message DB
        *  row (Claude: total_cost_usd, num_turns, duration_ms, usage, modelUsage…).
        *  Opaque to the orchestrator. */
@@ -77,12 +78,13 @@ export interface AgentSessionContext {
   resume: boolean | string;
   /** Capability-gated; consumed only by backends that support subagents (Claude). */
   subagents?: Record<string, AgentDef>;
-}
-
-/** Per-turn input. */
-export interface TurnInput {
-  text: string;
-  attachments?: Attachment[];
+  /**
+   * True for warm, interactive chat sessions; false/undefined for headless
+   * one-shot jobs. Backends use it to choose interactive options — e.g. the
+   * Claude backend loads project/user settings and streams partial messages
+   * only when interactive (jobs keep the leaner one-shot option set).
+   */
+  interactive?: boolean;
 }
 
 /**

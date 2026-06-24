@@ -80,6 +80,34 @@ describe("ClaudeSession", () => {
     await session.close();
   });
 
+  test("interactive sessions load settingSources/partials; jobs do not", async () => {
+    const captured: Record<string, unknown>[] = [];
+    const capturingBackend = (interactive: boolean) =>
+      new ClaudeBackend({
+        queryFn: (args) => {
+          captured.push(args.options as Record<string, unknown>);
+          return scriptedHandle([
+            { type: "system", subtype: "init", session_id: "s1" },
+            { type: "result", is_error: false, result: "ok", total_cost_usd: 0, num_turns: 1, session_id: "s1" },
+          ]);
+        },
+      }).openSession({ ...CTX, interactive });
+
+    const chat = await capturingBackend(true);
+    await collect(chat.send("x"));
+    const jobBackend = await capturingBackend(false);
+    await collect(jobBackend.send("x"));
+
+    const chatOpts = captured[0]!;
+    const jobOpts = captured[1]!;
+    expect(chatOpts.settingSources).toEqual(["project", "user"]);
+    expect(chatOpts.includePartialMessages).toBe(true);
+    expect(chatOpts.continue).toBe(false);
+    expect(jobOpts.settingSources).toBeUndefined();
+    expect(jobOpts.includePartialMessages).toBeUndefined();
+    expect(jobOpts.continue).toBeUndefined();
+  });
+
   test("abort() interrupts an in-flight send by throwing the reason", async () => {
     // A handle whose next() rejects when close() is called.
     function abortableHandle(): QueryHandle {

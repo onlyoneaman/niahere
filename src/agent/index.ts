@@ -5,8 +5,8 @@ export type {
   AgentEvent,
   AgentUsage,
   AgentDef,
-  TurnInput,
   Normalizer,
 } from "./types";
 export { isResultEvent } from "./types";
 export { getBackend, setBackend } from "./registry";
+export { resolveSdkModel } from "./backends/claude";

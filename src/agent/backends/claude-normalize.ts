@@ -112,6 +112,7 @@ export class SdkNormalizer implements Normalizer {
         text: (msg.result as string) || "",
         usage: { costUsd: msg.total_cost_usd ?? 0, turns: msg.num_turns ?? 0 },
         backendSessionId: msg.session_id ?? "",
+        terminalReason: msg.terminal_reason,
         metadata: {
           cost_usd: msg.total_cost_usd,
           turns: msg.num_turns,
