@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "fs";
-import { buildContentBlocks, formatChatError, getChatErrorSignal, resolveSdkModel } from "../../src/chat/engine";
+import { formatChatError, getChatErrorSignal, resolveSdkModel } from "../../src/chat/engine";
+import { buildContentBlocks } from "../../src/agent/message-stream";
 import { resetConfig } from "../../src/utils/config";
 import type { Attachment } from "../../src/types/attachment";
 
