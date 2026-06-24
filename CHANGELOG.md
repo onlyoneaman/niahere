@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.1] - 2026-06-24
+
+### Fixed
+
+- **Codex binary resolution** — failover spawns codex by resolved absolute path (nvm/homebrew/runtime bin) instead of relying on the launchd daemon PATH, which excludes them.
+
 ## [0.4.0] - 2026-06-24
 
 ### Added
