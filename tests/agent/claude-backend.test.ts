@@ -80,6 +80,27 @@ describe("ClaudeSession", () => {
     await session.close();
   });
 
+  test("a retryable error that survives all retries becomes providerDown (→ failover)", async () => {
+    let call = 0;
+    const backend = new ClaudeBackend({
+      queryFn: () => {
+        call++;
+        return scriptedHandle([{ type: "result", is_error: true, errors: ["overloaded_error"] }]);
+      },
+    });
+    const session = await backend.openSession(CTX);
+    const events = await collect(session.send("go"));
+
+    expect(call).toBe(3); // initial + 2 retries
+    const last = events.at(-1)!;
+    expect(last.type).toBe("error");
+    if (last.type === "error") {
+      expect(last.retryable).toBe(true);
+      expect(last.providerDown).toBe(true); // exhausted retries → fail over
+    }
+    await session.close();
+  });
+
   test("interactive sessions load settingSources/partials; jobs do not", async () => {
     const captured: Record<string, unknown>[] = [];
     const capturingBackend = (interactive: boolean) =>

@@ -151,8 +151,14 @@ class ClaudeSession implements AgentSession {
             retry = true;
             break;
           }
-          yield ev;
-          if (ev.type === "result" || ev.type === "error") {
+          // A retryable error that survived all our retries means the provider is
+          // effectively down for us — flag it so the consumer can fail over.
+          const out =
+            ev.type === "error" && ev.retryable && this.retryCount >= MAX_SEND_RETRIES
+              ? { ...ev, providerDown: true }
+              : ev;
+          yield out;
+          if (out.type === "result" || out.type === "error") {
             this.retryCount = 0;
             return;
           }

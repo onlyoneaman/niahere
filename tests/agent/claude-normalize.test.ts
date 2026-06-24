@@ -42,20 +42,18 @@ describe("SdkNormalizer", () => {
     ).toEqual([{ type: "thinking", delta: "first line" }]);
   });
 
-  test("tool_use_summary → tool event with formatted summary", () => {
+  test("tool_use_summary → tool event using the SDK's human summary", () => {
     const n = new SdkNormalizer();
-    const out = n.consume({ type: "tool_use_summary", tool_name: "Read", tool_input: { file_path: "/x" } });
-    expect(out[0]?.type).toBe("tool");
-    expect((out[0] as any).name).toBe("Read");
-    // formatToolUse("Read", {file_path}) renders a human line, not the tool name.
-    expect((out[0] as any).summary).toBe("reading x");
+    // Real SDK shape: { summary, preceding_tool_use_ids } — no tool_name/tool_input.
+    const out = n.consume({ type: "tool_use_summary", summary: "Read foo.ts", preceding_tool_use_ids: [] });
+    expect(out).toEqual([{ type: "tool", name: "tool", summary: "Read foo.ts" }]);
   });
 
-  test("Bash tool_progress → $-prefixed tool summary", () => {
+  test("tool_progress carries no displayable content → no event", () => {
     const n = new SdkNormalizer();
-    expect(n.consume({ type: "tool_progress", tool_name: "Bash", content: "ls -la" })).toEqual([
-      { type: "tool", name: "Bash", summary: "$ ls -la" },
-    ]);
+    expect(n.consume({ type: "tool_progress", tool_name: "Bash", tool_use_id: "t", elapsed_time_seconds: 1 })).toEqual(
+      [],
+    );
   });
 
   test("successful result → result event with usage + metadata", () => {
