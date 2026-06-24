@@ -13,9 +13,8 @@ import { buildJobPrompt } from "./job-prompt";
 import { getMcpServers, type McpSourceContext } from "../mcp";
 import { ActiveEngine } from "../db/models";
 import { log } from "../utils/log";
-import { isRetryableApiError, sleep } from "../utils/retry";
 import { registerActiveHandle, unregisterActiveHandle } from "./active-handles";
-import { getBackend, type AgentSession } from "../agent";
+import { getBackend, resolveBackends, type AgentBackend, type AgentSession, type AgentSessionContext } from "../agent";
 
 export { buildWorkingMemory } from "./job-prompt";
 
@@ -26,6 +25,8 @@ interface RunnerOutput {
   sessionId: string;
   terminalReason?: string;
   error?: string;
+  /** The backend reported provider-down — caller may fail over to the next backend. */
+  providerDown?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,6 +55,7 @@ async function consumeBackendRun(
   let agentText = "";
   let terminalReason: string | undefined;
   let error: string | undefined;
+  let providerDown = false;
 
   try {
     for await (const ev of session.send(prompt)) {
@@ -65,6 +67,7 @@ async function consumeBackendRun(
       } else if (ev.type === "error") {
         error = ev.message;
         terminalReason = ev.terminalReason;
+        providerDown = ev.providerDown;
       }
     }
   } catch (err) {
@@ -86,7 +89,31 @@ async function consumeBackendRun(
     return { agentText: "", sessionId: session.backendSessionId ?? "", terminalReason: "aborted", error: abortReason };
   }
 
-  return { agentText, sessionId: session.backendSessionId ?? "", terminalReason, error };
+  return { agentText, sessionId: session.backendSessionId ?? "", terminalReason, error, providerDown };
+}
+
+/**
+ * Run a job across the ordered backend chain: try the primary, and on a
+ * provider-down result fail over to the next backend (replaying the same prompt;
+ * continuity comes from Nia's own context, not a cross-backend session resume).
+ */
+export async function runJobAcrossBackends(
+  backends: AgentBackend[],
+  sessionCtx: AgentSessionContext,
+  jobPrompt: string,
+  onActivity?: ActivityCallback,
+  activeRoom?: string,
+): Promise<RunnerOutput> {
+  let output: RunnerOutput = { agentText: "", sessionId: "", error: "no backend configured" };
+  for (let i = 0; i < backends.length; i++) {
+    const backend = backends[i]!;
+    const session = await backend.openSession(sessionCtx);
+    output = await consumeBackendRun(session, jobPrompt, onActivity, activeRoom);
+    if (!output.providerDown) return output;
+    const next = backends[i + 1];
+    if (next) log.warn({ from: backend.name, to: next.name }, "provider down, failing over to next backend");
+  }
+  return output;
 }
 
 /**
@@ -201,37 +228,22 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
     // Model priority: job.model > agent.model > config.model
     const resolvedModel = job.model || agentModel || config.model;
 
-    const MAX_API_RETRIES = 2;
-    const RETRY_DELAYS = [3_000, 8_000]; // 3s, then 8s
-
     const jobSourceCtx: McpSourceContext = { jobName: job.name, channel: "system" };
 
-    if (config.runner === "codex") {
-      // Codex runs as a CLI peer and reaches Nia's tools (incl. send_message)
-      // over the loopback MCP endpoint — full parity with the Claude job path.
-      const session = await getBackend("codex").openSession({
-        room,
-        channel: "system",
-        systemPrompt,
-        cwd,
-        model: resolvedModel,
-        source: jobSourceCtx,
-        resume: false,
-      });
-      output = await consumeBackendRun(session, jobPrompt, onActivity, room);
-    } else {
-      output = await runJobWithClaude(systemPrompt, jobPrompt, cwd, onActivity, resolvedModel, jobSourceCtx, room);
-
-      for (let attempt = 0; attempt < MAX_API_RETRIES && output.error && isRetryableApiError(output.error); attempt++) {
-        const delay = RETRY_DELAYS[attempt] ?? 8_000;
-        log.warn(
-          { job: job.name, attempt: attempt + 1, error: output.error, delayMs: delay },
-          "retrying after transient API error",
-        );
-        await sleep(delay);
-        output = await runJobWithClaude(systemPrompt, jobPrompt, cwd, onActivity, resolvedModel, jobSourceCtx, room);
-      }
-    }
+    // One context serves every backend: Claude uses the pre-built in-process
+    // mcpServers; Codex/Gemini use `source` to wire the loopback endpoint. Run
+    // across the configured backend chain so a provider-down primary fails over.
+    const sessionCtx: AgentSessionContext = {
+      room,
+      channel: "system",
+      systemPrompt,
+      cwd,
+      model: resolvedModel,
+      mcpServers: (getMcpServers(jobSourceCtx) as Record<string, unknown> | undefined) ?? undefined,
+      source: jobSourceCtx,
+      resume: false,
+    };
+    output = await runJobAcrossBackends(resolveBackends(), sessionCtx, jobPrompt, onActivity, room);
 
     const duration_ms = Math.round(performance.now() - startMs);
     const ok = !output.error;

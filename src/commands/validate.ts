@@ -76,13 +76,23 @@ export function validateConfig(): Result {
     messages.push(`${WARN} database_url not set (will use default)`);
   }
 
-  // Runner
+  // Backends (primary runner + fallback chain)
+  const BACKENDS = ["claude", "codex", "gemini"];
   const runner = raw.runner as string | undefined;
-  if (runner && runner !== "claude" && runner !== "codex") {
-    messages.push(`${FAIL} runner must be "claude" or "codex", got "${runner}"`);
+  if (runner && !BACKENDS.includes(runner)) {
+    messages.push(`${FAIL} runner must be one of ${BACKENDS.join(", ")}, got "${runner}"`);
     ok = false;
   } else if (runner) {
     messages.push(`${PASS} runner: ${runner}`);
+  }
+  if (raw.fallback !== undefined) {
+    const fb = raw.fallback;
+    if (!Array.isArray(fb) || fb.some((b) => !BACKENDS.includes(b as string))) {
+      messages.push(`${FAIL} fallback must be an array of ${BACKENDS.join(", ")}`);
+      ok = false;
+    } else {
+      messages.push(`${PASS} fallback: [${fb.join(", ")}]`);
+    }
   }
 
   // Session finalization

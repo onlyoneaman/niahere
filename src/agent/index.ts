@@ -8,5 +8,5 @@ export type {
   Normalizer,
 } from "./types";
 export { isResultEvent } from "./types";
-export { getBackend, setBackend } from "./registry";
+export { getBackend, setBackend, resolveBackends } from "./registry";
 export { resolveSdkModel } from "./backends/claude";

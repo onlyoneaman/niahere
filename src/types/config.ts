@@ -99,9 +99,15 @@ export interface SessionFinalizationConfig {
   summaries: boolean;
 }
 
+/** A coding-agent backend Nia can run on. */
+export type BackendName = "claude" | "codex" | "gemini";
+
 export interface Config {
   model: string;
-  runner: "claude" | "codex";
+  /** The primary backend for jobs and chat. */
+  runner: BackendName;
+  /** Ordered fallback backends, tried when the primary is provider-down. */
+  fallback: BackendName[];
   timezone: string;
   activeHours: { start: string; end: string };
   database_url: string;

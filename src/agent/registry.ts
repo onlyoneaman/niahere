@@ -1,6 +1,7 @@
 import type { AgentBackend } from "./types";
 import { ClaudeBackend } from "./backends/claude";
 import { CodexBackend } from "./backends/codex";
+import { getConfig } from "../utils/config";
 
 /**
  * Backend selection — the ONE place backend identity is resolved. Consumers call
@@ -27,4 +28,17 @@ export function getBackend(name?: "claude" | "codex" | "gemini"): AgentBackend {
 /** Test seam: force `getBackend()` to return a specific backend; pass null to reset. */
 export function setBackend(backend: AgentBackend | null): void {
   override = backend;
+}
+
+/**
+ * The ordered backend chain for a run: the configured primary first, then any
+ * fallbacks (provider-down failover), de-duplicated. Consumers try each in order
+ * until one isn't provider-down.
+ */
+export function resolveBackends(): AgentBackend[] {
+  if (override) return [override];
+  const cfg = getConfig();
+  const seen = new Set<string>();
+  const names = [cfg.runner, ...cfg.fallback].filter((n) => !seen.has(n) && seen.add(n));
+  return names.map((n) => getBackend(n));
 }
