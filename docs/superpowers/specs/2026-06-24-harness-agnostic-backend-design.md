@@ -1,200 +1,174 @@
-# Harness-Agnostic Agent Backend — `AgentBackend`
+# Harness-Agnostic Nia — ACP as the Single Abstraction
 
 **Date:** 2026-06-24
-**Status:** Design approved, implementation not started
+**Status:** Design approved (spike-confirmed); implementation not started
 
 ## Goal
 
-Today Nia's agent execution is hardcoded to the Claude Agent SDK at ~4 call sites. Introduce one seam — `AgentBackend` — so Nia can run on a non-Claude harness without rewriting, and survive a Claude outage, pricing change, or quality regression on at least one fallback path.
+Make Nia run on any ACP-speaking coding agent behind one seam, so Claude and Codex are interchangeable peers for **both jobs and chat**, with full access to Nia's tools, resilient to either provider's outage. Today execution is hardcoded to the Claude Agent SDK at two `query()` sites; Codex exists only as a tool-less `codex exec` dead-end.
 
-Concretely, after v1:
+After v1:
 
-- One `AgentBackend` interface with **two implementations**: `SdkBackend` (current Claude Agent SDK, in-process) and `AcpBackend` (Codex, out-of-process over the Agent Client Protocol).
-- A **job** can run on Codex end-to-end, with the daemon delivering its result (a new, explicit delivery step — see below), proving the seam.
-- Claude is untouched in behavior — same streaming, dollar cost, skills, in-process debugging.
+- One `AgentBackend`/`AgentSession` seam. **Both** Claude (`@agentclientprotocol/claude-agent-acp`) and Codex (`@zed-industries/codex-acp`) run as ACP agent subprocesses behind it. No Claude-SDK special path.
+- Every backend reaches Nia's 21 tools via a **loopback HTTP MCP relay** the daemon hosts — tools run in-daemon with full channel/phone singleton access.
+- Switching a job or chat's backend is a config change.
 
-## Why this shape (decision record)
+## Decision record
 
-The ambitious option — make ACP the _single_ abstraction and route even Claude through the `claude-agent-acp` bridge, with full chat+jobs parity across Claude/Codex/Gemini — was evaluated and **rejected** after an adversarial review. Three findings drove the call:
+The owner chose **ACP as the single abstraction, including Claude** — over a hybrid (keep Claude on the in-process SDK) and over a jobs-only cut. This was chosen after explicit pushback (twice) on two real costs, which are accepted:
 
-1. **MCP tools are not pure functions.** `send_message` (`src/mcp/tools/send.ts:97`) and `place_call` (`src/mcp/tools/misc.ts:38`) are RPCs into live daemon singletons (channel registry, Twilio↔OpenAI phone relay). ACP agents reach tools only via an out-of-process stdio MCP server. Moving tools out of the daemon silently degrades proactive Slack thread replies, watch responses, and voice to text DMs. Solving it generally requires a daemon-RPC bridge — a project in itself. Keeping Claude in-process avoids this entirely.
-2. **Inverted risk gradient.** ACP-only would route the _most stable_ dependency (the Claude Agent SDK, first-party) through the _least_ stable layer (v0.x just-renamed bridge + a third-party Codex adapter pinned to a Codex Rust tag) — to de-risk the dependency that is already most reliable.
-3. **Feasibility is not the blocker.** The ACP client works as assumed; this is a strategy call, not a capability gap. So we keep ACP as one implementation, not the universe.
+- **Inverted risk gradient:** Claude (the most stable dependency) now runs through a v0.x bridge. Accepted.
+- **Lost in-process niceties:** JS `hooks` and the warm in-process `query()` go away. Mitigated below.
 
-"One abstraction, two implementations" is the textbook justification for the seam — and it formalizes the split that already exists today (`runJobWithClaude` vs `runJobWithCodex`). The asset worth eventually open-sourcing is `AgentBackend` itself — proven to normalize two genuinely different execution models to Nia's own domain types — which is more valuable than an ACP-only wrapper that inherits four unstable packages as bug reports. **Bet the interface, not the protocol.**
+The adversarial pre-mortem dissented (recommended cutting the relay + chat parity). The owner chose the ambitious path; its mitigations are carried into the Risks section regardless.
+
+**Why it's defensible:** one uniform execution + tool model across all harnesses, a clean productization story (Nia could itself expose ACP), and — critically — **the load-bearing mechanism is spike-confirmed** (below), not assumed.
+
+## Spike findings (2026-06-24, real binaries — confirmed facts)
+
+Probed `initialize` + `session/new` against the actual installed bridges:
+
+|                                                         | claude-agent-acp@0.50.0           | codex-acp@0.16.0                  |
+| ------------------------------------------------------- | --------------------------------- | --------------------------------- |
+| `mcpCapabilities`                                       | `http:true, sse:true`             | `http:true, sse:false`            |
+| **`session/new` w/ HTTP MCP + `Authorization: Bearer`** | **ACCEPTED** (returned sessionId) | **ACCEPTED** (returned sessionId) |
+| resume                                                  | loadSession + resume + fork       | loadSession + resume              |
+| image prompts                                           | yes                               | yes                               |
+| ACP protocol version                                    | 1                                 | 1                                 |
+
+`@agentclientprotocol/sdk@0.29.0`. **Not yet verified** (needs model creds + a live MCP server): an end-to-end tool round-trip (agent → relay → daemon handler → result). This is implementation step 1, not an assumption to build on.
 
 ## Non-goals (v1)
 
-- **Claude over ACP.** Claude stays on the in-process SDK. No `claude-agent-acp` dependency.
-- **Chat parity on Codex.** Interactive Slack/Telegram/REPL chat stays Claude-only. ACP is jobs-first (async, latency-tolerant — where subprocess warts don't hurt).
-- **Gemini** (or any third backend). Added later once the seam is proven on Codex.
-- **The daemon-RPC bridge / full tool access for ACP jobs.** v1 ACP jobs get a DB-safe tool subset; the daemon delivers their final output via a **new explicit delivery step** (today the agent self-delivers by calling `send_message` mid-run — that path is daemon-bound and excluded for ACP). Rich out-of-process tooling (`send_message`, `place_call` from inside a Codex job) is deferred.
-- **A backend-neutral policy gate (ALLOW/DENY/ASK).** Designed-for, not built. ACP hands us `session/request_permission` for free when we want it; the portable choke point is the MCP-handler boundary. Out of scope for v1.
-- **Phone consult's hardcoded model** (`src/channels/phone/consult.ts:31`, `claude-sonnet-4-6`). It's a one-shot completion, not an agent loop. Untouched.
+- **Gemini.** `gemini --acp` is stdio-only for MCP (won't take the HTTP relay). The seam keeps it addable; not built now.
+- **Per-token streaming into Slack/Telegram.** Those channels are final-only today (only the REPL streams). Preserved as-is; ACP chunk cadence is irrelevant to them.
+- **A backend-neutral approval UI.** The policy gate (below) is minimal: ALLOW/DENY in v1, with ASK only for interactive contexts; rich approval flows are later.
+- **Phone consult's hardcoded model** (`src/channels/phone/consult.ts:31`). One-shot completion, not an agent loop. Untouched.
 
 ## Architecture
 
 ```
-                        ┌──────────────────────────────────────────────┐
-                        │  Nia orchestration (engine.ts / runner.ts)    │
-                        │  one consume loop, zero `if (backend === …)`  │
-                        └───────────────────────┬──────────────────────┘
-                                                │ backend.startSession(ctx) → AgentSession
-                                                │ session.send(turn) → AsyncIterable<AgentEvent>
-                        ┌───────────────────────┴──────────────────────┐
-                        │                                               │
-              ┌─────────▼──────────┐                      ┌─────────────▼─────────────┐
-              │   SdkBackend       │                      │      AcpBackend           │
-              │  (Claude, default) │                      │  (Codex, jobs-first)      │
-              │  in-process query()│                      │  spawns codex-acp subproc │
-              │  rich: hooks/agents│                      │  @agentclientprotocol/sdk │
-              │  /skills/$cost     │                      │  stdio JSON-RPC client    │
-              └─────────┬──────────┘                      └─────────────┬─────────────┘
-                        │ SDK events                                    │ session/update
-                        └───────────────► normalize ◄───────────────────┘
-                                          AgentEvent (Nia domain type)
+   ┌─────────────────────────────────────────────────────────────┐
+   │  Nia daemon (one process)                                    │
+   │                                                              │
+   │   engine.ts / runner.ts ── one AgentEvent consume loop       │
+   │            │ backend.openSession(ctx) → AgentSession         │
+   │            ▼                                                 │
+   │      AcpBackend ──spawn──► claude-agent-acp / codex-acp      │
+   │            │ ACP JSON-RPC over stdio   (subprocess)          │
+   │            │                               │                 │
+   │   ┌────────▼─────────┐                     │ HTTP MCP        │
+   │   │ loopback /mcp     │◄────────────────────┘ (Bearer token) │
+   │   │ 127.0.0.1 relay   │   per-session Server, ctx frozen in  │
+   │   │ → 21 tool handlers│   (runs IN daemon: getChannel(),     │
+   │   └───────────────────┘    phone relay, DB — full access)    │
+   └─────────────────────────────────────────────────────────────┘
 ```
 
-## The interface (session-shaped)
-
-A turn-shaped `runTurn` models a one-shot job but **not** the warm chat engine, which reuses one `query()` subprocess across many `send()` calls (the whole point of `MessageStream`, `engine.ts:127`). A turn-shaped interface would force chat to either respawn per turn (a behavior regression) or bypass the seam entirely. So the seam is **session-shaped**: a job is a one-send session; chat is a many-send session. Both route through the same interface — this is what makes success criterion #4 true for the chat hot path, not just jobs.
-
-```ts
-// src/agent/backend.ts
-export interface AgentBackend {
-  readonly id: "claude-sdk" | "codex-acp" | string;
-  readonly capabilities: BackendCapabilities;
-  /** Open a session. Chat keeps it warm across turns; a job opens, sends once, closes. */
-  startSession(ctx: SessionContext): AgentSession;
-}
-
-export interface AgentSession {
-  readonly sessionId: string | null; // known after the first turn's `session` event
-  /** Run one turn. Streams events; ends with a `result` or `error` event.
-   *  Subsequent sends reuse the same warm backend (SdkBackend: the live query()). */
-  send(turn: TurnInput): AsyncIterable<AgentEvent>;
-  /** Out-of-band (ACP cancel is a connection method); normalizes to an
-   *  `{ kind:"error", ... }` or `result` event carrying stopReason:"aborted". */
-  cancel(): void;
-  close(): Promise<void>; // tears down the subprocess / query() handle
-}
-
-export interface SessionContext {
-  systemPrompt: string;
-  cwd: string;
-  model?: string; // resolved to the active backend's namespace BEFORE the session opens
-  resume?: { sessionId: string } | null;
-  subagents?: AgentDef[]; // capability-gated; SdkBackend only
-}
-
-export interface TurnInput {
-  userText: string;
-  attachments?: Attachment[];
-  signal?: AbortSignal;
-}
-
-export interface BackendCapabilities {
-  streamingText: boolean; // claude:true  codex:true(via ACP)
-  streamingThinking: boolean; // claude:true  codex:varies — gap is SYNTHESIZED, never a new event shape
-  sessionResume: boolean; // capability-gated; read from ACP initialize response, fallback to newSession
-  dollarCost: boolean; // claude:true  codex:false (tokens only → priced client-side)
-}
-```
-
-A **job** = `startSession` → one `send` → `close`. **Chat** = `startSession` once → `send` per message → `close` on idle/finalize. New backend features become new `SessionContext`/`TurnInput`/`AgentEvent` fields — never a signature change.
-
-## The normalized event vocabulary (ACP-mirrored, minimal)
-
-Nia consumes only a handful of things today; keep the enum tight and name variants after ACP's `session/update` so a future ACP-export is a thin mapping, not a rewrite. Capability gaps are absorbed by emitting the _same_ events non-incrementally (Vercel's `simulateStreaming` trick) — the consumer can't tell a non-streaming backend apart.
-
-```ts
-// src/agent/events.ts
-export type AgentEvent =
-  | { kind: "session"; sessionId: string } // ACP thread.started / SDK system:init
-  | { kind: "text"; delta: string; cumulative: string } // agent_message_chunk / text_delta
-  | { kind: "thinking"; line: string } // agent_thought_chunk (synthesized if absent)
-  | { kind: "tool"; id: string; name: string; status: ToolStatus } // tool_call + tool_call_update
-  | { kind: "progress"; line: string } // tool_progress / plan
-  | { kind: "result"; text: string; cost: ResultCost; stopReason: string }
-  | { kind: "error"; message: string; retryable: boolean };
-
-export type ToolStatus = "pending" | "in_progress" | "completed" | "failed";
-export type ResultCost =
-  | { kind: "dollars"; usd: number; turns: number; usage?: unknown }
-  | { kind: "tokens"; input: number; output: number }; // priced client-side via a token table
-```
-
-Making cost a `dollars | tokens` union (not a bare number) is what keeps a tokens-only backend a first-class shape rather than a special case — and keeps the seam reversible.
+The orchestration loop never branches on backend. Backend choice happens once per session via a registry.
 
 ## Components
 
-### `src/agent/backend.ts`, `src/agent/events.ts`
+### `src/agent/types.ts` — the seam
 
-Interfaces + the event union above. No SDK or ACP imports.
+```ts
+export interface AgentSessionContext {
+  room: string;
+  channel: string; // "slack" | "telegram" | "system" | ...
+  systemPrompt: string;
+  cwd: string;
+  model?: string;
+  source: McpSourceContext; // routing identity for Nia's tools (frozen per session)
+  resume: boolean | string; // true = latest for room; string = explicit backend session id
+  subagents?: Record<string, AgentDef>;
+}
 
-### `src/agent/backends/sdk.ts` — `SdkBackend` (Claude, default)
+export type AgentEvent =
+  | { type: "session"; backendSessionId: string }
+  | { type: "text"; delta: string }
+  | { type: "thinking"; delta: string }
+  | { type: "tool"; name: string; summary?: string }
+  | { type: "permission"; request: PermissionRequest; respond: (d: PolicyDecision) => void }
+  | { type: "result"; text: string; usage: AgentUsage; backendSessionId: string }
+  | { type: "error"; message: string; retryable: boolean };
 
-The `SdkBackend` session **owns the warm `query()` + `MessageStream`** (`engine.ts:127`), the retry/respawn loop (`engine.ts:~526–551`), event normalization (`content_block_delta`/`thinking_delta`/`tool_use_summary`/`result` → `AgentEvent`, in `startQuery`'s consume loop ~`engine.ts:372–600`), abort via `queryHandle.close()`, and `total_cost_usd` → `ResultCost.dollars`. The **engine** retains session-lifecycle concerns that aren't per-turn: idle/long-running timers (`engine.ts:32–33,254–302`), `finalizeSession`, and `registerActiveHandle` abort routing — it delegates execution to the session and keeps the lifecycle.
+export interface AgentUsage {
+  costUsd?: number;
+  tokens?: { input: number; output: number };
+  turns?: number;
+}
 
-This is **behavior-preserving but not a trivial move**: the existing consume loop is fused to multi-turn state (warm subprocess, retry, `pending`), so the extraction is wrapping that machinery into `AgentSession`, not relocating a code block. Success: Claude behaves identically (criterion #1).
+export interface AgentSession {
+  readonly backendSessionId: string | null;
+  send(text: string, attachments?: Attachment[]): AsyncIterable<AgentEvent>;
+  close(): Promise<void>;
+}
 
-### `src/agent/backends/acp.ts` — `AcpBackend` (Codex)
+export interface AgentBackend {
+  readonly name: "claude" | "codex";
+  openSession(ctx: AgentSessionContext): Promise<AgentSession>;
+  canResume(backendSessionId: string, cwd: string): Promise<boolean>;
+}
+```
 
-Spawns the agent as a stdio subprocess and drives `@agentclientprotocol/sdk` (~v0.29). Four corrections from the real SDK source (verified):
+A job is a one-send session; chat is a many-send session kept warm (the ACP subprocess is reused across turns, the ACP analog of today's `MessageStream`).
 
-1. `ndJsonStream(output=child.stdin, input=child.stdout)` — arg order is (writable-to-agent, readable-from-agent).
-2. `requestPermission` is a **request/response** — return `{outcome:{outcome:"selected", optionId}}` chosen from the agent's offered `options[]`, or `{outcome:{outcome:"cancelled"}}`. v1: auto-select the allow option (no gate yet).
-3. `cancel({sessionId})` is a connection method, exposed as the `cancel` handle alongside the iterable.
-4. Resume is capability-gated: read `initialize` → `agentCapabilities`, use `resumeSession`/`loadSession` only if advertised, else `newSession`. Same `cwd` required.
+### `src/agent/backends/acp.ts` — `AcpBackend`
 
-Bridges the callback-style `sessionUpdate` into the async iterable via a small queue. Codex spawn: `@zed-industries/codex-acp` (pin the version; it's third-party glue over a Codex Rust tag — treat as a managed risk).
+Spawns the bridge binary (claude-agent-acp / codex-acp) over stdio, drives `@agentclientprotocol/sdk` (`ClientSideConnection`, `ndJsonStream(stdin, stdout)`). Per turn: `session/prompt`, translating `session/update` notifications → `AgentEvent` (`agent_message_chunk`→text, `agent_thought_chunk`→thinking, `tool_call`/`tool_call_update`→tool, `session/request_permission`→permission). Resolves the turn on the `prompt` result (`stopReason`). `session/new` is given the relay's HTTP MCP config + this session's bearer (below). `cancel()` is the connection's `session/cancel` + subprocess kill. Image attachments map to ACP `ContentBlock`s. Backend identity (`claude`/`codex`) selects the spawn command and the model-namespace mapping.
 
-Headless client: advertise `clientCapabilities: { fs: { readTextFile:false, writeTextFile:false } }` and no terminal; omit those handlers. Agents do their own file IO against the real `cwd`.
+### `src/agent/mcp-relay/` — the loopback tool relay
 
-### `src/agent/index.ts` — `getBackend(role)`
+- **`server.ts`** — a dedicated `Bun.serve` on `127.0.0.1`, ephemeral port (`port: 0`), exposing `/mcp`. Started in `daemon.ts` right after `setMcpFactory` (`daemon.ts:~275`); stopped in shutdown. **Prefer a unix domain socket over TCP loopback** if Bun supports it for the MCP transport, to remove the "any local process can hit it" class (see Risks).
+- **`server-factory.ts`** — `buildRelayServer(ctx)`: a low-level `@modelcontextprotocol/sdk` `Server` whose `ListTools`/`CallTool` dispatch into the **same** `handlers.*` from `src/mcp/tools/*` (extracted into a shared `src/mcp/tools/table.ts` so the Claude-ACP and any in-process path share one source of truth). Handlers run in-daemon — `getChannel()`/`getPhoneChannel()` resolve to live singletons. `CallTool` calls `runPolicyGate` first.
+- **`registry.ts`** — `token → { ctx, server, transport }`. `mint(ctx)` (called at `session/new`) creates a random 256-bit bearer + a **per-session** `Server` + `WebStandardStreamableHTTPServerTransport` closing over an **immutable** `McpSourceContext` snapshot. `revoke(token)` (called at session close/crash) tears both down. Immutability + 1:1 token↔session is what prevents the thread-misrouting race.
 
-Resolves config → a backend instance. Backend selection happens **once** per turn; nothing downstream branches on it.
+### `src/agent/policy/` — the gate (minimal, real)
 
-### `src/agent/tools.ts` — DB-safe tool subset for ACP jobs
+One rule engine, enforced at **one** boundary per tool class:
 
-v1 ACP jobs are exposed only the tools whose handlers touch pure DB/file IO, via a minimal stdio MCP server (`nia mcp-serve`). **Only two of the 21 tools are genuinely daemon-bound and excluded:** `send_message` (channel registry singleton, `send.ts:97`) and `place_call` (phone relay singleton, `misc.ts:38`). Everything else is includable — including the four **watch** tools (`watch.ts`), which only read/write config YAML; a Codex job can call `add_watch_channel` safely, it just won't observe the daemon's `SlackWatchReloader` pick up the change in its own process (fine). The documented exclusion list (exactly those two) lives here.
+- **Nia's side-effect tools** (`place_call`, `send_message`) at the relay `CallTool` boundary → `runPolicyGate({tool, args, ctx})` returns allow/deny/ask.
+- **The agent's own built-ins** (Codex bash/edit) via ACP `session/request_permission`. (Not double-gated with the relay — they never traverse it.)
+- ASK reaches a human only in interactive (chat) contexts via the originating room; in headless jobs ASK collapses to a configured default (deny). v1 ruleset is a small array: Nia tools allow; agent built-ins ask-in-chat / allow-in-job; default allow.
 
-Because `send_message` is excluded, a Codex job cannot self-deliver its result — so the daemon must deliver it explicitly (see the runner rewrite).
+### `src/agent/registry.ts` — `getBackend(name)`
 
-### `src/chat/engine.ts`, `src/core/runner.ts` (rewrites)
+Resolves config (`backends` map + role/per-job/per-employee selector) → an `AgentBackend`. Selection happens once.
 
-Keep `createChatEngine`/`ChatEngine`/`SendResult` external shape (consumers in `repl.ts`, `cli/index.ts`, `channels/common/chat-session.ts` unchanged). The engine opens a `startSession` once and `send`s per message, consuming the normalized-event switch. `runJobWithClaude`/`runJobWithCodex` collapse into one `runJob` (open → one send → close). The dead Codex stdout-buffering path is deleted.
+### Consumers: `engine.ts`, `runner.ts` (rewrites)
 
-Three things the collapse must preserve:
+Keep `ChatEngine`/`SendResult`/`EngineOptions` external shapes (channel consumers unchanged — they stay final-only). Replace both `query()` sites with `backend.openSession(ctx)` + an `AgentEvent` loop. `runJobWithCodex`/`runJobWithClaude` collapse into one `runJob` over the backend; the dead `codex exec` path is deleted. Idle/long-running timers, `finalizeSession`, `ActiveEngine`, DB saves stay in the consumer; execution + normalization move to `AcpBackend`. `runTask` (consolidator/summarizer) routes through the same `runJob`.
 
-- **Explicit ACP-job delivery.** Today the scheduler only logs `result.status` (`scheduler.ts:59–68`); a scheduled job reaches the owner solely because the agent calls `send_message` itself. Since ACP jobs can't, `runJob` must, for `AcpBackend` results, call in-daemon `sendMessage(...)` with the returned text. (Claude jobs keep self-delivering — a deliberate, documented per-backend difference.)
-- **`runTask` keeps routing to the Claude path.** The consolidator/summarizer call `runTask` (`runner.ts:~289`), which goes through the Claude SDK path. The collapse must not break that — those background tasks stay on `SdkBackend`.
-- **`config.runner` is removed.** The old global `config.runner === "codex"` switch (`runner.ts:362`) is deleted in favor of the per-role `backends` map; migrate config by hand (no compat shim, per project convention).
+### DB + resume + cost
 
-### Config + DB
+- Migration: `sessions` gains `backend TEXT NOT NULL DEFAULT 'claude'` + `backend_session_id TEXT`.
+- Resume is **backend-matched**: `Session.getLatestWithBackend(room)`; resume only if `latest.backend === backend.name && await backend.canResume(...)`. The Claude `~/.claude/projects` jsonl probe (`engine.ts:173`) moves into the Claude backend's `canResume` and never runs for Codex. A backend switch mid-room → fresh session, no cross-backend resume.
+- Cost: `AgentUsage` is `costUsd?` (Claude) or `tokens?` (Codex); the existing JSONB session-metadata accumulator already sums whichever keys are present. Jobs gain a cost field (today they record none).
 
-- Config gains `backends: { <id>: {…} }` + a role map (`chat`, `job`, `employee`, `summarize`, `title`) → `"backend/model"`. Secrets stay in env.
-- `sessions` table gains a **`backend` column**. Resume is gated on backend match at **both** sites: the SDK disk probe `sessionFileExists` (`engine.ts:173`, a `~/.claude/projects/…jsonl` check a Codex `thread_id` always fails) must only run for `claude-sdk` sessions, and the Slack thread-activation heuristic (`slack.ts:236`) must not treat a wrong-backend session as active.
+## What moving Claude to ACP preserves vs loses
 
-## Migration (strangler — no flag day)
+- **Preserved:** skill _enumeration_ (Nia builds the `Available skills:` prompt block itself via `scanSkills`, independent of the harness); dollar cost (`claude-agent-acp` emits `total_cost_usd` as `usage_update.cost`); subagents (`loadSession`/agent picker); model selection; session resume/fork; MCP (now via the relay).
+- **Lost / changed:** the in-process JS `hooks` (the `gh pr merge` `PreToolUse` warning, `sdk-hooks.ts`) → re-expressed as an ACP `request_permission` policy rule; the warm in-process `query()` → an ACP subprocess kept warm per session (cold-start on the first turn of each session). Per-skill gating/observability over ACP is opaque (acceptable — Nia gates via its own tools + prompt).
 
-- **Phase 0:** Land `AgentBackend`/`AgentSession` + `AgentEvent` + `SdkBackend` as the _only_ backend; route chat and jobs through it. Behavior-preserving (not a trivial move — see `SdkBackend`). De-risks the riskiest rewrite first.
-- **Phase 1:** Build `AcpBackend` (Codex) + `nia mcp-serve` (DB-safe tools) + the `backend` column + the explicit ACP-job delivery step. Wire one job to run on Codex end-to-end and report back. **De-risk goal met here.**
-- **Phase 2 (later):** Add the policy gate (`request_permission` + MCP-handler boundary), then Gemini, then evaluate chat parity — each behind evidence, not speculation.
-- **Phase 3 (deferred):** Extract `@nia/agent-runtime` once the interface is stable across ≥2 backends.
+## Migration
 
-## Known risks / residual gaps (carried, not solved in v1)
+- **Phase 0 — spike round-trip (≤1 day).** Stand up a minimal relay + drive one ACP agent through one real tool call end-to-end (needs creds). Confirms the one unverified link before committing. If HTTP MCP round-trip fails for a bridge, fall back to a stdio MCP proxy for that backend (the unix-socket variant).
+- **Phase 1 — the seam + relay.** `AgentBackend`/`AgentSession`/`AgentEvent`, the loopback relay + registry + `tools/table.ts`, `AcpBackend` for **Codex** first (it already lacks tools — biggest win, lowest regression risk), the policy gate, the DB column. One Codex job runs end-to-end with full tools. **De-risk goal met.**
+- **Phase 2 — Claude onto ACP.** Add the Claude backend via `claude-agent-acp`; migrate chat + jobs; delete the SDK `query()` path and `sdk-hooks` (→ policy rule). Validate skills/cost/resume parity in the wild.
+- **Phase 3 — config + polish.** Per-job/per-employee backend selection; Gemini if wanted; extract `@nia/agent-runtime` if productizing.
 
-- **Codex jobs have a limited toolset** (DB-safe only) until the daemon-RPC bridge exists. Acceptable for a fallback; document it.
-- **No dollar cost for Codex** — tokens only, priced client-side via a token table; numbers will be estimates.
-- **Subprocess lifecycle**: `AcpBackend` must track PIDs and process-group-kill on abort/daemon-restart, or leak zombies. The existing `runJobWithCodex` has _no_ abort wired — fix that in the new path. `cancel()` must normalize to the same post-abort event the Claude path produces (`terminal_reason:"aborted"` → `RunnerOutput`, `runner.ts:~246–252`), so orchestration's abort handling stays backend-uniform.
-- **Young, churning deps**: `@agentclientprotocol/sdk`, `@zed-industries/codex-acp` are v0.x and recently renamed. Pin versions; expect breakage; the seam keeps blast radius to one file.
-- **Hooks don't cross to ACP**: the `gh pr merge` `PreToolUse` warning (`sdk-hooks.ts:39`) stays Claude-only (advisory). Hard gating, when built, lives at the MCP-handler boundary.
+## Risks (carried, owner-accepted)
 
-## Success criteria (v1)
+- **Loopback relay security — HIGH.** It can `place_call`/`send_message` as the owner, and the bearer is handed to a third-party agent subprocess running model-generated bash. Mitigations: unix socket over TCP where possible; short-TTL / per-session tokens revoked on close; reap subprocesses on revoke; the policy gate hard-allowlists side-effect verbs; no rate-limit primitive exists today — add one for the MCP path.
+- **Per-session context-threading race — HIGH if done wrong.** The token↔ctx mapping must be immutable and 1:1 with a session (snapshot, never mutate, never reuse) or Slack thread replies misroute silently. The per-session `Server` design reproduces today's closure safety by construction.
+- **Subprocess fleet — MEDIUM.** Jobs + chat each spawn agent subprocesses (+ their own tool subprocesses). `scheduler.ts` has no global concurrency cap — add one. Every ACP subprocess must register an `active-handle` whose close SIGKILLs the PID, or daemon restart leaks zombies holding tokens.
+- **Dependency churn — HIGH for a solo dev.** `@agentclientprotocol/sdk` (v0.x), `claude-agent-acp` (v0.x, wraps the SDK), `codex-acp` (third-party, just renamed to `@agentclientprotocol/codex-acp`, pinned to a Codex Rust tag). Pin everything; expect breakage; the seam keeps blast radius to `src/agent/`.
+- **Unverified tool round-trip.** Phase 0 closes this; do not skip it.
 
-1. Claude chat + jobs behave identically to today (the `SdkBackend` extraction is invisible).
-2. A configured job runs to completion on Codex via `AcpBackend`, and the daemon delivers its result to the owner's channel via the explicit ACP-job delivery step.
-3. Switching a job's backend is a config change, not a code change.
-4. The chat engine and the job runner both drive execution through `AgentBackend`/`AgentSession`; no `if (backend === …)` branch exists in the orchestration loop.
-5. Consolidator/summarizer (`runTask`) and all Claude behavior are unaffected.
+## Success criteria (v1 = Phases 1–2)
+
+1. A Codex job runs to completion with full Nia tools (incl. `send_message` to deliver its result), via the relay.
+2. Claude chat + jobs run over ACP with skills, dollar cost, and resume intact — behavior parity with today.
+3. Switching a job's backend (claude↔codex) is a config change; no `if (backend === …)` in the orchestration loop.
+4. A Slack-thread chat and a background job calling `send_message` concurrently each route to the correct destination (no context-threading race).
+5. Daemon restart reaps all ACP subprocesses and revokes all relay tokens.
