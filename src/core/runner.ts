@@ -1,7 +1,6 @@
 import { homedir } from "os";
 import { existsSync } from "fs";
 import { randomUUID } from "crypto";
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { JobInput, JobResult } from "../types";
 import { appendAudit, readState, writeState } from "../utils/logger";
 import type { AuditEntry, JobState } from "../types";
@@ -11,14 +10,11 @@ import { buildEmployeePrompt } from "../chat/employee-prompt";
 import { getEmployee } from "./employees";
 import { scanAgents } from "./agents";
 import { buildJobPrompt } from "./job-prompt";
-import { truncate, formatToolUse } from "../utils/format-activity";
 import { getMcpServers, type McpSourceContext } from "../mcp";
 import { ActiveEngine } from "../db/models";
 import { log } from "../utils/log";
-import { isRetryableApiError, sleep } from "../utils/retry";
 import { registerActiveHandle, unregisterActiveHandle } from "./active-handles";
-import { getSdkSkillsSetting } from "./skills";
-import { getSdkHooks } from "./sdk-hooks";
+import { getBackend, resolveBackends, type AgentBackend, type AgentSession, type AgentSessionContext } from "../agent";
 
 export { buildWorkingMemory } from "./job-prompt";
 
@@ -29,86 +25,101 @@ interface RunnerOutput {
   sessionId: string;
   terminalReason?: string;
   error?: string;
+  /** The backend reported provider-down — caller may fail over to the next backend. */
+  providerDown?: boolean;
 }
 
 // ---------------------------------------------------------------------------
-// Codex runner
+// Shared backend run consumer
 // ---------------------------------------------------------------------------
 
-function resolveCodexPath(): string {
-  const candidates = ["/opt/homebrew/bin/codex", "/usr/local/bin/codex"];
-  return candidates.find((p) => existsSync(p)) || "codex";
-}
-
-async function runJobWithCodex(fullPrompt: string, cwd: string, model: string): Promise<RunnerOutput> {
-  const codexPath = resolveCodexPath();
-  const args = [
-    codexPath,
-    "exec",
-    fullPrompt,
-    "-C",
-    cwd,
-    "--json",
-    "--skip-git-repo-check",
-    "--dangerously-bypass-approvals-and-sandbox",
-  ];
-  if (model && model !== "default") {
-    args.splice(3, 0, "-m", model);
+/**
+ * Drive one backend session to a `RunnerOutput`: map `AgentEvent`s to activity +
+ * result/error, and handle abort. Shared by the Claude and Codex job paths so
+ * the consume logic lives in exactly one place.
+ */
+async function consumeBackendRun(
+  session: AgentSession,
+  prompt: string,
+  onActivity?: ActivityCallback,
+  activeRoom?: string,
+): Promise<RunnerOutput> {
+  let abortReason: string | null = null;
+  if (activeRoom) {
+    registerActiveHandle(activeRoom, (reason) => {
+      abortReason = reason;
+      session.abort(reason);
+    });
   }
-
-  const CODEX_EXCLUDED = new Set([
-    "ANTHROPIC_API_KEY",
-    "OPENAI_API_KEY",
-    "GEMINI_API_KEY",
-    "SLACK_BOT_TOKEN",
-    "SLACK_APP_TOKEN",
-    "TELEGRAM_BOT_TOKEN",
-    "TWILIO_AUTH_TOKEN",
-    "DATABASE_URL",
-  ]);
-  const codexEnv = Object.fromEntries(
-    Object.entries(process.env).filter(([k]) => !CODEX_EXCLUDED.has(k))
-  );
-
-  const proc = Bun.spawn(args, {
-    stdout: "pipe",
-    stderr: "pipe",
-    env: codexEnv,
-  });
-
-  const stdout = await new Response(proc.stdout).text();
-  const stderr = await new Response(proc.stderr).text();
-  const exitCode = await proc.exited;
 
   let agentText = "";
-  let sessionId = "";
-  for (const line of stdout.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      const event = JSON.parse(line);
-      if (event.type === "thread.started" && event.thread_id) {
-        sessionId = event.thread_id;
+  let terminalReason: string | undefined;
+  let error: string | undefined;
+  let providerDown = false;
+
+  try {
+    for await (const ev of session.send(prompt)) {
+      if (ev.type === "thinking") onActivity?.(ev.delta);
+      else if (ev.type === "tool") onActivity?.(ev.summary ?? ev.name);
+      else if (ev.type === "result") {
+        agentText = ev.text;
+        terminalReason = ev.terminalReason;
+      } else if (ev.type === "error") {
+        error = ev.message;
+        terminalReason = ev.terminalReason;
+        providerDown = ev.providerDown;
       }
-      if (event.type === "item.completed" && event.item?.type === "agent_message") {
-        agentText = event.item.text || "";
-      }
-    } catch {}
+    }
+  } catch (err) {
+    if (abortReason) {
+      return {
+        agentText: "",
+        sessionId: session.backendSessionId ?? "",
+        terminalReason: "aborted",
+        error: abortReason,
+      };
+    }
+    throw err;
+  } finally {
+    await session.close();
+    if (activeRoom) unregisterActiveHandle(activeRoom);
   }
 
-  if (exitCode !== 0) {
-    return {
-      agentText,
-      sessionId,
-      error: stderr.trim() || `exit code ${exitCode}`,
-    };
+  if (abortReason) {
+    return { agentText: "", sessionId: session.backendSessionId ?? "", terminalReason: "aborted", error: abortReason };
   }
-  return { agentText, sessionId };
+
+  return { agentText, sessionId: session.backendSessionId ?? "", terminalReason, error, providerDown };
 }
 
-// ---------------------------------------------------------------------------
-// Claude Agent SDK runner
-// ---------------------------------------------------------------------------
+/**
+ * Run a job across the ordered backend chain: try the primary, and on a
+ * provider-down result fail over to the next backend (replaying the same prompt;
+ * continuity comes from Nia's own context, not a cross-backend session resume).
+ */
+export async function runJobAcrossBackends(
+  backends: AgentBackend[],
+  sessionCtx: AgentSessionContext,
+  jobPrompt: string,
+  onActivity?: ActivityCallback,
+  activeRoom?: string,
+): Promise<RunnerOutput> {
+  let output: RunnerOutput = { agentText: "", sessionId: "", error: "no backend configured" };
+  for (let i = 0; i < backends.length; i++) {
+    const backend = backends[i]!;
+    const session = await backend.openSession(sessionCtx);
+    output = await consumeBackendRun(session, jobPrompt, onActivity, activeRoom);
+    if (!output.providerDown) return output;
+    const next = backends[i + 1];
+    if (next) log.warn({ from: backend.name, to: next.name }, "provider down, failing over to next backend");
+  }
+  return output;
+}
 
+/**
+ * Run a one-shot job on the in-process Claude backend. Kept as a named export
+ * (signature stable) because `alive.ts` and `runTask` call it directly.
+ */
 export async function runJobWithClaude(
   systemPrompt: string,
   jobPrompt: string,
@@ -118,155 +129,18 @@ export async function runJobWithClaude(
   sourceCtx?: McpSourceContext,
   activeRoom?: string,
 ): Promise<RunnerOutput> {
-  const sessionId = randomUUID();
-
-  // One-shot async iterable: emit a single user message then close
-  async function* singleMessage() {
-    yield {
-      type: "user" as const,
-      message: { role: "user" as const, content: jobPrompt },
-      parent_tool_use_id: null,
-      session_id: "",
-    };
-  }
-
-  const options: Record<string, unknown> = {
+  const mcpServers = (getMcpServers(sourceCtx) as Record<string, unknown> | undefined) ?? undefined;
+  const session = await getBackend().openSession({
+    room: activeRoom ?? `_oneshot/${randomUUID()}`,
+    channel: "system",
     systemPrompt,
     cwd,
-    permissionMode: "bypassPermissions",
-    sessionId,
-    skills: getSdkSkillsSetting(),
-    hooks: getSdkHooks(),
-  };
-
-  if (model && model !== "default") {
-    options.model = model;
-  }
-
-  const mcpServers = getMcpServers(sourceCtx);
-  if (mcpServers) {
-    options.mcpServers = mcpServers;
-  }
-
-  const handle = query({
-    prompt: singleMessage() as any,
-    options: options as any,
+    model,
+    mcpServers,
+    source: sourceCtx,
+    resume: false,
   });
-  let abortReason: string | null = null;
-  if (activeRoom) {
-    registerActiveHandle(activeRoom, (reason) => {
-      abortReason = reason;
-      handle.close();
-    });
-  }
-
-  let agentText = "";
-  let actualSessionId = sessionId;
-  let terminalReason: string | undefined;
-  let accumulatedThinking = "";
-  let lastThinkingLine = "";
-
-  try {
-    for await (const message of handle) {
-      if (message.type === "system" && (message as any).subtype === "init") {
-        actualSessionId = (message as any).session_id || sessionId;
-      }
-
-      // Stream activity events
-      if (onActivity) {
-        const msg = message as any;
-
-        if (message.type === "stream_event") {
-          const event = msg.event;
-          if (event?.type === "content_block_start" && event.content_block?.type === "thinking") {
-            accumulatedThinking = "";
-            lastThinkingLine = "";
-            onActivity("thinking...");
-          }
-          if (event?.type === "content_block_delta") {
-            const delta = event.delta;
-            if (delta?.type === "thinking_delta" && delta.thinking) {
-              accumulatedThinking += delta.thinking;
-              const lines = accumulatedThinking.split("\n");
-              if (lines.length > 1) {
-                const completeLine = lines[lines.length - 2]?.trim();
-                if (completeLine && completeLine !== lastThinkingLine) {
-                  lastThinkingLine = completeLine;
-                  onActivity(truncate(completeLine, 70));
-                }
-              }
-            }
-          }
-          if (event?.type === "content_block_stop") {
-            accumulatedThinking = "";
-            lastThinkingLine = "";
-          }
-        }
-
-        if (message.type === "tool_use_summary") {
-          const name = msg.tool_name || "tool";
-          onActivity(formatToolUse(name, msg.tool_input));
-        }
-
-        if (message.type === "tool_progress") {
-          if (msg.tool_name === "Bash" && msg.content) {
-            onActivity(`$ ${truncate(msg.content, 60)}`);
-          } else if (msg.content) {
-            onActivity(truncate(msg.content, 70));
-          }
-        }
-
-        if (message.type === "system") {
-          if (msg.subtype === "task_started" && msg.description) {
-            onActivity(truncate(msg.description, 60));
-          }
-          if (msg.subtype === "task_progress" && msg.last_tool_name) {
-            onActivity(msg.summary || msg.last_tool_name);
-          }
-        }
-      }
-
-      if (message.type === "result") {
-        if (!(message as any).is_error) {
-          agentText = (message as any).result || "";
-          terminalReason = (message as any).terminal_reason;
-        } else {
-          const errors = (message as any).errors;
-          terminalReason = (message as any).terminal_reason;
-          return {
-            agentText: "",
-            sessionId: actualSessionId,
-            terminalReason,
-            error: errors?.join(", ") || "unknown error",
-          };
-        }
-      }
-    }
-  } catch (err) {
-    if (abortReason) {
-      return {
-        agentText: "",
-        sessionId: actualSessionId,
-        terminalReason: "aborted",
-        error: abortReason,
-      };
-    }
-    throw err;
-  } finally {
-    handle.close();
-    if (activeRoom) unregisterActiveHandle(activeRoom);
-  }
-
-  if (abortReason) {
-    return {
-      agentText: "",
-      sessionId: actualSessionId,
-      terminalReason: "aborted",
-      error: abortReason,
-    };
-  }
-
-  return { agentText, sessionId: actualSessionId, terminalReason };
+  return consumeBackendRun(session, jobPrompt, onActivity, activeRoom);
 }
 
 // ---------------------------------------------------------------------------
@@ -354,27 +228,22 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
     // Model priority: job.model > agent.model > config.model
     const resolvedModel = job.model || agentModel || config.model;
 
-    const MAX_API_RETRIES = 2;
-    const RETRY_DELAYS = [3_000, 8_000]; // 3s, then 8s
-
     const jobSourceCtx: McpSourceContext = { jobName: job.name, channel: "system" };
 
-    if (config.runner === "codex") {
-      const fullPrompt = `${systemPrompt}\n\n---\n\n${jobPrompt}`;
-      output = await runJobWithCodex(fullPrompt, cwd, resolvedModel);
-    } else {
-      output = await runJobWithClaude(systemPrompt, jobPrompt, cwd, onActivity, resolvedModel, jobSourceCtx, room);
-
-      for (let attempt = 0; attempt < MAX_API_RETRIES && output.error && isRetryableApiError(output.error); attempt++) {
-        const delay = RETRY_DELAYS[attempt] ?? 8_000;
-        log.warn(
-          { job: job.name, attempt: attempt + 1, error: output.error, delayMs: delay },
-          "retrying after transient API error",
-        );
-        await sleep(delay);
-        output = await runJobWithClaude(systemPrompt, jobPrompt, cwd, onActivity, resolvedModel, jobSourceCtx, room);
-      }
-    }
+    // One context serves every backend: Claude uses the pre-built in-process
+    // mcpServers; Codex/Gemini use `source` to wire the loopback endpoint. Run
+    // across the configured backend chain so a provider-down primary fails over.
+    const sessionCtx: AgentSessionContext = {
+      room,
+      channel: "system",
+      systemPrompt,
+      cwd,
+      model: resolvedModel,
+      mcpServers: (getMcpServers(jobSourceCtx) as Record<string, unknown> | undefined) ?? undefined,
+      source: jobSourceCtx,
+      resume: false,
+    };
+    output = await runJobAcrossBackends(resolveBackends(), sessionCtx, jobPrompt, onActivity, room);
 
     const duration_ms = Math.round(performance.now() - startMs);
     const ok = !output.error;
