@@ -14,6 +14,7 @@ import { startScheduler, stopScheduler, recomputeAllNextRuns } from "./scheduler
 import { startAlive, stopAlive } from "./alive";
 import { createNiaMcpServer } from "../mcp/server";
 import { setMcpFactory } from "../mcp";
+import { startMcpEndpoint, stopMcpEndpoint } from "../agent/mcp-endpoint";
 import { processPending, cleanupOldRequests } from "./finalizer";
 import { closeAllActiveHandles } from "./active-handles";
 import { clearForceShutdownRequest, consumeForceShutdownRequest, requestForceShutdown } from "./force-shutdown";
@@ -275,6 +276,10 @@ export async function runDaemon(): Promise<void> {
   setMcpFactory((ctx) => ({ nia: createNiaMcpServer(ctx) }));
   log.info("MCP server factory initialized");
 
+  // Start the loopback MCP endpoint that out-of-process CLI backends (Codex/
+  // Gemini) connect back to for Nia's tools.
+  await startMcpEndpoint();
+
   // Register and start channels
   registerAllChannels();
   let channels: Channel[] = [];
@@ -386,6 +391,7 @@ export async function runDaemon(): Promise<void> {
 
     stopAlive();
     stopScheduler();
+    stopMcpEndpoint();
     await stopChannels(channels);
 
     try {
