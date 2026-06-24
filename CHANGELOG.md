@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0] - 2026-06-24
+
+### Added
+
+- **Harness-agnostic backends** — jobs and chat can run on Codex as well as Claude (`runner: codex`), with Codex reaching Nia's tools over a loopback MCP endpoint, behind one `AgentBackend` seam.
+- **Provider-down failover** — `fallback: [codex]` automatically answers on the next backend (jobs and chat) when the primary is down.
+
 ## [0.3.12] - 2026-06-21
 
 ### Fixed
