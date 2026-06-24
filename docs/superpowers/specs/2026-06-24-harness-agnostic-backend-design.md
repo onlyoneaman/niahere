@@ -25,6 +25,8 @@ The chosen shape — **MCP-hybrid** — is what mature systems (Hermes Agent, Go
 
 **Spike-confirmed (2026-06-24, real binaries):** Codex (`[mcp_servers.*]` TOML, stdio + Streamable HTTP) and Gemini (`settings.json` `mcpServers`, `httpUrl` + `headers` Bearer) are both first-class MCP clients that connect to a host-provided MCP server. Codex emits `--json` JSONL events; Gemini emits `--output-format stream-json` JSONL events — both normalize cleanly to `AgentEvent`.
 
+**Round-trip CONFIRMED end-to-end (real codex 0.142.0):** a loopback Streamable-HTTP MCP endpoint on `@modelcontextprotocol/sdk@1.27.1`'s `WebStandardStreamableHTTPServerTransport` + `Bun.serve` works. `codex exec -c mcp_servers.nia.url=… -c mcp_servers.nia.bearer_token_env_var=…` connected, the endpoint validated the `Authorization: Bearer` header, the tool handler ran **in-process**, and codex returned the result. The Phase 2 mechanism is verified, not assumed.
+
 ## The design principle (the no-weird-patches rule)
 
 **The orchestrator speaks only `AgentEvent` and treats the backend session id as opaque. Everything backend-specific lives inside one adapter.** Concretely the interface guarantees:
