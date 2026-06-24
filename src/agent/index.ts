@@ -9,4 +9,4 @@ export type {
   Normalizer,
 } from "./types";
 export { isResultEvent } from "./types";
-export { getBackend } from "./registry";
+export { getBackend, setBackend } from "./registry";

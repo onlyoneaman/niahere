@@ -51,7 +51,7 @@ export type AgentEvent =
        *  Opaque to the orchestrator. */
       metadata?: Record<string, unknown>;
     }
-  | { type: "error"; message: string; retryable: boolean; providerDown: boolean };
+  | { type: "error"; message: string; retryable: boolean; providerDown: boolean; terminalReason?: string };
 
 export function isResultEvent(ev: AgentEvent): ev is Extract<AgentEvent, { type: "result" }> {
   return ev.type === "result";

@@ -135,6 +135,7 @@ export class SdkNormalizer implements Normalizer {
       message: raw,
       retryable: isRetryableApiError(raw),
       providerDown: isProviderDownError(raw),
+      terminalReason: msg.terminal_reason,
     };
   }
 }

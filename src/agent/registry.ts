@@ -10,8 +10,15 @@ import { ClaudeBackend } from "./backends/claude";
  * a role/per-job selector; Phase 3 adds the ordered-fallback failover list.
  */
 let claudeBackend: ClaudeBackend | null = null;
+let override: AgentBackend | null = null;
 
 export function getBackend(_name?: "claude" | "codex" | "gemini"): AgentBackend {
+  if (override) return override;
   if (!claudeBackend) claudeBackend = new ClaudeBackend();
   return claudeBackend;
+}
+
+/** Test seam: force `getBackend()` to return a specific backend; pass null to reset. */
+export function setBackend(backend: AgentBackend | null): void {
+  override = backend;
 }

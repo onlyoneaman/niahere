@@ -1,7 +1,6 @@
 import { homedir } from "os";
 import { existsSync } from "fs";
 import { randomUUID } from "crypto";
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { JobInput, JobResult } from "../types";
 import { appendAudit, readState, writeState } from "../utils/logger";
 import type { AuditEntry, JobState } from "../types";
@@ -11,14 +10,12 @@ import { buildEmployeePrompt } from "../chat/employee-prompt";
 import { getEmployee } from "./employees";
 import { scanAgents } from "./agents";
 import { buildJobPrompt } from "./job-prompt";
-import { truncate, formatToolUse } from "../utils/format-activity";
 import { getMcpServers, type McpSourceContext } from "../mcp";
 import { ActiveEngine } from "../db/models";
 import { log } from "../utils/log";
 import { isRetryableApiError, sleep } from "../utils/retry";
 import { registerActiveHandle, unregisterActiveHandle } from "./active-handles";
-import { getSdkSkillsSetting } from "./skills";
-import { getSdkHooks } from "./sdk-hooks";
+import { getBackend } from "../agent";
 
 export { buildWorkingMemory } from "./job-prompt";
 
@@ -66,9 +63,7 @@ async function runJobWithCodex(fullPrompt: string, cwd: string, model: string): 
     "TWILIO_AUTH_TOKEN",
     "DATABASE_URL",
   ]);
-  const codexEnv = Object.fromEntries(
-    Object.entries(process.env).filter(([k]) => !CODEX_EXCLUDED.has(k))
-  );
+  const codexEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !CODEX_EXCLUDED.has(k)));
 
   const proc = Bun.spawn(args, {
     stdout: "pipe",
@@ -118,155 +113,62 @@ export async function runJobWithClaude(
   sourceCtx?: McpSourceContext,
   activeRoom?: string,
 ): Promise<RunnerOutput> {
-  const sessionId = randomUUID();
-
-  // One-shot async iterable: emit a single user message then close
-  async function* singleMessage() {
-    yield {
-      type: "user" as const,
-      message: { role: "user" as const, content: jobPrompt },
-      parent_tool_use_id: null,
-      session_id: "",
-    };
-  }
-
-  const options: Record<string, unknown> = {
+  const mcpServers = (getMcpServers(sourceCtx) as Record<string, unknown> | undefined) ?? undefined;
+  const session = await getBackend().openSession({
+    room: activeRoom ?? `_oneshot/${randomUUID()}`,
+    channel: "system",
     systemPrompt,
     cwd,
-    permissionMode: "bypassPermissions",
-    sessionId,
-    skills: getSdkSkillsSetting(),
-    hooks: getSdkHooks(),
-  };
-
-  if (model && model !== "default") {
-    options.model = model;
-  }
-
-  const mcpServers = getMcpServers(sourceCtx);
-  if (mcpServers) {
-    options.mcpServers = mcpServers;
-  }
-
-  const handle = query({
-    prompt: singleMessage() as any,
-    options: options as any,
+    model,
+    mcpServers,
+    source: sourceCtx,
+    resume: false,
   });
+
   let abortReason: string | null = null;
   if (activeRoom) {
     registerActiveHandle(activeRoom, (reason) => {
       abortReason = reason;
-      handle.close();
+      session.abort(reason);
     });
   }
 
   let agentText = "";
-  let actualSessionId = sessionId;
   let terminalReason: string | undefined;
-  let accumulatedThinking = "";
-  let lastThinkingLine = "";
+  let error: string | undefined;
 
   try {
-    for await (const message of handle) {
-      if (message.type === "system" && (message as any).subtype === "init") {
-        actualSessionId = (message as any).session_id || sessionId;
-      }
-
-      // Stream activity events
-      if (onActivity) {
-        const msg = message as any;
-
-        if (message.type === "stream_event") {
-          const event = msg.event;
-          if (event?.type === "content_block_start" && event.content_block?.type === "thinking") {
-            accumulatedThinking = "";
-            lastThinkingLine = "";
-            onActivity("thinking...");
-          }
-          if (event?.type === "content_block_delta") {
-            const delta = event.delta;
-            if (delta?.type === "thinking_delta" && delta.thinking) {
-              accumulatedThinking += delta.thinking;
-              const lines = accumulatedThinking.split("\n");
-              if (lines.length > 1) {
-                const completeLine = lines[lines.length - 2]?.trim();
-                if (completeLine && completeLine !== lastThinkingLine) {
-                  lastThinkingLine = completeLine;
-                  onActivity(truncate(completeLine, 70));
-                }
-              }
-            }
-          }
-          if (event?.type === "content_block_stop") {
-            accumulatedThinking = "";
-            lastThinkingLine = "";
-          }
-        }
-
-        if (message.type === "tool_use_summary") {
-          const name = msg.tool_name || "tool";
-          onActivity(formatToolUse(name, msg.tool_input));
-        }
-
-        if (message.type === "tool_progress") {
-          if (msg.tool_name === "Bash" && msg.content) {
-            onActivity(`$ ${truncate(msg.content, 60)}`);
-          } else if (msg.content) {
-            onActivity(truncate(msg.content, 70));
-          }
-        }
-
-        if (message.type === "system") {
-          if (msg.subtype === "task_started" && msg.description) {
-            onActivity(truncate(msg.description, 60));
-          }
-          if (msg.subtype === "task_progress" && msg.last_tool_name) {
-            onActivity(msg.summary || msg.last_tool_name);
-          }
-        }
-      }
-
-      if (message.type === "result") {
-        if (!(message as any).is_error) {
-          agentText = (message as any).result || "";
-          terminalReason = (message as any).terminal_reason;
-        } else {
-          const errors = (message as any).errors;
-          terminalReason = (message as any).terminal_reason;
-          return {
-            agentText: "",
-            sessionId: actualSessionId,
-            terminalReason,
-            error: errors?.join(", ") || "unknown error",
-          };
-        }
+    for await (const ev of session.send(jobPrompt)) {
+      if (ev.type === "thinking") onActivity?.(ev.delta);
+      else if (ev.type === "tool") onActivity?.(ev.summary ?? ev.name);
+      else if (ev.type === "result") {
+        agentText = ev.text;
+        terminalReason = ev.metadata?.terminal_reason as string | undefined;
+      } else if (ev.type === "error") {
+        error = ev.message;
+        terminalReason = ev.terminalReason;
       }
     }
   } catch (err) {
     if (abortReason) {
       return {
         agentText: "",
-        sessionId: actualSessionId,
+        sessionId: session.backendSessionId ?? "",
         terminalReason: "aborted",
         error: abortReason,
       };
     }
     throw err;
   } finally {
-    handle.close();
+    await session.close();
     if (activeRoom) unregisterActiveHandle(activeRoom);
   }
 
   if (abortReason) {
-    return {
-      agentText: "",
-      sessionId: actualSessionId,
-      terminalReason: "aborted",
-      error: abortReason,
-    };
+    return { agentText: "", sessionId: session.backendSessionId ?? "", terminalReason: "aborted", error: abortReason };
   }
 
-  return { agentText, sessionId: actualSessionId, terminalReason };
+  return { agentText, sessionId: session.backendSessionId ?? "", terminalReason, error };
 }
 
 // ---------------------------------------------------------------------------
