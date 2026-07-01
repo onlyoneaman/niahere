@@ -141,7 +141,10 @@ export async function accumulateMetadata(id: string, resultMeta: Record<string, 
     }
   }
 
-  const delta = JSON.stringify({
+  // Bind deltas as jsonb via sql.json — pre-stringifying would store a
+  // double-encoded string scalar, making every `->>` extraction return NULL
+  // and silently zeroing all accumulated totals.
+  const delta = sql.json({
     total_cost_usd: (resultMeta.cost_usd as number) || 0,
     total_turns: (resultMeta.turns as number) || 0,
     total_duration_ms: (resultMeta.duration_ms as number) || 0,
@@ -152,22 +155,23 @@ export async function accumulateMetadata(id: string, resultMeta: Record<string, 
     total_cache_creation_tokens: cacheCreationTokens,
     message_count: 1,
     models_used: newModels,
-    channel: resultMeta.channel || null,
+    channel: (resultMeta.channel as string) || null,
   });
+  const modelsDelta = sql.json(newModels);
 
   // Atomic accumulate — no read-then-write race
   await sql`
     UPDATE sessions SET metadata = jsonb_build_object(
-      'total_cost_usd',              COALESCE((metadata->>'total_cost_usd')::real, 0)              + (${delta}::jsonb->>'total_cost_usd')::real,
-      'total_turns',                  COALESCE((metadata->>'total_turns')::int, 0)                  + (${delta}::jsonb->>'total_turns')::int,
-      'total_duration_ms',            COALESCE((metadata->>'total_duration_ms')::real, 0)            + (${delta}::jsonb->>'total_duration_ms')::real,
-      'total_duration_api_ms',        COALESCE((metadata->>'total_duration_api_ms')::real, 0)        + (${delta}::jsonb->>'total_duration_api_ms')::real,
-      'total_input_tokens',           COALESCE((metadata->>'total_input_tokens')::int, 0)            + (${delta}::jsonb->>'total_input_tokens')::int,
-      'total_output_tokens',          COALESCE((metadata->>'total_output_tokens')::int, 0)           + (${delta}::jsonb->>'total_output_tokens')::int,
-      'total_cache_read_tokens',      COALESCE((metadata->>'total_cache_read_tokens')::int, 0)       + (${delta}::jsonb->>'total_cache_read_tokens')::int,
-      'total_cache_creation_tokens',  COALESCE((metadata->>'total_cache_creation_tokens')::int, 0)   + (${delta}::jsonb->>'total_cache_creation_tokens')::int,
+      'total_cost_usd',              COALESCE((metadata->>'total_cost_usd')::real, 0)              + (${delta}->>'total_cost_usd')::real,
+      'total_turns',                  COALESCE((metadata->>'total_turns')::int, 0)                  + (${delta}->>'total_turns')::int,
+      'total_duration_ms',            COALESCE((metadata->>'total_duration_ms')::real, 0)            + (${delta}->>'total_duration_ms')::real,
+      'total_duration_api_ms',        COALESCE((metadata->>'total_duration_api_ms')::real, 0)        + (${delta}->>'total_duration_api_ms')::real,
+      'total_input_tokens',           COALESCE((metadata->>'total_input_tokens')::int, 0)            + (${delta}->>'total_input_tokens')::int,
+      'total_output_tokens',          COALESCE((metadata->>'total_output_tokens')::int, 0)           + (${delta}->>'total_output_tokens')::int,
+      'total_cache_read_tokens',      COALESCE((metadata->>'total_cache_read_tokens')::int, 0)       + (${delta}->>'total_cache_read_tokens')::int,
+      'total_cache_creation_tokens',  COALESCE((metadata->>'total_cache_creation_tokens')::int, 0)   + (${delta}->>'total_cache_creation_tokens')::int,
       'message_count',                COALESCE((metadata->>'message_count')::int, 0)                 + 1,
-      'models_used',                  COALESCE(metadata->'models_used', '[]'::jsonb) || ${JSON.stringify(newModels)}::jsonb,
+      'models_used',                  COALESCE(metadata->'models_used', '[]'::jsonb) || ${modelsDelta},
       'channel',                      COALESCE(metadata->>'channel', ${(resultMeta.channel as string) || null})
     )
     WHERE id = ${id}

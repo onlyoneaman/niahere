@@ -4,10 +4,15 @@ import type { SaveMessageParams, RoomStats, RecentMessage, SearchResult, Session
 
 export type DeliveryStatus = "pending" | "sent" | "failed";
 
-export async function save(params: SaveMessageParams & { deliveryStatus?: DeliveryStatus; metadata?: Record<string, unknown> }): Promise<number> {
+export async function save(
+  params: SaveMessageParams & { deliveryStatus?: DeliveryStatus; metadata?: Record<string, unknown> },
+): Promise<number> {
   const sql = getSql();
   const status = params.deliveryStatus || "sent";
-  const meta = params.metadata ? JSON.stringify(params.metadata) : null;
+  // Pass the object straight through: the postgres driver serializes it to a
+  // real jsonb object. Pre-stringifying stores a double-encoded string scalar,
+  // which silently breaks every `metadata->>'key'` filter (e.g. notifications).
+  const meta = params.metadata ? sql.json(params.metadata as Parameters<typeof sql.json>[0]) : null;
   const rows = await sql`
     INSERT INTO messages (session_id, room, sender, content, is_from_agent, delivery_status, metadata)
     VALUES (${params.sessionId}, ${params.room}, ${params.sender}, ${params.content}, ${params.isFromAgent}, ${status}, ${meta})
@@ -21,7 +26,9 @@ export async function updateDeliveryStatus(id: number, status: DeliveryStatus): 
   await sql`UPDATE messages SET delivery_status = ${status} WHERE id = ${id}`;
 }
 
-export async function getUndelivered(room?: string): Promise<Array<{ id: number; room: string; content: string; createdAt: string }>> {
+export async function getUndelivered(
+  room?: string,
+): Promise<Array<{ id: number; room: string; content: string; createdAt: string }>> {
   const sql = getSql();
   const rows = room
     ? await sql`

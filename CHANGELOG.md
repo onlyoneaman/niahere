@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.3] - 2026-07-01
+
+### Fixed
+
+- **Double-encoded jsonb metadata** — message/session metadata was `JSON.stringify`'d before the Postgres driver (which already serializes), storing a string scalar instead of an object; this silently broke every `metadata->>'key'` filter, so proactive-notification DM context injection never fired and per-session cost/token totals stayed NULL.
+
 ## [0.4.2] - 2026-06-24
 
 ### Changed

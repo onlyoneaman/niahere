@@ -154,6 +154,93 @@ describe("Message model", () => {
       expect(s).toHaveProperty("lastActivity");
     }
   });
+
+  test("save stores metadata as a queryable jsonb object, not a double-encoded string", async () => {
+    const sql = getSql();
+    const sessionId = `test-meta-${Date.now()}`;
+    await Session.create(sessionId, TEST_ROOM);
+
+    await Message.save({
+      sessionId,
+      room: TEST_ROOM,
+      sender: "nia",
+      content: "notification body",
+      isFromAgent: true,
+      metadata: { kind: "notification", source: "job:test" },
+    });
+
+    // The column must hold a real object so `metadata->>'key'` works — a
+    // double-encoded string scalar silently breaks every metadata filter.
+    const [row] = await sql`
+      SELECT jsonb_typeof(metadata) AS type, metadata->>'kind' AS kind
+      FROM messages WHERE session_id = ${sessionId}
+    `;
+    expect(row.type).toBe("object");
+    expect(row.kind).toBe("notification");
+  });
+});
+
+describe("Session.accumulateMetadata", () => {
+  test("accumulates usage totals as queryable numbers across turns", async () => {
+    const sql = getSql();
+    const id = `test-accum-${Date.now()}`;
+    await Session.create(id, TEST_ROOM);
+
+    const meta = (cost: number, turns: number) => ({
+      cost_usd: cost,
+      turns,
+      channel: "slack",
+      model_usage: { "claude-sonnet-5": { inputTokens: 10, outputTokens: 5 } },
+    });
+    await Session.accumulateMetadata(id, meta(0.25, 1));
+    await Session.accumulateMetadata(id, meta(0.3, 2));
+
+    const [row] = await sql`
+      SELECT
+        (metadata->>'total_cost_usd')::real AS cost,
+        (metadata->>'total_turns')::int AS turns,
+        (metadata->>'total_input_tokens')::int AS input,
+        (metadata->>'message_count')::int AS msgs,
+        metadata->>'channel' AS channel
+      FROM sessions WHERE id = ${id}
+    `;
+    // Totals must be real numbers, not NULL — double-encoded deltas zero these.
+    expect(row.cost).toBeCloseTo(0.55, 5);
+    expect(row.turns).toBe(3);
+    expect(row.input).toBe(20);
+    expect(row.msgs).toBe(2);
+    expect(row.channel).toBe("slack");
+  });
+});
+
+describe("Message.getRecentNotifications", () => {
+  const NOTIF_PREFIX = `test-notif-${Date.now()}`;
+  const NOTIF_ROOM = `${NOTIF_PREFIX}-1`;
+
+  afterAll(async () => {
+    const sql = getSql();
+    await sql`DELETE FROM messages WHERE room = ${NOTIF_ROOM}`;
+    await sql`DELETE FROM sessions WHERE room = ${NOTIF_ROOM}`;
+  });
+
+  test("returns proactive notifications so a flat reply keeps context", async () => {
+    const sessionId = `test-notif-session-${Date.now()}`;
+    await Session.create(sessionId, NOTIF_ROOM);
+
+    await Message.save({
+      sessionId,
+      room: NOTIF_ROOM,
+      sender: "nia",
+      content: "Claude Sonnet 5 is GA",
+      isFromAgent: true,
+      metadata: { kind: "notification", source: "job:scout" },
+    });
+
+    const notifications = await Message.getRecentNotifications(NOTIF_PREFIX);
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]!.content).toBe("Claude Sonnet 5 is GA");
+    expect(notifications[0]!.source).toBe("job:scout");
+  });
 });
 
 describe("Session.listRecent", () => {
