@@ -171,7 +171,8 @@ export async function accumulateMetadata(id: string, resultMeta: Record<string, 
       'total_cache_read_tokens',      COALESCE((metadata->>'total_cache_read_tokens')::int, 0)       + (${delta}->>'total_cache_read_tokens')::int,
       'total_cache_creation_tokens',  COALESCE((metadata->>'total_cache_creation_tokens')::int, 0)   + (${delta}->>'total_cache_creation_tokens')::int,
       'message_count',                COALESCE((metadata->>'message_count')::int, 0)                 + 1,
-      'models_used',                  COALESCE(metadata->'models_used', '[]'::jsonb) || ${modelsDelta},
+      'models_used',                  (SELECT COALESCE(jsonb_agg(DISTINCT e), '[]'::jsonb)
+                                         FROM jsonb_array_elements(COALESCE(metadata->'models_used', '[]'::jsonb) || ${modelsDelta}) AS e),
       'channel',                      COALESCE(metadata->>'channel', ${(resultMeta.channel as string) || null})
     )
     WHERE id = ${id}

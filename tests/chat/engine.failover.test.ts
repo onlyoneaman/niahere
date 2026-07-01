@@ -67,4 +67,36 @@ describe("chat failover", () => {
     const rows = await getSql()`SELECT sender, content FROM messages WHERE session_id = ${sid} ORDER BY id`;
     expect(rows.map((r: any) => r.sender)).toEqual(["user", "nia"]);
   });
+
+  test("failover re-saves the user turn when the primary established a session before going down", async () => {
+    const sid1 = `${PREFIX}-down-1`;
+    const sid2 = `${PREFIX}-up-2`;
+    setBackendChain([
+      // Primary opens a session, then goes provider-down mid-turn — this sets
+      // userSaved=true under sid1 before failover.
+      fakeBackend("claude", [
+        { type: "session", backendSessionId: sid1 },
+        { type: "error", message: "", retryable: false, providerDown: true },
+      ]),
+      fakeBackend("codex", [
+        { type: "session", backendSessionId: sid2 },
+        {
+          type: "result",
+          text: "answered by codex",
+          usage: { tokens: { input: 1, output: 1 } },
+          backendSessionId: sid2,
+        },
+      ]),
+    ]);
+
+    const { createChatEngine } = await import("../../src/chat/engine");
+    const engine = await createChatEngine({ room: `${PREFIX}-down-room`, channel: "test", resume: false });
+    await engine.send("my question");
+
+    // The failed-over session must carry the user's question, not just the reply.
+    const { getSql } = await import("../../src/db/connection");
+    const rows = await getSql()`SELECT sender, content FROM messages WHERE session_id = ${sid2} ORDER BY id`;
+    expect(rows.map((r: any) => r.sender)).toEqual(["user", "nia"]);
+    expect(rows[0].content).toBe("my question");
+  });
 });

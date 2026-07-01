@@ -37,11 +37,10 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
   const { room, channel, resume, mcpServers } = opts;
   let systemPrompt = buildSystemPrompt("chat", channel);
 
-  // Inject recent session summaries for continuity
+  // Recent session summaries for continuity. Appended AFTER persona selection
+  // below — the employee/agent branches replace systemPrompt wholesale, so
+  // injecting here would be discarded for those contexts.
   const sessionContext = await getSessionContext(room);
-  if (sessionContext) {
-    systemPrompt += "\n\n" + sessionContext;
-  }
 
   // Context overrides: employee > agent > job > default
   let cwd = homedir();
@@ -84,6 +83,11 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
       const source = resolvedPrompt.source === "file" ? ` from ${resolvedPrompt.filePath}` : "";
       systemPrompt += `\n\n## Job Context\nYou are chatting in the context of job "${jobData.name}" (schedule: ${jobData.schedule}).\n\nJob prompt (${resolvedPrompt.source}${source}):\n${resolvedPrompt.prompt}`;
     }
+  }
+
+  // Continuity summaries — appended after persona so employee/agent contexts keep them.
+  if (sessionContext) {
+    systemPrompt += "\n\n" + sessionContext;
   }
 
   // Watch mode: inject behavior into system prompt
@@ -312,6 +316,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
           log.warn({ room, to: backends[backendIndex]!.name }, "chat provider down, failing over to next backend");
           await teardown(); // close the dead session so ensureSession opens the next backend
           sessionId = null; // a cross-backend session id is meaningless; start fresh
+          userSaved = false; // re-save the user turn under the new backend's session
           continue;
         }
         break;

@@ -40,10 +40,10 @@ async function tick(): Promise<void> {
 
   for (const job of dueJobs) {
     if (!job.always && !isWithinActiveHours()) {
-      try {
-        const nextRun = computeNextRun(job.scheduleType, job.schedule, config.timezone, new Date());
-        if (nextRun) await Job.markRun(job.name, nextRun).catch(() => {});
-      } catch {}
+      // Leave next_run_at untouched so the job stays due and fires as soon as
+      // active hours resume. Rescheduling here would advance a cron job whose
+      // only fire time sits outside the window to the next (also-outside)
+      // occurrence — starving it forever.
       log.info({ job: job.name }, "scheduler: skipping — outside active hours");
       continue;
     }

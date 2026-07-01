@@ -26,31 +26,6 @@ export async function updateDeliveryStatus(id: number, status: DeliveryStatus): 
   await sql`UPDATE messages SET delivery_status = ${status} WHERE id = ${id}`;
 }
 
-export async function getUndelivered(
-  room?: string,
-): Promise<Array<{ id: number; room: string; content: string; createdAt: string }>> {
-  const sql = getSql();
-  const rows = room
-    ? await sql`
-        SELECT id, room, content, created_at
-        FROM messages
-        WHERE delivery_status = 'failed' AND is_from_agent = true AND room = ${room}
-        ORDER BY created_at ASC
-      `
-    : await sql`
-        SELECT id, room, content, created_at
-        FROM messages
-        WHERE delivery_status = 'failed' AND is_from_agent = true
-        ORDER BY created_at ASC
-      `;
-  return rows.map((r) => ({
-    id: r.id,
-    room: r.room,
-    content: r.content,
-    createdAt: String(r.created_at),
-  }));
-}
-
 export async function getRecent(limit = 20, room?: string): Promise<RecentMessage[]> {
   const sql = getSql();
   const rows = room

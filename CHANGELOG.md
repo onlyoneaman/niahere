@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.4] - 2026-07-01
+
+### Fixed
+
+- **Failover dropped the user's turn** — a provider-down failover nulled the session but not the "already saved" flag, so the fallback session stored Nia's reply with no question and was never summarized; the turn is now re-saved under the new session.
+- **Employee/agent chats lost continuity** — those personas overwrote the system prompt after summaries were injected, discarding them; summaries are now appended after persona selection for all contexts.
+- **SMS/WhatsApp silently swallowed send failures** — outbound errors (and WhatsApp's 24h-window / missing-creds drops) now propagate, so `send_message` reports "Failed to send" instead of falsely claiming delivery.
+- **Cron jobs starved outside narrowed active hours** — a cron job whose only fire time sat outside the window was rescheduled to the next (also-outside) occurrence forever; it now stays due and fires when active hours resume.
+- **`models_used` grew unbounded** — session metadata appended the model list every turn with no dedup; now stored as a distinct set.
+
+### Removed
+
+- **Dead `getUndelivered` query** — the failed-delivery queue had no readers.
+
 ## [0.4.3] - 2026-07-01
 
 ### Fixed

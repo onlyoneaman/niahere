@@ -201,7 +201,8 @@ describe("Session.accumulateMetadata", () => {
         (metadata->>'total_turns')::int AS turns,
         (metadata->>'total_input_tokens')::int AS input,
         (metadata->>'message_count')::int AS msgs,
-        metadata->>'channel' AS channel
+        metadata->>'channel' AS channel,
+        metadata->'models_used' AS models
       FROM sessions WHERE id = ${id}
     `;
     // Totals must be real numbers, not NULL — double-encoded deltas zero these.
@@ -210,6 +211,8 @@ describe("Session.accumulateMetadata", () => {
     expect(row.input).toBe(20);
     expect(row.msgs).toBe(2);
     expect(row.channel).toBe("slack");
+    // Same model across turns must dedup, not accumulate one entry per message.
+    expect(row.models).toEqual(["claude-sonnet-5"]);
   });
 });
 

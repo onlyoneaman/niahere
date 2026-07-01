@@ -131,8 +131,7 @@ class SmsChannel implements Channel {
 
   private async sendTo(remoteE164: string, body: string): Promise<void> {
     if (!this.twilio.sid || !this.twilio.secret) {
-      log.warn("sms: twilio sid/secret missing, cannot send");
-      return;
+      throw new Error("sms: twilio sid/secret missing, cannot send");
     }
     try {
       const res = await twilioSendMessage({
@@ -147,6 +146,10 @@ class SmsChannel implements Channel {
       log.info({ to: remoteE164, sid: res.messageSid, status: res.status }, "sms: sent");
     } catch (err) {
       log.error({ err, to: remoteE164 }, "sms: send failed");
+      // Rethrow so deliver() propagates the failure: the inbound handler falls
+      // back to an error reply, and the send_message tool reports "Failed to
+      // send" instead of falsely claiming delivery.
+      throw err;
     }
   }
 

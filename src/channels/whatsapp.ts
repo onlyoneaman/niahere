@@ -121,7 +121,10 @@ class WhatsAppChannel implements Channel {
       const state = await this.getState(from);
       chainLock(state, async () => {
         const newState = await this.restartChat(from);
-        await this.sendTextTo(from, `New conversation started (room ${this.roomPrefix(from)}-${newState.roomIndex}).`);
+        await this.sendTextTo(
+          from,
+          `New conversation started (room ${this.roomPrefix(from)}-${newState.roomIndex}).`,
+        ).catch((err) => log.warn({ err, from }, "whatsapp: failed to send reset confirmation"));
       });
       return new Response(EMPTY_TWIML, { status: 200, headers: { "Content-Type": "text/xml" } });
     }
@@ -231,7 +234,7 @@ class WhatsAppChannel implements Channel {
   // --- Outbound ---
 
   private async sendTextTo(remoteE164: string, body: string): Promise<void> {
-    if (!this.canSend(remoteE164)) return;
+    if (!this.canSend(remoteE164)) throw new Error("whatsapp: cannot send (missing creds or outside 24h window)");
     const converted = toWhatsAppMarkdown(body);
     const chunks = chunkText(converted, CHUNK_LIMIT);
     for (const chunk of chunks) {
@@ -240,14 +243,14 @@ class WhatsAppChannel implements Channel {
   }
 
   private async sendMediaTo(remoteE164: string, data: Buffer, mimeType: string, filename?: string): Promise<void> {
-    if (!this.canSend(remoteE164)) return;
+    if (!this.canSend(remoteE164)) throw new Error("whatsapp: cannot send (missing creds or outside 24h window)");
     const ext = filename ? extOf(filename) : undefined;
     let mediaUrl: string;
     try {
       mediaUrl = await getTwilioServer().serveMedia(new Uint8Array(data), mimeType, ext);
     } catch (err) {
       log.error({ err }, "whatsapp: serveMedia failed");
-      return;
+      throw err;
     }
     await this.postMessage(remoteE164, "", [mediaUrl]);
   }
