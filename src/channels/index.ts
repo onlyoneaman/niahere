@@ -1,5 +1,5 @@
 import type { Channel } from "../types";
-import { registerChannel, getFactories, trackStarted, clearStarted } from "./registry";
+import { registerChannel, getFactories, trackStarted, clearStarted, getStarted } from "./registry";
 import { log } from "../utils/log";
 import { getConfig } from "../utils/config";
 import { createTelegramChannel } from "./telegram";
@@ -25,10 +25,12 @@ export interface StartResult {
   failed: string[];
 }
 
-export async function startChannels(): Promise<StartResult> {
+export async function startChannels(only?: readonly string[]): Promise<StartResult> {
+  const onlySet = only ? new Set(only) : null;
   const pending = getFactories()
     .map((factory) => factory())
-    .filter((ch): ch is Channel => ch !== null);
+    .filter((ch): ch is Channel => ch !== null)
+    .filter((ch) => onlySet === null || onlySet.has(ch.name));
 
   if (pending.length === 0) return { started: [], failed: [] };
 
@@ -58,6 +60,42 @@ export async function startChannels(): Promise<StartResult> {
   }
 
   return { started, failed };
+}
+
+/**
+ * Bring the running channel set back in line with configuration. Starts any
+ * configured-but-not-running channels and stops any running-but-unconfigured
+ * ones. A no-op when already in sync, so it is safe to call on a timer.
+ *
+ * This is the recovery path for the boot-time race where channels fail to
+ * start because Postgres isn't ready yet (channel `.start()` reads the DB):
+ * `startChannels` abandons the failed channels with no retry, so without
+ * reconciliation Nia stays alive but deaf on every channel until a manual
+ * restart. The alive monitor calls this every healthy heartbeat.
+ */
+export async function reconcileChannels(): Promise<StartResult> {
+  const wanted = getConfiguredChannelNames();
+  const running = getStarted();
+  const runningNames = new Set(running.map((ch) => ch.name));
+  const wantedSet = new Set(wanted);
+
+  const missing = wanted.filter((name) => !runningNames.has(name));
+  const extra = running.filter((ch) => !wantedSet.has(ch.name));
+  if (missing.length === 0 && extra.length === 0) return { started: [], failed: [] };
+
+  log.warn({ missing, extra: extra.map((ch) => ch.name) }, "channels out of sync, reconciling");
+
+  // A channel was removed from config. stopChannels() tears down the whole
+  // registry (it stops the shared Twilio server and clears all tracking), so a
+  // partial stop isn't possible — rebuild the full configured set instead.
+  if (extra.length > 0) {
+    await stopChannels(running);
+    return wanted.length > 0 ? startChannels() : { started: [], failed: [] };
+  }
+
+  // Only additions: start just the missing channels so healthy ones stay
+  // connected and one persistently-failing channel can't thrash the rest.
+  return startChannels(missing);
 }
 
 export function getConfiguredChannelNames(): string[] {

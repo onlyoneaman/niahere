@@ -1,6 +1,7 @@
 import { log } from "../utils/log";
 import { getConfig } from "../utils/config";
 import { getSql, closeDb } from "../db/connection";
+import { reconcileChannels } from "../channels";
 import { getFailures, type Check } from "./health";
 
 const HEARTBEAT_INTERVAL = 60_000; // 60s
@@ -164,6 +165,23 @@ async function runRecoveryAgent(failures: Check[]): Promise<{ recovered: boolean
   }
 }
 
+/**
+ * Restart any configured channel that isn't currently running. Only acts when
+ * the running set drifts from config (the boot-time postgres race is the common
+ * cause), and notifies the user once when it recovers channels.
+ */
+async function reconcileDeadChannels(): Promise<void> {
+  try {
+    const { started } = await reconcileChannels();
+    if (started.length > 0) {
+      log.warn({ started }, "alive: restarted dead channels");
+      await notifyUser(`Channels were down and have been restarted: ${started.join(", ")}.`);
+    }
+  } catch (err) {
+    log.warn({ err }, "alive: channel reconcile failed");
+  }
+}
+
 async function heartbeat(): Promise<void> {
   const failures = await getFailures();
   const failureNames = failures.map((f) => f.name);
@@ -176,6 +194,10 @@ async function heartbeat(): Promise<void> {
     }
     lastFailures = [];
     recoveryAttempted = false;
+    // The DB is healthy, so any channel that failed to start (e.g. it lost the
+    // boot-time race against Postgres) can be brought back now. No-op when the
+    // running channels already match config.
+    await reconcileDeadChannels();
     return;
   }
 

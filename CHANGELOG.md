@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.5] - 2026-07-08
+
+### Fixed
+
+- **Nia went deaf after every reboot** — channels that failed to start against a not-yet-ready Postgres were abandoned with no retry, leaving Nia alive but unreachable on every channel until a manual restart; the alive monitor now restarts any missing channel each heartbeat, recovering within ~60s.
+
+### Changed
+
+- **Channel reconcile unified** — the SIGHUP handler's hand-rolled reconcile logic now shares the single `reconcileChannels` used by the alive monitor, and it restarts only missing channels instead of tearing down healthy ones.
+
 ## [0.4.4] - 2026-07-01
 
 ### Fixed

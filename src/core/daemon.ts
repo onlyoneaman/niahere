@@ -8,8 +8,7 @@ import { isRunning, readPid, removePid, writePid } from "../utils/pid";
 import { ActiveEngine, Job } from "../db/models";
 import { runMigrations } from "../db/migrate";
 import { closeDb, getSql } from "../db/connection";
-import { registerAllChannels, startChannels, stopChannels, getStarted, getConfiguredChannelNames } from "../channels";
-import type { Channel } from "../types";
+import { registerAllChannels, startChannels, stopChannels, getStarted, reconcileChannels } from "../channels";
 import { startScheduler, stopScheduler, recomputeAllNextRuns } from "./scheduler";
 import { startAlive, stopAlive } from "./alive";
 import { createNiaMcpServer } from "../mcp/server";
@@ -282,13 +281,13 @@ export async function runDaemon(): Promise<void> {
   // composition root) so the endpoint module stays free of the handler chain.
   await startMcpEndpoint(NIA_TOOLS);
 
-  // Register and start channels
+  // Register and start channels. The running set is tracked in the channel
+  // registry (getStarted()); the alive monitor reconciles it if any channel
+  // fails to start (e.g. it lost the boot-time race against Postgres).
   registerAllChannels();
-  let channels: Channel[] = [];
   const config = getConfig();
   if (config.channels.enabled) {
-    const result = await startChannels();
-    channels = result.started;
+    await startChannels();
   } else {
     log.info("channels disabled (channels_enabled: false)");
   }
@@ -353,32 +352,7 @@ export async function runDaemon(): Promise<void> {
   process.on("SIGHUP", async () => {
     log.info("received SIGHUP, reloading config");
     resetConfig();
-
-    const running = getStarted();
-    const wantedNames = getConfiguredChannelNames();
-    const runningNames = running.map((channel) => channel.name).sort();
-    const wantChannels = wantedNames.length > 0;
-    const haveChannels = running.length > 0;
-    const needsReconcile =
-      wantChannels &&
-      haveChannels &&
-      (wantedNames.length !== runningNames.length || wantedNames.sort().some((name, i) => name !== runningNames[i]));
-
-    if (wantChannels && !haveChannels) {
-      log.info("SIGHUP: starting channels");
-      const result = await startChannels();
-      channels = result.started;
-    } else if (!wantChannels && haveChannels) {
-      log.info("SIGHUP: stopping channels");
-      await stopChannels(running);
-      channels = [];
-    } else if (needsReconcile) {
-      log.info({ wantedNames, runningNames }, "SIGHUP: reconciling channels");
-      await stopChannels(running);
-      const result = await startChannels();
-      channels = result.started;
-    }
-
+    await reconcileChannels();
     await recomputeAllNextRuns().catch(() => {});
   });
 
@@ -394,7 +368,7 @@ export async function runDaemon(): Promise<void> {
     stopAlive();
     stopScheduler();
     stopMcpEndpoint();
-    await stopChannels(channels);
+    await stopChannels(getStarted());
 
     try {
       if (force) {
