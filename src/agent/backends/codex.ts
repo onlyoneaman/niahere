@@ -6,6 +6,7 @@ import type { Attachment } from "../../types/attachment";
 import type { McpSourceContext } from "../../mcp";
 import { CodexNormalizer } from "./codex-normalize";
 import { mintRun, revokeRun } from "../mcp-endpoint";
+import { isCliProviderDownError } from "../../utils/retry";
 
 /**
  * Resolve the codex binary's absolute path. The daemon runs under launchd with a
@@ -188,7 +189,7 @@ class CodexSession implements AgentSession {
           type: "error",
           message: stderr.trim() || `codex exited ${exit}`,
           retryable: false,
-          providerDown: false,
+          providerDown: isCliProviderDownError(stderr),
         };
       }
     } finally {

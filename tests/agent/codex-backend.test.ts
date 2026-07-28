@@ -5,14 +5,19 @@ import { startMcpEndpoint, stopMcpEndpoint, liveRunCount } from "../../src/agent
 import type { AgentEvent, AgentSessionContext } from "../../src/agent/types";
 
 /** A fake CLI process emitting scripted JSONL lines, then exiting. */
-function fakeProc(lines: string[], exitCode = 0): CliProc {
+function fakeProc(lines: string[], exitCode = 0, stderrText = ""): CliProc {
   const stdout = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(new TextEncoder().encode(lines.join("\n") + "\n"));
       controller.close();
     },
   });
-  const stderr = new ReadableStream<Uint8Array>({ start: (c) => c.close() });
+  const stderr = new ReadableStream<Uint8Array>({
+    start(controller) {
+      if (stderrText) controller.enqueue(new TextEncoder().encode(stderrText));
+      controller.close();
+    },
+  });
   return { stdout, stderr, exited: Promise.resolve(exitCode), kill: () => {} };
 }
 
@@ -79,5 +84,24 @@ describe("CodexSession", () => {
     const session = await new CodexBackend({ spawnFn }).openSession(CTX);
     const events = await collect(session.send("x"));
     expect(events.at(-1)?.type).toBe("error");
+  });
+
+  test("an expired auth session is reported as provider-down so the chain fails over", async () => {
+    const spawnFn: SpawnFn = () =>
+      fakeProc([], 1, "Failed to authenticate: OAuth session expired and could not be refreshed");
+    const session = await new CodexBackend({ spawnFn }).openSession(CTX);
+    const events = await collect(session.send("x"));
+    const err = events.at(-1)!;
+    expect(err.type).toBe("error");
+    if (err.type === "error") expect(err.providerDown).toBe(true);
+  });
+
+  test("a genuine task failure is not reported as provider-down", async () => {
+    const spawnFn: SpawnFn = () => fakeProc([], 1, "error: no such file or directory (os error 2)");
+    const session = await new CodexBackend({ spawnFn }).openSession(CTX);
+    const events = await collect(session.send("x"));
+    const err = events.at(-1)!;
+    expect(err.type).toBe("error");
+    if (err.type === "error") expect(err.providerDown).toBe(false);
   });
 });

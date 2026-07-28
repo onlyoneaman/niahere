@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.6] - 2026-07-28
+
+### Fixed
+
+- **Every scheduled job failed silently for a week** — `runJob` resolves with `status: "error"` rather than throwing, so the scheduler's `.then` logged failures at info level as "scheduler: job completed" with the outcome buried in a field and its `.catch` never firing; four months of logs held 1,730 completions and zero failures while nine jobs were dying daily. Failed jobs now log at error level with the reason and terminal reason attached.
+- **Codex could never trigger failover** — the CLI backend hardcoded `providerDown: false`, so an expired auth session was indistinguishable from a task that genuinely failed and terminated the backend chain instead of advancing past it; no backend configured behind Codex was reachable. Codex stderr is now classified, so auth, credential, and network failures fail over while real task errors still stop the chain.
+
 ## [0.4.5] - 2026-07-08
 
 ### Fixed

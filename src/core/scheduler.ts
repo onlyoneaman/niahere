@@ -3,8 +3,24 @@ import { runJob } from "./runner";
 import { getConfig } from "../utils/config";
 import { log } from "../utils/log";
 import { computeInitialNextRun, computeNextRun } from "../utils/schedule";
+import type { JobResult } from "../types";
 
 export { computeInitialNextRun, computeNextRun };
+
+/**
+ * Log a finished job at a level matching its outcome. `runJob` resolves with
+ * `status: "error"` instead of throwing, so the caller's `.catch` only ever sees
+ * an infrastructure fault — a job that ran and failed must be branched on here
+ * or it is indistinguishable from success in the log.
+ */
+export function logJobOutcome(result: JobResult): void {
+  const fields = { job: result.job, status: result.status, duration: result.duration_ms };
+  if (result.status === "error") {
+    log.error({ ...fields, error: result.error, terminal_reason: result.terminal_reason }, "scheduler: job failed");
+    return;
+  }
+  log.info(fields, "scheduler: job completed");
+}
 
 function isWithinActiveHours(): boolean {
   const config = getConfig();
@@ -57,11 +73,9 @@ async function tick(): Promise<void> {
     runningJobs.add(job.name);
 
     runJob(job)
-      .then((result) => {
-        log.info({ job: job.name, status: result.status, duration: result.duration_ms }, "scheduler: job completed");
-      })
+      .then(logJobOutcome)
       .catch((err) => {
-        log.error({ err, job: job.name }, "scheduler: job failed");
+        log.error({ err, job: job.name }, "scheduler: job crashed");
       })
       .finally(() => {
         runningJobs.delete(job.name);
