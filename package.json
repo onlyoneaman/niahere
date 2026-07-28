@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "check:cycles": "madge --circular --extensions ts src/",
     "seed": "bun run src/db/seed.ts",
-    "release": "npm version patch && npm publish && git push"
+    "release": "npm version patch && npm publish && git push --follow-tags"
   },
   "keywords": [
     "ai",
