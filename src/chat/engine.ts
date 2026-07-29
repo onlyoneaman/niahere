@@ -10,10 +10,13 @@ import { finalizeSession, cancelPending } from "../core/finalizer";
 import { log } from "../utils/log";
 import { registerActiveHandle, unregisterActiveHandle } from "../core/active-handles";
 import { resolveJobPrompt } from "../core/job-prompt";
+import { truncate } from "../utils/format-activity";
 import { resolveChain, ChainCursor, describeEntry, type AgentSession, type FailoverScope } from "../agent";
 import { scopeOf } from "../agent/failure";
 
 const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
+const HANDOFF_MESSAGES = 20;
+const HANDOFF_CHARS = 2000;
 const LONG_RUNNING_WARN = 30 * 60 * 1000; // 30 minutes
 const GENERIC_CHAT_ERROR = "💀";
 
@@ -98,7 +101,8 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
 
   // A turn that cannot be served moves down the chain and answers the current
   // message there (see send()).
-  const cursor = new ChainCursor(resolveChain());
+  const chain = resolveChain();
+  let cursor = new ChainCursor(chain);
 
   let sessionId: string | null = null;
   if (typeof resume === "string") {
@@ -114,6 +118,9 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
   }
 
   let session: AgentSession | null = null;
+  // Prior turns, replayed into the system prompt when a failover starts a fresh
+  // session on another backend — the new one has no session to resume.
+  let handoff = "";
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   let longRunningTimer: ReturnType<typeof setTimeout> | null = null;
   let messageCount = 0;
@@ -168,6 +175,16 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
     unregisterActiveHandle(room);
   }
 
+  /** Transcript of the conversation so far, for a backend that cannot resume it. */
+  async function buildHandoff(currentMessage: string): Promise<string> {
+    const recent = await Message.getRecent(HANDOFF_MESSAGES, room).catch(() => []);
+    const lines = recent
+      .filter((m) => m.content !== currentMessage)
+      .map((m) => `${m.sender === "nia" ? "Nia" : "User"}: ${truncate(m.content, HANDOFF_CHARS)}`);
+    if (lines.length === 0) return "";
+    return `\n\n## Conversation So Far\nYou are continuing this conversation after switching models mid-turn.\n\n${lines.join("\n")}`;
+  }
+
   /** Lazily open (and reuse) the current chain entry's session for this engine. */
   async function ensureSession(): Promise<AgentSession> {
     if (session) return session;
@@ -175,7 +192,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
     const s = await entry.backend.openSession({
       room,
       channel,
-      systemPrompt,
+      systemPrompt: systemPrompt + handoff,
       cwd,
       // A context override names a model for the configured provider, so it
       // only applies at the head of the chain.
@@ -202,6 +219,19 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
     },
 
     async send(userMessage: string, callbacks?: SendCallbacks, attachments?: Attachment[]) {
+      // Re-probe from the top once the failed provider's cooldown lapses, so a
+      // brief outage does not pin the conversation to the fallback for good.
+      if (!cursor.atHead) {
+        const fresh = new ChainCursor(chain);
+        if (fresh.current !== cursor.current) {
+          log.info({ room, to: fresh.current && describeEntry(fresh.current) }, "chat returning to preferred model");
+          cursor = fresh;
+          handoff = await buildHandoff("");
+          await teardown();
+          sessionId = null;
+        }
+      }
+
       // Clear idle timer — engine is not idle while processing a request
       clearIdleTimer();
       startLongRunningTimer();
@@ -229,7 +259,17 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
       // Run the turn on the current chain entry; a turn that cannot be served
       // moves down the chain and answers the current message there.
       while (true) {
-        const sess = await ensureSession();
+        let sess: AgentSession;
+        try {
+          sess = await ensureSession();
+        } catch (err) {
+          // A backend that cannot start must not take the turn down.
+          const next = cursor.advance("provider");
+          log.warn({ room, err: String(err), to: next && describeEntry(next) }, "chat backend failed to start");
+          if (!next) throw err instanceof Error ? err : new Error(String(err));
+          handoff = await buildHandoff(userMessage);
+          continue;
+        }
         let accumulated = "";
         let failover: FailoverScope | undefined;
 
@@ -316,6 +356,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
           await teardown(); // close the dead session so ensureSession opens the next entry
           sessionId = null; // a cross-backend session id is meaningless; start fresh
           userSaved = false; // re-save the user turn under the new session
+          handoff = await buildHandoff(userMessage);
           continue;
         }
         break;

@@ -51,6 +51,97 @@ describe("resolveCodexBin", () => {
   });
 });
 
+/**
+ * A process whose exit only resolves once stderr has been read — the shape of a
+ * real OS pipe, which blocks the child when its buffer fills and nobody drains.
+ */
+function stderrGatedProc(lines: string[], stderrText: string): CliProc {
+  let release!: () => void;
+  const drained = new Promise<void>((r) => (release = r));
+  return {
+    stdout: new ReadableStream<Uint8Array>({
+      start(c) {
+        if (lines.length) c.enqueue(new TextEncoder().encode(lines.join("\n") + "\n"));
+        c.close();
+      },
+    }),
+    stderr: new ReadableStream<Uint8Array>(
+      {
+        pull(c) {
+          c.enqueue(new TextEncoder().encode(stderrText));
+          c.close();
+          release();
+        },
+      },
+      { highWaterMark: 0 }, // pull only on a real read, so the gate models a blocked pipe
+    ),
+    exited: drained.then(() => 1),
+    kill: () => {},
+  };
+}
+
+describe("CodexSession process handling", () => {
+  test("drains stderr while the process runs instead of after it exits", async () => {
+    const spawnFn: SpawnFn = () => stderrGatedProc([], "boom: something broke");
+    const session = await new CodexBackend({ spawnFn }).openSession(CTX);
+
+    const events = await Promise.race([
+      collect(session.send("x")),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("deadlocked on stderr")), 2000)),
+    ]);
+
+    const err = events.at(-1)!;
+    expect(err.type).toBe("error");
+    if (err.type === "error") expect(err.message).toContain("boom");
+  });
+
+  test("kills a codex that goes silent and reports it as provider-scoped", async () => {
+    let killed = false;
+    const spawnFn: SpawnFn = () => ({
+      stdout: new ReadableStream<Uint8Array>({ start() {} }), // never emits, never closes
+      stderr: new ReadableStream<Uint8Array>({ start: (c) => c.close() }),
+      exited: new Promise<number>(() => {}),
+      kill: () => {
+        killed = true;
+      },
+    });
+    const session = await new CodexBackend({ spawnFn, idleTimeoutMs: 50 }).openSession(CTX);
+    const events = await collect(session.send("x"));
+
+    expect(killed).toBe(true);
+    const err = events.at(-1)!;
+    expect(err.type).toBe("error");
+    if (err.type === "error") {
+      expect(err.message).toContain("no output");
+      expect(err.failover).toBe("provider");
+    }
+  });
+});
+
+describe("codex subprocess environment", () => {
+  test("passes through what the CLI needs and nothing else", async () => {
+    process.env.OPENAI_API_KEY = "sk-should-not-leak";
+    process.env.GITHUB_TOKEN = "ghp-should-not-leak";
+    let env: Record<string, string> = {};
+    const spawnFn: SpawnFn = (_args, opts) => {
+      env = opts.env;
+      return fakeProc([JSON.stringify({ type: "turn.completed", usage: {} })]);
+    };
+    const session = await new CodexBackend({ spawnFn }).openSession(CTX);
+    await collect(session.send("x"));
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.GITHUB_TOKEN;
+
+    expect(env.PATH).toBeDefined();
+    expect(env.HOME).toBeDefined();
+    expect(env.NIA_MCP_TOKEN).toBeDefined();
+    expect(env.OPENAI_API_KEY).toBeUndefined();
+    expect(env.GITHUB_TOKEN).toBeUndefined();
+    expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(env.DATABASE_URL).toBeUndefined();
+  });
+});
+
 describe("CodexSession", () => {
   test("normalizes a codex run to session → text → result and revokes the token", async () => {
     const before = liveRunCount();

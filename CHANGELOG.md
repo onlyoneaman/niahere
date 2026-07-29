@@ -8,6 +8,15 @@
 - **Codex reported a benign notice instead of the real failure** — the normalizer dropped the top-level `error`/`turn.failed` events carrying the upstream message and fell back to stderr, surfacing the "Reading additional input from stdin..." line codex prints on every non-TTY run; structured failures now come through verbatim, which is what kept the model leak hidden.
 - **A backend that could not start killed the whole run** — a missing codex binary or an unstarted MCP endpoint threw out of the chain instead of advancing to the next entry.
 - **Background tasks could not fail over** — the consolidator, summarizer, and the `alive.ts` outage-recovery agent were pinned to Claude, the provider most likely to be the thing that was down.
+- **A codex run could hang forever** — its stderr pipe was only read after the process exited, so a run that wrote past the OS buffer blocked with nobody draining; stderr is now consumed alongside the process and capped to its last 16k.
+- **A wedged codex was never given up on** — nothing bounded the wait for output, so a silent process hung the job indefinitely; a run that emits nothing for ten minutes is now killed and reported as provider-scoped, without depending on the child honouring the signal.
+- **Chat failover answered with no memory of the conversation** — the fallback opened a fresh session and received only the current message, since a backend cannot resume another's session; the recent transcript is now replayed into its system prompt.
+- **A failed-over chat stayed on the fallback until restart** — the engine only ever moved down the chain, so a brief outage pinned a conversation to the fallback for the life of the daemon; it now returns to the preferred model once the failed provider's cooldown lapses.
+- **A chat turn died when a fallback could not start** — only the job path was exception-safe; chat now advances the chain instead of throwing.
+
+### Security
+
+- **The codex subprocess env is an allowlist** — it was a six-name denylist, so everything else in the daemon's environment reached a third-party agent, including `OPENAI_API_KEY` and `GEMINI_API_KEY`; only what the CLI needs is passed now, and a newly-added secret is excluded by default.
 
 ### Changed
 
@@ -15,6 +24,7 @@
 - **Failover is scoped** — `providerDown` became `failover: "model" | "provider"`, so a rejected or overloaded model advances one entry while auth and network failures skip that provider's remaining entries.
 - **Failure classification consolidated** — five overlapping predicates in `utils/retry` plus a sixth copy in `engine.ts` collapsed into `isRetryable`/`scopeOf` in `src/agent/failure.ts`.
 - **One chain walk** — the job runner and chat engine had drifting copies of the advance/skip logic; both now use `ChainCursor`.
+- **A provider that just failed is skipped briefly** — every job and chat turn used to rediscover the same outage from scratch and pay the full retry ladder before failing over; a provider-scoped failure now puts it in a five-minute cooldown shared across the process, and the chain never strands itself if everything is cooling down.
 
 ## [0.4.6] - 2026-07-28
 

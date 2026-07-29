@@ -5,14 +5,18 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { setupTestDb, teardownTestDb } from "../db/setup";
 import { setBackendChain } from "../../src/agent";
-import type { AgentBackend, AgentEvent, ChainEntry } from "../../src/agent";
+import type { AgentBackend, AgentEvent, AgentSessionContext, ChainEntry } from "../../src/agent";
+import { Session, Message } from "../../src/db/models";
+import { providerHealth } from "../../src/agent/health";
 
 const PREFIX = `test-chat-fo-${process.pid}`;
 
-function entry(name: AgentBackend["name"], events: AgentEvent[]): ChainEntry {
+/** `seen` captures the session context each entry is opened with. */
+function entry(name: AgentBackend["name"], events: AgentEvent[], seen?: AgentSessionContext[]): ChainEntry {
   const backend: AgentBackend = {
     name,
-    async openSession() {
+    async openSession(ctx) {
+      seen?.push(ctx);
       return {
         backendSessionId: null as string | null,
         async *send(): AsyncIterable<AgentEvent> {
@@ -39,7 +43,10 @@ afterAll(async () => {
   await sql`DELETE FROM sessions WHERE id LIKE ${PREFIX + "%"}`;
   await teardownTestDb();
 });
-afterEach(() => setBackendChain(null));
+afterEach(() => {
+  setBackendChain(null);
+  providerHealth.clear();
+});
 
 describe("chat failover", () => {
   test("a provider-down primary fails over to the fallback, which answers", async () => {
@@ -99,5 +106,65 @@ describe("chat failover", () => {
     const rows = await getSql()`SELECT sender, content FROM messages WHERE session_id = ${sid2} ORDER BY id`;
     expect(rows.map((r: any) => r.sender)).toEqual(["user", "nia"]);
     expect(rows[0].content).toBe("my question");
+  });
+});
+
+describe("chat failover continuity", () => {
+  test("hands the fallback the conversation so far", async () => {
+    const room = `${PREFIX}-history-room`;
+    const priorSession = `${PREFIX}-history-prior`;
+    await Session.create(priorSession, room);
+    await Message.save({ sessionId: priorSession, room, sender: "user", content: "my cat is called Biscuit", isFromAgent: false });
+    await Message.save({ sessionId: priorSession, room, sender: "nia", content: "noted, Biscuit it is", isFromAgent: true });
+
+    const seen: AgentSessionContext[] = [];
+    const sid = `${PREFIX}-history-2`;
+    setBackendChain([
+      entry("claude", [{ type: "error", message: "", retryable: false, failover: "provider" }], seen),
+      entry(
+        "codex",
+        [
+          { type: "session", backendSessionId: sid },
+          { type: "result", text: "Biscuit", usage: {}, backendSessionId: sid },
+        ],
+        seen,
+      ),
+    ]);
+
+    const { createChatEngine } = await import("../../src/chat/engine");
+    const engine = await createChatEngine({ room, channel: "test", resume: false });
+    await engine.send("what is my cat called?");
+
+    const fallbackPrompt = seen.at(-1)!.systemPrompt;
+    expect(fallbackPrompt).toContain("Biscuit");
+    expect(fallbackPrompt).toContain("noted, Biscuit it is");
+    // The primary saw no handoff — it had the live session.
+    expect(seen[0]!.systemPrompt).not.toContain("noted, Biscuit it is");
+  });
+
+  test("a fallback that cannot start advances instead of killing the turn", async () => {
+    const room = `${PREFIX}-throw-room`;
+    const sid = `${PREFIX}-throw-1`;
+    const broken: AgentBackend = {
+      name: "codex",
+      async openSession() {
+        throw new Error("spawn codex ENOENT");
+      },
+      async canResume() {
+        return false;
+      },
+    };
+    setBackendChain([
+      { backend: broken },
+      entry("claude", [
+        { type: "session", backendSessionId: sid },
+        { type: "result", text: "recovered", usage: {}, backendSessionId: sid },
+      ]),
+    ]);
+
+    const { createChatEngine } = await import("../../src/chat/engine");
+    const engine = await createChatEngine({ room, channel: "test", resume: false });
+    const res = await engine.send("hello");
+    expect(res.result).toBe("recovered");
   });
 });

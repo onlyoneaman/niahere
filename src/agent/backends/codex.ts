@@ -42,21 +42,30 @@ export interface CliProc {
 }
 export type SpawnFn = (args: string[], opts: { cwd: string; env: Record<string, string> }) => CliProc;
 
-// Nia secrets that must never reach a third-party agent subprocess. Codex
-// authenticates via its own ~/.codex login, not these.
-const SCRUB = new Set([
-  "ANTHROPIC_API_KEY",
-  "SLACK_BOT_TOKEN",
-  "SLACK_APP_TOKEN",
-  "TELEGRAM_BOT_TOKEN",
-  "TWILIO_AUTH_TOKEN",
-  "DATABASE_URL",
+// An allowlist, so a newly-added secret is excluded by default rather than
+// leaking to a third-party subprocess. Codex authenticates via its own
+// ~/.codex login, so it needs no credential of ours.
+const ENV_ALLOW = new Set([
+  "PATH",
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "SHELL",
+  "TERM",
+  "TMPDIR",
+  "TZ",
+  "LANG",
+  "XDG_CONFIG_HOME",
+  "XDG_CACHE_HOME",
+  "XDG_DATA_HOME",
 ]);
+const ENV_ALLOW_PREFIX = ["LC_", "CODEX_"];
 
-function scrubbedEnv(extra: Record<string, string>): Record<string, string> {
+function subprocessEnv(extra: Record<string, string>): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) {
-    if (!SCRUB.has(k) && v != null) env[k] = v;
+    if (v == null) continue;
+    if (ENV_ALLOW.has(k) || ENV_ALLOW_PREFIX.some((p) => k.startsWith(p))) env[k] = v;
   }
   return { ...env, ...extra };
 }
@@ -76,8 +85,9 @@ function defaultSpawn(args: string[], opts: { cwd: string; env: Record<string, s
   };
 }
 
-async function* readLines(stream: ReadableStream<Uint8Array>): AsyncGenerator<string> {
-  const reader = stream.getReader();
+/** Takes the reader rather than the stream so the caller can cancel a read that
+ *  would otherwise never resolve. */
+async function* readLines(reader: ReadableStreamDefaultReader<Uint8Array>): AsyncGenerator<string> {
   const decoder = new TextDecoder();
   let buf = "";
   while (true) {
@@ -93,28 +103,53 @@ async function* readLines(stream: ReadableStream<Uint8Array>): AsyncGenerator<st
   if (buf.trim()) yield buf;
 }
 
-async function readAll(stream: ReadableStream<Uint8Array>): Promise<string> {
-  let out = "";
-  const decoder = new TextDecoder();
-  const reader = stream.getReader();
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    out += decoder.decode(value, { stream: true });
-  }
-  return out;
+const IDLE = Symbol("idle");
+
+/** A cancellable deadline, used to race a read that may never resolve. */
+function idleAfter(ms: number): { promise: Promise<typeof IDLE>; cancel: () => void } {
+  let timer: ReturnType<typeof setTimeout>;
+  const promise = new Promise<typeof IDLE>((resolve) => {
+    timer = setTimeout(() => resolve(IDLE), ms);
+  });
+  return { promise, cancel: () => clearTimeout(timer) };
 }
+
+const STDERR_CAP = 16_000;
+
+/**
+ * Consume stderr to EOF, keeping only the tail. Must run alongside the process:
+ * an undrained pipe blocks the child once its buffer fills.
+ */
+function drainStderr(stream: ReadableStream<Uint8Array>): Promise<string> {
+  return (async () => {
+    let out = "";
+    const decoder = new TextDecoder();
+    const reader = stream.getReader();
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      out += decoder.decode(value, { stream: true });
+      if (out.length > STDERR_CAP) out = out.slice(-STDERR_CAP);
+    }
+    return out;
+  })().catch(() => "");
+}
+
+/** A codex that emits nothing for this long is wedged, not working. */
+const DEFAULT_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
 export class CodexBackend implements AgentBackend {
   readonly name = "codex" as const;
   private spawnFn: SpawnFn;
+  private idleTimeoutMs: number;
 
-  constructor(deps?: { spawnFn?: SpawnFn }) {
+  constructor(deps?: { spawnFn?: SpawnFn; idleTimeoutMs?: number }) {
     this.spawnFn = deps?.spawnFn ?? defaultSpawn;
+    this.idleTimeoutMs = deps?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
   }
 
   async openSession(ctx: AgentSessionContext): Promise<AgentSession> {
-    return new CodexSession(ctx, this.spawnFn);
+    return new CodexSession(ctx, this.spawnFn, this.idleTimeoutMs);
   }
 
   async canResume(): Promise<boolean> {
@@ -127,10 +162,12 @@ class CodexSession implements AgentSession {
   private _sessionId: string | null = null;
   private aborted: string | null = null;
   private proc: CliProc | null = null;
+  private idledOut = false;
 
   constructor(
     private ctx: AgentSessionContext,
     private spawnFn: SpawnFn,
+    private idleTimeoutMs: number,
   ) {}
 
   get backendSessionId(): string | null {
@@ -157,15 +194,32 @@ class CodexSession implements AgentSession {
     ];
     if (this.ctx.model && this.ctx.model !== "default") args.push("-m", this.ctx.model);
 
-    const proc = this.spawnFn(args, { cwd: this.ctx.cwd, env: scrubbedEnv({ NIA_MCP_TOKEN: token }) });
+    const proc = this.spawnFn(args, { cwd: this.ctx.cwd, env: subprocessEnv({ NIA_MCP_TOKEN: token }) });
     this.proc = proc;
 
+    // Started now, not after exit: an undrained pipe blocks the child.
+    const stderr = drainStderr(proc.stderr);
+
     const normalizer = new CodexNormalizer();
+    const stdout = proc.stdout.getReader();
+    const lines = readLines(stdout)[Symbol.asyncIterator]();
     let sawTerminal = false;
     try {
-      for await (const line of readLines(proc.stdout)) {
+      while (true) {
+        // Race the read rather than trusting kill() to close the pipe — a child
+        // that ignores the signal would otherwise hang the run forever.
+        const idle = idleAfter(this.idleTimeoutMs);
+        const next = await Promise.race([lines.next(), idle.promise]);
+        idle.cancel();
+        if (next === IDLE) {
+          this.idledOut = true;
+          proc.kill();
+          break;
+        }
+        if (next.done) break;
+
         if (this.aborted) throw new Error(this.aborted);
-        const trimmed = line.trim();
+        const trimmed = next.value.trim();
         if (!trimmed) continue;
         let parsed: unknown;
         try {
@@ -181,18 +235,28 @@ class CodexSession implements AgentSession {
           yield ev;
         }
       }
+      if (this.idledOut) {
+        yield {
+          type: "error",
+          message: `codex produced no output for ${Math.round(this.idleTimeoutMs / 1000)}s`,
+          retryable: false,
+          failover: "provider",
+        };
+        return;
+      }
       const exit = await proc.exited;
       if (this.aborted) throw new Error(this.aborted);
       if (exit !== 0 && !sawTerminal) {
-        const stderr = await readAll(proc.stderr);
+        const text = await stderr;
         yield {
           type: "error",
-          message: stderr.trim() || `codex exited ${exit}`,
+          message: text.trim() || `codex exited ${exit}`,
           retryable: false,
-          failover: scopeOf(stderr, "provider"),
+          failover: scopeOf(text, "provider"),
         };
       }
     } finally {
+      await stdout.cancel().catch(() => {});
       revokeRun(token);
       this.proc = null;
     }

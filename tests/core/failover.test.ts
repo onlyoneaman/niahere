@@ -1,7 +1,8 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { runJobAcrossChain } from "../../src/core/runner";
 import { CodexBackend, type CliProc, type SpawnFn } from "../../src/agent/backends/codex";
 import { startMcpEndpoint, stopMcpEndpoint } from "../../src/agent/mcp-endpoint";
+import { providerHealth } from "../../src/agent/health";
 import type { AgentBackend, AgentEvent, AgentSessionContext } from "../../src/agent";
 
 function fakeBackend(name: AgentBackend["name"], events: AgentEvent[], seenModels?: (string | undefined)[]): AgentBackend {
@@ -45,6 +46,8 @@ const OK = (id: string): AgentEvent[] => [
   { type: "session", backendSessionId: id },
   { type: "result", text: "ok", usage: { tokens: { input: 1, output: 1 } }, backendSessionId: id },
 ];
+
+afterEach(() => providerHealth.clear());
 
 const CTX: AgentSessionContext = { room: "job/x", channel: "system", systemPrompt: "s", cwd: "/tmp", resume: false };
 
