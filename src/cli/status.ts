@@ -1,7 +1,6 @@
 import { isRunning, readPid } from "../core/daemon";
 import { readState } from "../utils/logger";
 import { getConfig } from "../utils/config";
-import { localTime } from "../utils/time";
 import { maskToken, safeDate, dateSortValue, formatTimeLine } from "../utils/format";
 import { Message, ActiveEngine, Job } from "../db/models";
 import type { ScheduleType, JobStateStatus, RoomStats } from "../types";

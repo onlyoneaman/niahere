@@ -1,13 +1,9 @@
 #!/usr/bin/env bun
-import { existsSync, mkdirSync, readFileSync } from "fs";
+import { mkdirSync, readFileSync } from "fs";
 import { isRunning, readPid, runDaemon, startDaemon, stopDaemon } from "../core/daemon";
 import { getConfig } from "../utils/config";
-import { localTime } from "../utils/time";
 import { startRepl } from "../chat/repl";
-import { Message } from "../db/models";
-import { withDb } from "../db/with-db";
 import { getNiaHome, getPaths } from "../utils/paths";
-import { errMsg } from "../utils/errors";
 import { fail, ICON_PASS, ICON_WARN } from "../utils/cli";
 import { jobCommand } from "./job";
 import { statusCommand } from "./status";
@@ -19,7 +15,7 @@ import { rulesCommand, memoryCommand } from "./self";
 import { watchCommand } from "./watch";
 import { agentCommand } from "./agent";
 import { employeeCommand } from "./employee";
-import { guardActiveEngines, parseGuardFlags, withDefaultWait } from "../core/engine-guard";
+import { guardActiveEngines, parseGuardFlags } from "../core/engine-guard";
 
 // Set LOG_LEVEL from config before anything else logs
 try {
@@ -166,80 +162,13 @@ switch (command) {
 
   case "run": {
     const prompt = process.argv.slice(3).join(" ");
-    if (prompt) {
-      const { createChatEngine } = await import("../chat/engine");
-      const { getMcpServers } = await import("../mcp");
-      const { DIM, RESET: RST, CLEAR_LINE, SPINNER: FRAMES } = await import("../utils/cli");
-      let frame = 0;
-      let statusText = "thinking";
-      let spinTimer: ReturnType<typeof setInterval> | null = null;
-      let streamedLen = 0;
-      let streaming = false;
-
-      const renderSpinner = () => {
-        process.stderr.write(`${CLEAR_LINE}${DIM}  ${FRAMES[frame]} ${statusText}${RST}`);
-        frame = (frame + 1) % FRAMES.length;
-      };
-
-      await withDb(async () => {
-        const engine = await createChatEngine({
-          room: "cli-run",
-          channel: "terminal",
-          resume: false,
-          mcpServers: getMcpServers(),
-        });
-        spinTimer = setInterval(renderSpinner, 80);
-        renderSpinner();
-
-        const { result, costUsd, turns } = await engine.send(prompt, {
-          onStream(textSoFar) {
-            if (!streaming) {
-              if (spinTimer) {
-                clearInterval(spinTimer);
-                spinTimer = null;
-              }
-              process.stderr.write("\x1b[2K\r");
-              streaming = true;
-            }
-            const chunk = textSoFar.slice(streamedLen);
-            if (chunk) {
-              process.stdout.write(chunk);
-              streamedLen = textSoFar.length;
-            }
-          },
-          onActivity(text) {
-            if (!streaming) statusText = text;
-          },
-        });
-
-        if (spinTimer) {
-          clearInterval(spinTimer);
-          spinTimer = null;
-        }
-
-        if (!streaming && result.trim()) {
-          process.stderr.write("\x1b[2K\r");
-          process.stdout.write(result.trim());
-        } else if (streaming) {
-          const rest = result.slice(streamedLen);
-          if (rest.trim()) process.stdout.write(rest);
-        } else {
-          process.stderr.write("\x1b[2K\r");
-        }
-
-        const costStr = costUsd > 0 ? `$${costUsd.toFixed(4)}` : "";
-        const turnsStr = turns > 0 ? `${turns} turn${turns !== 1 ? "s" : ""}` : "";
-        const meta = [costStr, turnsStr].filter(Boolean).join(" · ");
-        if (meta) process.stderr.write(`\n${DIM}${meta}${RST}`);
-        process.stdout.write("\n");
-
-        await engine.close();
-      });
-      process.exit(0);
-    } else {
+    if (!prompt) {
       await runDaemon();
+      break;
     }
-    break;
+    const { runPrompt } = await import("./run");
+    await runPrompt(prompt);
+    process.exit(0);
   }
 
   case "job": {
@@ -263,52 +192,14 @@ switch (command) {
   }
 
   case "history": {
-    const room = process.argv[3];
-    try {
-      await withDb(async () => {
-        const messages = await Message.getRecent(20, room);
-        if (messages.length === 0) {
-          console.log("No messages yet.");
-        } else {
-          for (const m of messages) {
-            const time = localTime(new Date(m.createdAt));
-            const prefix = m.sender === "user" ? "you" : m.sender;
-            const roomTag = room ? "" : `[${m.room}] `;
-            const snippet = m.content.length > 120 ? m.content.slice(0, 120) + "..." : m.content;
-            console.log(`  ${roomTag}${time}  ${prefix} > ${snippet.replace(/\n/g, " ")}`);
-          }
-        }
-      });
-    } catch (err) {
-      fail(`Failed: ${errMsg(err)}`);
-    }
+    const { historyCommand } = await import("./logs");
+    await historyCommand(process.argv[3]);
     break;
   }
 
   case "logs": {
-    const { daemonLog } = getPaths();
-    if (!existsSync(daemonLog)) fail("No daemon log found. Is nia running?");
-    const logArgs = process.argv.slice(3);
-    const follow = logArgs.includes("-f") || logArgs.includes("--follow");
-    // --channel <name> filters logs by channel/component via grep
-    const chIdx = logArgs.indexOf("--channel");
-    const channelFilter = chIdx !== -1 && logArgs[chIdx + 1] ? logArgs[chIdx + 1] : null;
-
-    if (channelFilter) {
-      // Pipe through grep to filter by channel name in structured logs
-      const tailArgs = follow ? ["tail", "-f", daemonLog] : ["tail", "-200", daemonLog];
-      const tail = Bun.spawn(tailArgs, {
-        stdio: ["ignore", "pipe", "inherit"],
-      });
-      const grep = Bun.spawn(["grep", "-i", channelFilter], {
-        stdio: [tail.stdout, "inherit", "inherit"],
-      });
-      await grep.exited;
-    } else {
-      const args = follow ? ["tail", "-f", daemonLog] : ["tail", "-50", daemonLog];
-      const proc = Bun.spawn(args, { stdio: ["ignore", "inherit", "inherit"] });
-      await proc.exited;
-    }
+    const { logsCommand } = await import("./logs");
+    await logsCommand(process.argv.slice(3));
     break;
   }
 
@@ -351,20 +242,8 @@ switch (command) {
   }
 
   case "skills": {
-    const { scanSkills: loadSkills } = await import("../core/skills");
-    const filter = process.argv[3]; // e.g. "project", "nia", "shared", "claude"
-    let skills = loadSkills();
-    if (filter) {
-      skills = skills.filter((s) => s.source === filter);
-    }
-    if (skills.length === 0) {
-      console.log(filter ? `No skills found in "${filter}".` : "No skills found.");
-    } else {
-      for (const s of skills) {
-        const tag = filter ? "" : `  [${s.source}]`;
-        console.log(`  ${s.name}${tag}`);
-      }
-    }
+    const { skillsCommand } = await import("./skills");
+    skillsCommand(process.argv[3]);
     break;
   }
 
@@ -389,90 +268,19 @@ switch (command) {
   }
 
   case "config": {
-    const configSub = process.argv[3];
-    const configKey = process.argv[4];
-    const configVal = process.argv.slice(5).join(" ");
-    const { readRawConfig, updateRawConfig } = await import("../utils/config");
-
-    if (configSub === "set" && configKey) {
-      if (!configVal) fail("Usage: nia config set <key> <value>");
-      // Support dot notation for nested keys (e.g. channels.default)
-      const parts = configKey.split(".");
-      let obj: Record<string, unknown> = {};
-      let cursor = obj;
-      for (let i = 0; i < parts.length - 1; i++) {
-        cursor[parts[i]] = {};
-        cursor = cursor[parts[i]] as Record<string, unknown>;
-      }
-      // Auto-detect booleans and numbers
-      let parsed: unknown = configVal;
-      if (configVal === "true") parsed = true;
-      else if (configVal === "false") parsed = false;
-      else if (/^\d+$/.test(configVal)) parsed = Number(configVal);
-      cursor[parts[parts.length - 1]] = parsed;
-      updateRawConfig(obj);
-      console.log(`${configKey} = ${configVal}`);
-    } else if (configSub === "get" && configKey) {
-      const raw = readRawConfig();
-      const parts = configKey.split(".");
-      let val: unknown = raw;
-      for (const p of parts) {
-        if (val && typeof val === "object") val = (val as Record<string, unknown>)[p];
-        else {
-          val = undefined;
-          break;
-        }
-      }
-      if (val === undefined) {
-        console.log(`${configKey}: (not set)`);
-      } else if (typeof val === "object") {
-        const yaml = (await import("js-yaml")).default;
-        console.log(yaml.dump(val, { lineWidth: -1 }).trim());
-      } else {
-        console.log(`${configKey} = ${val}`);
-      }
-    } else if (!configSub || configSub === "list") {
-      const raw = readRawConfig();
-      const yaml = (await import("js-yaml")).default;
-      console.log(yaml.dump(raw, { lineWidth: -1 }).trim());
-    } else {
-      console.log("Usage: nia config <set|get|list>");
-      console.log("  nia config set <key> <value>  — set a config value");
-      console.log("  nia config get <key>          — get a config value");
-      console.log("  nia config list               — show all config");
-    }
+    const { configCommand } = await import("./config");
+    await configCommand(process.argv[3], process.argv[4], process.argv.slice(5).join(" "));
     break;
   }
 
   case "channels": {
     const sub = process.argv[3];
-    const target = process.argv[4];
-    const { updateRawConfig } = await import("../utils/config");
-    if (sub === "on" || sub === "off") {
-      const enabled = sub === "on";
-      if (target) {
-        const supported = new Set(["telegram", "slack", "phone", "sms", "whatsapp"]);
-        if (!supported.has(target)) fail("Usage: nia channels <on|off> [telegram|slack|phone|sms|whatsapp]");
-        updateRawConfig({ channels: { ...(enabled ? { enabled: true } : {}), [target]: { enabled } } });
-      } else {
-        updateRawConfig({ channels: { enabled } });
-      }
-      const pid = readPid();
-      if (pid && isRunning()) {
-        process.kill(pid, "SIGHUP");
-        console.log(
-          target ? `${target} ${enabled ? "enabled" : "disabled"}` : `channels ${enabled ? "enabled" : "disabled"}`,
-        );
-      } else {
-        console.log(
-          target
-            ? `${target} ${enabled ? "enabled" : "disabled"} — start nia to apply`
-            : `channels ${enabled ? "enabled" : "disabled"} — start nia to apply`,
-        );
-      }
-    } else {
+    if (sub !== "on" && sub !== "off") {
       console.log(`channels: ${getConfig().channels.enabled ? "on" : "off"}`);
+      break;
     }
+    const { channelsToggleCommand } = await import("./update");
+    await channelsToggleCommand(sub, process.argv[4]);
     break;
   }
 
@@ -483,35 +291,8 @@ switch (command) {
   }
 
   case "test": {
-    const verbose = process.argv.includes("-v") || process.argv.includes("--verbose");
-    const extraArgs = process.argv.slice(3).filter((a) => a !== "-v" && a !== "--verbose");
-    const proc = Bun.spawn(["bun", "test", ...extraArgs], {
-      stdio: ["ignore", "pipe", "pipe"],
-      cwd: import.meta.dir + "/../..",
-      env: { ...process.env, LOG_LEVEL: "silent" },
-    });
-
-    const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
-    const exitCode = await proc.exited;
-    const output = stdout + stderr;
-
-    if (verbose) {
-      process.stdout.write(output);
-    } else {
-      for (const line of output.split("\n")) {
-        if (
-          /^\s*\d+ pass/.test(line) ||
-          /^\s*\d+ fail/.test(line) ||
-          /^Ran \d+ tests/.test(line) ||
-          /expect\(\) calls/.test(line)
-        ) {
-          console.log(line);
-        } else if (/^✗|FAIL|error:/i.test(line.trim())) {
-          console.log(line);
-        }
-      }
-    }
-    process.exit(exitCode);
+    const { testCommand } = await import("./test");
+    await testCommand(process.argv.slice(3));
   }
 
   case "backup": {
@@ -529,53 +310,8 @@ switch (command) {
   }
 
   case "update": {
-    const updateGuard = withDefaultWait(parseGuardFlags(process.argv.slice(3)), 1);
-    const { version: currentVersion } = await import("../../package.json");
-    console.log(`Current: v${currentVersion}`);
-
-    // Check active engines before doing anything destructive
-    if (isRunning() && !(await guardActiveEngines("update", updateGuard))) process.exit(1);
-
-    // Auto-backup before update
-    try {
-      const { createBackup } = await import("../commands/backup");
-      console.log("Backing up...");
-      await createBackup(true);
-      console.log("✓ pre-update backup created");
-    } catch (err) {
-      console.log(`⚠ backup skipped: ${errMsg(err)}`);
-    }
-    console.log("Updating...");
-    const install = Bun.spawn(["npm", "i", "-g", "niahere@latest"], {
-      stdio: ["ignore", "inherit", "inherit"],
-    });
-    const installExit = await install.exited;
-    if (installExit !== 0) {
-      fail("Update failed.");
-    }
-    // Get new version
-    const check = Bun.spawn(["npm", "view", "niahere", "version"], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const newVersion = (await new Response(check.stdout).text()).trim();
-    await check.exited;
-    if (newVersion === currentVersion) {
-      console.log("Already on latest.");
-    } else {
-      console.log(`Updated: v${currentVersion} → v${newVersion}`);
-      if (isRunning()) {
-        console.log("Restarting daemon...");
-        const { isServiceInstalled, restartService } = await import("../commands/service");
-        if (isServiceInstalled()) {
-          await restartService({ force: updateGuard.force });
-        } else {
-          stopDaemon({ force: updateGuard.force });
-          startDaemon();
-        }
-        console.log("Restarted.");
-      }
-    }
+    const { updateCommand } = await import("./update");
+    await updateCommand(process.argv.slice(3));
     break;
   }
 
