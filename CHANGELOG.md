@@ -1,10 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## [0.5.2] - 2026-07-29
 
 ### Fixed
 
 - **A turn that died was recorded as a completed job** — the Agent SDK used to report turns killed by an exhausted API retry, a malformed tool-use give-up, or an exhausted budget as `terminal_reason: "completed"`; it now names them, and a named dead turn is reported as a failure instead of a success.
+- **A failed-over turn left no trace of who served it** — the codex backend emitted no metadata at all, so its model, provider, and token counts never reached the session record, and codex's `cached_input_tokens` was discarded; both backends now emit the same `model_usage` shape and sessions carry `providers_used` alongside `models_used`.
+- **Compactions went unrecorded** — `compact_boundary` fell through the normalizer's system-message branch and was dropped, so a long session could have its history summarized with nothing logged; it now surfaces as activity naming the trigger and how much context was dropped.
 - **Claude failures were classified on prose alone** — the result message carries `api_error_status`, which the normalizer ignored; an HTTP status now decides the failover scope with prose as the fallback, matching what the codex path already did. Rate-limit and overloaded errors delivered mid-stream only started reporting 429/529 in a recent SDK release, which is what makes this reliable.
 
 ### Changed
