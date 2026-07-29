@@ -63,10 +63,6 @@ export function scanSkills(): SkillInfo[] {
   return skills;
 }
 
-export function getSkillNames(): string[] {
-  return scanSkills().map((s) => s.name);
-}
-
 export function getSkillsSummary(): string {
   const skills = scanSkills();
   if (skills.length === 0) return "";

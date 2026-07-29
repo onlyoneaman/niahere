@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from "fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from "fs";
 import { join, basename } from "path";
 import { getNiaHome } from "../utils/paths";
 import { getConfig } from "../utils/config";
@@ -79,7 +79,6 @@ export async function createBackup(silent = false): Promise<string> {
     if (exitCode === 0 && existsSync(dumpPath)) {
       // Copy to a relative path for tar
       const relDump = "db-backup.sql";
-      const { copyFileSync } = await import("fs");
       copyFileSync(dumpPath, join(home, relDump));
       includes.push(relDump);
       dbDumped = true;

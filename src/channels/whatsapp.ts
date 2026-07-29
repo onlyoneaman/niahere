@@ -24,6 +24,7 @@ import { chainLock, openChatEngine, rotateRoom } from "./common/chat-session";
 import type { Attachment, Channel, ChatState, Outbound, TwilioConfig, WhatsappConfig, PhoneConfig } from "../types";
 import { getConfig } from "../utils/config";
 import { log } from "../utils/log";
+import { errMsg, ignore } from "../utils/errors";
 import { classifyMime, prepareImage, validateAttachment } from "../utils/attachment";
 import { sendMessage as twilioSendMessage } from "./twilio/rest";
 import { getTwilioServer } from "./twilio/server";
@@ -162,7 +163,7 @@ class WhatsAppChannel implements Channel {
             } catch (err) {
               log.error({ err, from }, "whatsapp: voice transcription failed");
               voiceParts.push(
-                `[voice note: transcription failed — ${err instanceof Error ? err.message : String(err)}]`,
+                `[voice note: transcription failed — ${errMsg(err)}]`,
               );
             }
             continue;
@@ -171,7 +172,7 @@ class WhatsAppChannel implements Channel {
           const error = validateAttachment(item.data);
           if (error) {
             log.warn({ from, mime: item.mime, error }, "whatsapp: rejecting attachment");
-            await this.sendTextTo(from, `[error] ${error}`).catch(() => {});
+            await ignore(this.sendTextTo(from, `[error] ${error}`), "reply engine error");
             continue;
           }
 
@@ -203,15 +204,15 @@ class WhatsAppChannel implements Channel {
         const reply = result.trim() || "(no response)";
         try {
           await this.sendTextTo(from, reply);
-          if (messageId) await Message.updateDeliveryStatus(messageId, "sent").catch(() => {});
+          if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "sent"), "record sent delivery status");
         } catch (sendErr) {
-          if (messageId) await Message.updateDeliveryStatus(messageId, "failed").catch(() => {});
+          if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "failed"), "record failed delivery status");
           throw sendErr;
         }
       } catch (err) {
         log.error({ err, from }, "whatsapp: engine error");
-        const errText = err instanceof Error ? err.message : String(err);
-        await this.sendTextTo(from, `[error] ${errText}`).catch(() => {});
+        const errText = errMsg(err);
+        await ignore(this.sendTextTo(from, `[error] ${errText}`), "reply engine error");
       }
     });
 

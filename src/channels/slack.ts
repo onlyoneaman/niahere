@@ -5,6 +5,7 @@ import { relativeTime } from "../utils/format";
 import { runMigrations } from "../db/migrate";
 import { Session, Message } from "../db/models";
 import { log } from "../utils/log";
+import { errMsg, ignore } from "../utils/errors";
 import { getMcpServers } from "../mcp";
 import { chainLock, openChatEngine, rotateRoom } from "./common/chat-session";
 import { SlackAttachmentCache } from "./slack/attachments";
@@ -183,7 +184,7 @@ class SlackChannel implements Channel {
             });
             await respond(result.trim() || "(no response)");
           } catch (err) {
-            const errText = err instanceof Error ? err.message : String(err);
+            const errText = errMsg(err);
             await respond(`[error] ${errText}`);
           }
         });
@@ -448,7 +449,7 @@ class SlackChannel implements Channel {
             await reactToSlackMessage(client, msg.channel, msg.ts, "skull").catch((err) =>
               log.debug({ err, channel: msg.channel }, "slack: failed to add provider-down reaction"),
             );
-            if (messageId) await Message.updateDeliveryStatus(messageId, "sent").catch(() => {});
+            if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "sent"), "record sent delivery status");
             log.info({ channel: msg.channel, key, reaction: "skull" }, "slack provider failure sent as reaction");
             return;
           }
@@ -468,7 +469,7 @@ class SlackChannel implements Channel {
                 "slack: [NO_REPLY] sentinel mixed with content; suppressing send",
               );
             }
-            if (messageId) await Message.updateDeliveryStatus(messageId, "sent").catch(() => {});
+            if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "sent"), "record sent delivery status");
             return;
           }
 
@@ -482,26 +483,27 @@ class SlackChannel implements Channel {
             } else {
               await say(reply);
             }
-            if (messageId) await Message.updateDeliveryStatus(messageId, "sent").catch(() => {});
+            if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "sent"), "record sent delivery status");
             log.info({ channel: msg.channel, key, chars: reply.length }, "slack reply sent");
           } catch (sendErr) {
-            if (messageId) await Message.updateDeliveryStatus(messageId, "failed").catch(() => {});
+            if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "failed"), "record failed delivery status");
             throw sendErr;
           }
         } catch (err) {
-          const errText = err instanceof Error ? err.message : String(err);
+          const errText = errMsg(err);
           log.error({ err, channel: msg.channel }, "slack message processing failed");
 
           if (replyThreadTs) {
-            await client.chat
-              .postMessage({
+            await ignore(
+              client.chat.postMessage({
                 channel: msg.channel,
                 text: `[error] ${errText}`,
                 thread_ts: replyThreadTs,
-              })
-              .catch(() => {});
+              }),
+              "reply engine error in thread",
+            );
           } else {
-            await say(`[error] ${errText}`).catch(() => {});
+            await ignore(say(`[error] ${errText}`), "reply engine error");
           }
         } finally {
           await client.reactions

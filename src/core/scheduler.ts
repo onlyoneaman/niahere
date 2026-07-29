@@ -85,8 +85,16 @@ async function tick(): Promise<void> {
     try {
       nextRun = computeNextRun(job.scheduleType, job.schedule, config.timezone, new Date());
     } catch (err) {
-      log.error({ err, job: job.name, schedule: job.schedule }, "scheduler: invalid schedule, disabling job");
-      await Job.update(job.name, { status: "disabled" }).catch(() => {});
+      log.error({ err, job: job.name, schedule: job.schedule }, "scheduler: invalid schedule");
+      try {
+        await Job.update(job.name, { status: "disabled" });
+        log.info({ job: job.name }, "scheduler: disabled job with invalid schedule");
+      } catch (updateErr) {
+        log.error(
+          { err: updateErr, job: job.name },
+          "scheduler: could not disable job with invalid schedule — it will keep failing every tick",
+        );
+      }
       continue;
     }
     await Job.markRun(job.name, nextRun).catch((err) => {
@@ -95,8 +103,15 @@ async function tick(): Promise<void> {
 
     // Auto-disable one-shot jobs after execution
     if (job.scheduleType === "once") {
-      await Job.update(job.name, { status: "disabled" }).catch(() => {});
-      log.info({ job: job.name }, "scheduler: one-shot job completed, auto-disabled");
+      try {
+        await Job.update(job.name, { status: "disabled" });
+        log.info({ job: job.name }, "scheduler: one-shot job completed, auto-disabled");
+      } catch (err) {
+        log.error(
+          { err, job: job.name },
+          "scheduler: one-shot job completed but could not be disabled — it will run again",
+        );
+      }
     }
   }
 }

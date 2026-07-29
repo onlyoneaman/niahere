@@ -26,13 +26,6 @@ export async function unregister(room: string): Promise<void> {
   await sql`DELETE FROM active_engines WHERE room = ${room}`;
 }
 
-export async function clearStale(
-  maxAgeMs: number = 5 * 60 * 1000,
-): Promise<void> {
-  const sql = getSql();
-  await sql`DELETE FROM active_engines WHERE last_ping < NOW() - ${maxAgeMs / 1000}::int * interval '1 second'`;
-}
-
 export async function clearAll(): Promise<void> {
   const sql = getSql();
   await sql`DELETE FROM active_engines`;

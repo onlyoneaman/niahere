@@ -49,7 +49,7 @@ src/
     twilio/              # Shared by phone/sms/whatsapp — server, signature, REST, middleware
       server.ts          # Bun HTTP+WS server + signature/dedup/rate-limit middleware + route registry
       signature.ts       # X-Twilio-Signature HMAC-SHA1 validator
-      rest.ts            # placeCall, sendMessage, hangupCall, updateIncomingPhoneNumber
+      rest.ts            # placeCall, sendMessage
       dedup.ts           # TTL set for MessageSid/CallSid dedup (Twilio retries)
       rate-limit.ts      # Sliding-window per-key limiter (default 30/min)
     phone/               # Voice — Twilio Voice + OpenAI Realtime bridge
@@ -105,7 +105,8 @@ src/
     mode-job.md          # Job mode instructions
     channel-slack.md     # Slack-specific rules (formatting, security, thread judgement)
     channel-telegram.md  # Telegram-specific rules
-  types/                 # All type definitions (types, interfaces, enums only)
+  types/                 # Cross-cutting types shared by several modules
+                         # (module-local types live beside their module)
     index.ts             # Barrel export
     enums.ts             # JobStatus (active/disabled/archived), ScheduleType, Mode, AttachmentType, ChannelName
     config.ts            # Config, ChannelsConfig, TelegramConfig, SlackConfig
@@ -302,9 +303,12 @@ Jobs can be assigned to employees via `--employee` on CLI or `employee` paramete
 
 - TypeScript, strict mode, ESNext target
 - Semicolons required
-- Imports: node builtins first, then deps, then local. Types from `types/`, functions from their module.
-- Types only in `src/types/`, constants only in `src/constants/`, utils in `src/utils/`
+- Imports: node builtins first, then deps, then local. Static imports by default — `await import()` is only for genuine CLI lazy-loading or breaking a cycle, never for node builtins.
+- Types: cross-cutting ones in `src/types/`; a type used by one module lives with that module. Constants in `src/constants/`, utils in `src/utils/`.
 - Local timestamps via `localTime()` — never raw `toISOString()` for display
+- Errors: `errMsg(err)` to read a message, `asError(err)` to normalize before rethrowing. Never hand-roll `err instanceof Error ? ... : String(err)`.
+- Best-effort work that must not fail the caller uses `ignore(promise, "what it was")` — never `.catch(() => {})`. A swallowed failure has to leave a trace, or a persistent one is invisible.
+- A log line must not claim something happened unless the write that made it happen succeeded.
 
 ## Releasing
 

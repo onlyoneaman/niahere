@@ -12,6 +12,7 @@ import { consolidateSession } from "./consolidator";
 import { summarizeSession } from "./summarizer";
 import { loadConfig } from "../utils/config";
 import { log } from "../utils/log";
+import { ignore } from "../utils/errors";
 
 type FinalizationTask = "consolidate" | "summarize";
 
@@ -132,11 +133,14 @@ async function processOne(sessionId: string, room: string, messageCount: number)
       log.error({ sessionId, room, messageCount, errors }, "finalizer: completed with task failures");
     }
   } catch (err) {
-    await sql`
-      UPDATE finalization_requests
-      SET status = 'failed', updated_at = NOW()
-      WHERE id = ${requestId}
-    `.catch(() => {});
+    await ignore(
+      sql`
+        UPDATE finalization_requests
+        SET status = 'failed', updated_at = NOW()
+        WHERE id = ${requestId}
+      `,
+      "mark finalization request failed",
+    );
 
     log.error({ err, sessionId, room }, "finalizer: processing failed");
   }

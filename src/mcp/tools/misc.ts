@@ -1,4 +1,5 @@
 import { appendFileSync } from "fs";
+import { errMsg } from "../../utils/errors";
 import { join } from "path";
 import { getPaths } from "../../utils/paths";
 import { scanAgents } from "../../core/agents";
@@ -58,6 +59,6 @@ export async function placeCall(args: {
     });
     return `Call placed. callSid=${result.callSid} status=${result.status}. Transcript will land in messages once the call completes.`;
   } catch (err) {
-    return `place_call failed: ${err instanceof Error ? err.message : String(err)}`;
+    return `place_call failed: ${errMsg(err)}`;
   }
 }

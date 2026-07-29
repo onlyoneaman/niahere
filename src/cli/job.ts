@@ -1,4 +1,5 @@
 import * as readline from "readline";
+import { existsSync, readFileSync } from "fs";
 import { readState, readAudit } from "../utils/logger";
 import { getConfig } from "../utils/config";
 import { runJob } from "../core/runner";
@@ -145,7 +146,6 @@ export async function jobCommand(): Promise<void> {
       const promptFile = args.getString("prompt-file");
       let prompt: string;
       if (promptFile) {
-        const { existsSync, readFileSync } = await import("fs");
         if (!existsSync(promptFile)) fail(`File not found: ${promptFile}`);
         prompt = readFileSync(promptFile, "utf8").trim();
       } else if (promptFlag) {
@@ -243,7 +243,6 @@ export async function jobCommand(): Promise<void> {
       const promptFile = args.getString("prompt-file");
       let prompt = args.getString("prompt");
       if (promptFile) {
-        const { existsSync, readFileSync } = await import("fs");
         if (!existsSync(promptFile)) fail(`File not found: ${promptFile}`);
         prompt = readFileSync(promptFile, "utf8").trim();
       }

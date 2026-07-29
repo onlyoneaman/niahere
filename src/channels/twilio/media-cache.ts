@@ -16,6 +16,7 @@ import { createHash } from "crypto";
 import { join } from "path";
 import { getNiaHome } from "../../utils/paths";
 import { log } from "../../utils/log";
+import { ignore } from "../../utils/errors";
 
 const MAX_FILES = 100;
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -85,7 +86,7 @@ async function evict(): Promise<void> {
   let alive: typeof stats = [];
   for (const s of stats) {
     if (now - s.mtime > MAX_AGE_MS) {
-      await unlink(s.path).catch(() => {});
+      await ignore(unlink(s.path), "prune cached media");
     } else {
       alive.push(s);
     }
@@ -95,13 +96,13 @@ async function evict(): Promise<void> {
 
   while (alive.length > MAX_FILES) {
     const victim = alive.shift()!;
-    await unlink(victim.path).catch(() => {});
+    await ignore(unlink(victim.path), "prune cached media");
   }
 
   let totalBytes = alive.reduce((sum, f) => sum + f.size, 0);
   while (totalBytes > MAX_BYTES && alive.length > 0) {
     const victim = alive.shift()!;
     totalBytes -= victim.size;
-    await unlink(victim.path).catch(() => {});
+    await ignore(unlink(victim.path), "prune cached media");
   }
 }

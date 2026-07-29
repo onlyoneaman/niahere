@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { existsSync, mkdirSync } from "fs";
+import { existsSync, mkdirSync, readFileSync } from "fs";
 import { isRunning, readPid, runDaemon, startDaemon, stopDaemon } from "../core/daemon";
 import { getConfig } from "../utils/config";
 import { localTime } from "../utils/time";
@@ -58,7 +58,6 @@ async function awaitStartup(timeout = 60_000): Promise<void> {
 
   if (expecting.size === 0) return;
 
-  const { readFileSync } = await import("fs");
   const ready = new Set<string>();
   let logOffset = 0;
   try {

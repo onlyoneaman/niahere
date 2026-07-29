@@ -4,6 +4,7 @@ import { randomBytes, randomUUID } from "crypto";
 import type { NiaTool } from "../mcp/tools/types";
 import type { McpSourceContext } from "../mcp";
 import { log } from "../utils/log";
+import { ignore } from "../utils/errors";
 import { gateSideEffects } from "../mcp/gate";
 
 /**
@@ -93,8 +94,8 @@ export function revokeRun(token: string): void {
   const entry = runs.get(token);
   if (!entry) return;
   runs.delete(token);
-  entry.transport.close().catch(() => {});
-  entry.server.close().catch(() => {});
+  void ignore(entry.transport.close(), "close run transport");
+  void ignore(entry.server.close(), "close run server");
 }
 
 /** Test/diagnostic: number of live runs. */

@@ -8,6 +8,7 @@ import { Session, Message, ActiveEngine, Job } from "../db/models";
 import type { Attachment, SendResult, SendCallbacks, ChatEngine, EngineOptions } from "../types";
 import { finalizeSession, cancelPending } from "../core/finalizer";
 import { log } from "../utils/log";
+import { asError, errMsg, ignore } from "../utils/errors";
 import { registerActiveHandle, unregisterActiveHandle } from "../core/active-handles";
 import { resolveJobPrompt } from "../core/job-prompt";
 import { truncate } from "../utils/format-activity";
@@ -169,7 +170,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
     clearIdleTimer();
     clearLongRunningTimer();
     if (session) {
-      await session.close().catch(() => {});
+      await ignore(session.close(), "close chat session");
       session = null;
     }
     unregisterActiveHandle(room);
@@ -239,7 +240,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
 
       // Cancel any pending finalization — session is active again
       if (sessionId) {
-        cancelPending(sessionId).catch(() => {});
+        void ignore(cancelPending(sessionId), "cancel pending finalization");
       }
 
       await ActiveEngine.register(room, channel);
@@ -266,7 +267,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
           // A backend that cannot start must not take the turn down.
           const next = cursor.advance("provider");
           log.warn({ room, err: String(err), to: next && describeEntry(next) }, "chat backend failed to start");
-          if (!next) throw err instanceof Error ? err : new Error(String(err));
+          if (!next) throw asError(err);
           handoff = await buildHandoff(userMessage);
           continue;
         }
@@ -318,7 +319,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
                     messageId = await Message.save({ ...saveParams, metadata: undefined });
                   }
                   await Session.touch(sessionId);
-                  Session.accumulateMetadata(sessionId, { ...(ev.metadata ?? {}), channel }).catch(() => {});
+                  void ignore(Session.accumulateMetadata(sessionId, { ...(ev.metadata ?? {}), channel }), "accumulate session metadata");
                 }
                 result = { result: ev.text, costUsd, turns, messageId };
                 break;
@@ -340,11 +341,11 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
             }
           }
         } catch (err) {
-          await ActiveEngine.unregister(room).catch(() => {});
+          await ignore(ActiveEngine.unregister(room), "unregister active-engine");
           clearLongRunningTimer();
           inFlight = false;
           if (sess.backendSessionId) sessionId = sess.backendSessionId;
-          throw err instanceof Error ? err : new Error(String(err));
+          throw asError(err);
         }
 
         // Re-read the backend session id post-send so finalize/DB target it.
@@ -379,7 +380,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
         }
       }
       await teardown();
-      await ActiveEngine.unregister(room).catch(() => {});
+      await ignore(ActiveEngine.unregister(room), "unregister active-engine");
     },
   };
 }

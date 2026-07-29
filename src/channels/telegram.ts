@@ -7,6 +7,7 @@ import { getConfig, updateRawConfig } from "../utils/config";
 import { runMigrations } from "../db/migrate";
 import { Message } from "../db/models";
 import { log } from "../utils/log";
+import { errMsg, ignore } from "../utils/errors";
 import { getMcpServers } from "../mcp";
 import { classifyMime, validateAttachment, prepareImage } from "../utils/attachment";
 import { getNiaHome } from "../utils/paths";
@@ -118,7 +119,7 @@ class TelegramChannel implements Channel {
         await this.processMessage(ctx, state, caption, [attachment]);
       } catch (err) {
         log.error({ err, chatId }, "failed to process photo");
-        await ctx.reply("Failed to process image.").catch(() => {});
+        await ignore(ctx.reply("Failed to process image."), "reply image failure");
       }
     });
   }
@@ -157,7 +158,7 @@ class TelegramChannel implements Channel {
         await this.processMessage(ctx, state, caption, [attachment]);
       } catch (err) {
         log.error({ err, chatId }, "failed to process document");
-        await ctx.reply("Failed to process document.").catch(() => {});
+        await ignore(ctx.reply("Failed to process document."), "reply document failure");
       }
     });
   }
@@ -176,25 +177,25 @@ class TelegramChannel implements Channel {
     log.info({ chatId, text: text.slice(0, 100), attachments: attachments?.length || 0 }, "telegram message received");
 
     const typingInterval = setInterval(() => {
-      bot.api.sendChatAction(chatId, "typing").catch(() => {});
+      void ignore(bot.api.sendChatAction(chatId, "typing"), "send typing indicator");
     }, 4000);
-    bot.api.sendChatAction(chatId, "typing").catch(() => {});
+    void ignore(bot.api.sendChatAction(chatId, "typing"), "send typing indicator");
 
     try {
       const { result, messageId } = await state.engine.send(text, {}, attachments);
       const reply = result.trim() || "(no response)";
       try {
         await bot.api.sendMessage(chatId, reply);
-        if (messageId) await Message.updateDeliveryStatus(messageId, "sent").catch(() => {});
+        if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "sent"), "record sent delivery status");
         log.info({ chatId, chars: result.length }, "telegram reply sent");
       } catch (sendErr) {
-        if (messageId) await Message.updateDeliveryStatus(messageId, "failed").catch(() => {});
+        if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "failed"), "record failed delivery status");
         throw sendErr;
       }
     } catch (err) {
-      const errText = err instanceof Error ? err.message : String(err);
+      const errText = errMsg(err);
       log.error({ err, chatId }, "telegram message processing failed");
-      await bot.api.sendMessage(chatId, `[error] ${errText}`).catch(() => {});
+      await ignore(bot.api.sendMessage(chatId, `[error] ${errText}`), "reply engine error");
     } finally {
       clearInterval(typingInterval);
     }
@@ -238,7 +239,7 @@ class TelegramChannel implements Channel {
   private gate(ctx: Context): boolean {
     if (!ctx.chatId) return false;
     if (this.isAllowed(ctx.chatId)) return true;
-    ctx.reply("Unauthorized.").catch(() => {});
+    void ignore(ctx.reply("Unauthorized."), "reply unauthorized");
     return false;
   }
 

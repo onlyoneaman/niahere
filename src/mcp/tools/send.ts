@@ -5,6 +5,7 @@ import { Message, Session } from "../../db/models";
 import { getConfig } from "../../utils/config";
 import { getChannel } from "../../channels/registry";
 import { log } from "../../utils/log";
+import { errMsg, ignore } from "../../utils/errors";
 import type { Recipient } from "../../types";
 import type { McpSourceContext } from "../index";
 
@@ -168,7 +169,7 @@ export async function sendMessage(
     let media: { data: Uint8Array; mimeType: string; filename: string } | undefined;
     if (mediaPath) {
       if (!existsSync(mediaPath)) {
-        if (messageId) await Message.updateDeliveryStatus(messageId, "failed").catch(() => {});
+        if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "failed"), "record failed delivery status");
         return `Failed to send: file not found: ${mediaPath}`;
       }
       const buf = readFileSync(mediaPath);
@@ -190,13 +191,13 @@ export async function sendMessage(
 
     // Mark as sent
     if (messageId) {
-      await Message.updateDeliveryStatus(messageId, "sent").catch(() => {});
+      await ignore(Message.updateDeliveryStatus(messageId, "sent"), "record sent delivery status");
     }
 
     return mediaPath ? "Message with media sent." : "Message sent.";
   } catch (err) {
-    if (messageId) await Message.updateDeliveryStatus(messageId, "failed").catch(() => {});
-    const errText = err instanceof Error ? err.message : String(err);
+    if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "failed"), "record failed delivery status");
+    const errText = errMsg(err);
     return `Failed to send: ${errText}`;
   }
 }

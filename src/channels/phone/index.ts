@@ -25,6 +25,7 @@ import type { ServerWebSocket } from "bun";
 import type { Channel, Outbound, PhoneConfig, TwilioConfig } from "../../types";
 import { getConfig } from "../../utils/config";
 import { log } from "../../utils/log";
+import { ignore } from "../../utils/errors";
 import { getChannel } from "../registry";
 import { Session, Message } from "../../db/models";
 import { runMigrations } from "../../db/migrate";
@@ -194,9 +195,10 @@ class PhoneChannel implements Channel {
 
     if (!allowed) {
       log.warn({ from, callSid }, "phone: rejecting unauthorized caller");
-      getChannel("telegram")
-        ?.deliver({ text: `Phone: rejected call from ${from} (CallSid ${callSid})` })
-        .catch(() => {});
+      const notice = getChannel("telegram")?.deliver({
+        text: `Phone: rejected call from ${from} (CallSid ${callSid})`,
+      });
+      if (notice) void ignore(notice, "notify rejected caller");
       return twimlResponse(sayAndHangupTwiML("Sorry, this line is not currently accepting calls. Goodbye."));
     }
 

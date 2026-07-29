@@ -73,16 +73,6 @@ export async function placeCall(opts: PlaceCallOpts): Promise<PlaceCallResult> {
   return { callSid: data.sid, status: data.status };
 }
 
-export async function updateCallUrl(opts: TwilioCreds & { callSid: string; url: string }): Promise<void> {
-  const body = new URLSearchParams({ Url: opts.url, Method: "POST" });
-  await twilioPost(opts, `/Calls/${encodeURIComponent(opts.callSid)}.json`, body);
-}
-
-export async function hangupCall(opts: TwilioCreds & { callSid: string }): Promise<void> {
-  const body = new URLSearchParams({ Status: "completed" });
-  await twilioPost(opts, `/Calls/${encodeURIComponent(opts.callSid)}.json`, body);
-}
-
 // --- Messages (SMS / WhatsApp) ---
 
 export interface SendMessageOpts extends TwilioCreds {
@@ -111,24 +101,3 @@ export async function sendMessage(opts: SendMessageOpts): Promise<SendMessageRes
 }
 
 // --- Phone number config (update inbound webhook on a number) ---
-
-export async function updateIncomingPhoneNumber(
-  opts: TwilioCreds & {
-    phoneNumberSid: string;
-    voiceUrl?: string;
-    voiceMethod?: "GET" | "POST";
-    smsUrl?: string;
-    smsMethod?: "GET" | "POST";
-    statusCallback?: string;
-    statusCallbackMethod?: "GET" | "POST";
-  },
-): Promise<void> {
-  const body = new URLSearchParams();
-  if (opts.voiceUrl !== undefined) body.set("VoiceUrl", opts.voiceUrl);
-  if (opts.voiceMethod) body.set("VoiceMethod", opts.voiceMethod);
-  if (opts.smsUrl !== undefined) body.set("SmsUrl", opts.smsUrl);
-  if (opts.smsMethod) body.set("SmsMethod", opts.smsMethod);
-  if (opts.statusCallback !== undefined) body.set("StatusCallback", opts.statusCallback);
-  if (opts.statusCallbackMethod) body.set("StatusCallbackMethod", opts.statusCallbackMethod);
-  await twilioPost(opts, `/IncomingPhoneNumbers/${encodeURIComponent(opts.phoneNumberSid)}.json`, body);
-}

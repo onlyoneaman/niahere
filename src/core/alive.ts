@@ -1,4 +1,7 @@
 import { log } from "../utils/log";
+import { homedir } from "os";
+import { existsSync, readFileSync, unlinkSync } from "fs";
+import { errMsg } from "../utils/errors";
 import { getConfig } from "../utils/config";
 import { getSql, closeDb } from "../db/connection";
 import { reconcileChannels } from "../channels";
@@ -23,7 +26,6 @@ async function recoverPostgres(): Promise<boolean> {
   log.info("alive: postgres not ready, attempting deterministic recovery");
 
   // Find and remove stale postmaster.pid
-  const { existsSync, unlinkSync, readFileSync } = await import("fs");
   for (const dir of PG_DATA_DIRS) {
     const pidFile = `${dir}/postmaster.pid`;
     if (!existsSync(pidFile)) continue;
@@ -126,7 +128,6 @@ async function notifyUser(message: string): Promise<void> {
 async function runRecoveryAgent(failures: Check[]): Promise<{ recovered: boolean; report: string }> {
   try {
     const { runOneShot } = await import("./runner");
-    const { homedir } = await import("os");
 
     const failureSummary = failures.map((f) => `- ${f.name}: ${f.detail}`).join("\n");
 
@@ -160,7 +161,7 @@ async function runRecoveryAgent(failures: Check[]): Promise<{ recovered: boolean
   } catch (err) {
     return {
       recovered: false,
-      report: `Recovery agent failed to run: ${err instanceof Error ? err.message : String(err)}`,
+      report: `Recovery agent failed to run: ${errMsg(err)}`,
     };
   }
 }

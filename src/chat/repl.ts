@@ -1,4 +1,5 @@
 import * as readline from "readline";
+import { errMsg, ignore } from "../utils/errors";
 import { createChatEngine } from "./engine";
 import { runMigrations } from "../db/migrate";
 import { closeDb } from "../db/connection";
@@ -118,7 +119,7 @@ export async function startRepl(
   try {
     await runMigrations();
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errMsg(err);
     console.error(`Failed to connect to postgres: ${msg}`);
     console.error(`Set database_url in ~/.niahere/config.yaml or run \`nia init\``);
     process.exit(1);
@@ -218,7 +219,7 @@ export async function startRepl(
       process.stdout.write("\n\n");
     } catch (err) {
       status.stop();
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = errMsg(err);
       console.error(`\n${DIM}error:${RESET} ${msg}\n`);
     }
   }
@@ -252,9 +253,8 @@ export async function startRepl(
   rl.on("close", async () => {
     console.log(`\n${DIM}bye${RESET}`);
     await engine.close();
-    closeDb()
-      .catch(() => {})
-      .finally(() => process.exit(0));
+    await ignore(closeDb(), "close db on exit");
+    process.exit(0);
   });
 
   process.on("SIGINT", () => {

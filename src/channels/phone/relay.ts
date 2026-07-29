@@ -12,6 +12,7 @@
  *   const result = await relay.completion;
  */
 import { log } from "../../utils/log";
+import { errMsg } from "../../utils/errors";
 
 export interface PhoneToolDefinition {
   name: string;
@@ -268,7 +269,7 @@ export function createRelay(opts: RelayOpts): RelayHandle {
           try {
             output = await tool.handler(args);
           } catch (err) {
-            output = `error: ${err instanceof Error ? err.message : String(err)}`;
+            output = `error: ${errMsg(err)}`;
             log.error({ err, callSid: context.callSid, toolName }, "phone tool handler failed");
           }
         }

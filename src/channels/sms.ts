@@ -19,6 +19,7 @@ import { runMigrations } from "../db/migrate";
 import type { Channel, ChatState, Outbound, TwilioConfig } from "../types";
 import { getConfig } from "../utils/config";
 import { log } from "../utils/log";
+import { errMsg, ignore } from "../utils/errors";
 import { sendMessage as twilioSendMessage } from "./twilio/rest";
 import { getTwilioServer } from "./twilio/server";
 import { chainLock, openChatEngine } from "./common/chat-session";
@@ -107,7 +108,7 @@ class SmsChannel implements Channel {
         await this.sendTo(from, reply);
       } catch (err) {
         log.error({ err, from }, "sms: engine error");
-        await this.sendTo(from, `[error] ${err instanceof Error ? err.message : String(err)}`).catch(() => {});
+        await ignore(this.sendTo(from, `[error] ${errMsg(err)}`), "reply engine error");
       }
     });
 

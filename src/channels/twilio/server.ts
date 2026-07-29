@@ -248,8 +248,3 @@ export function getTwilioServer(): TwilioServer {
   if (!_instance) _instance = new TwilioServerImpl();
   return _instance;
 }
-
-/** Test-only: drop the singleton so tests get a fresh server. */
-export function resetTwilioServer(): void {
-  _instance = null;
-}

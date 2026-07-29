@@ -1,4 +1,5 @@
 import { getSql } from "../connection";
+import { errMsg } from "../../utils/errors";
 import { CronExpressionParser } from "cron-parser";
 import { parseDuration } from "../../utils/duration";
 import { computeInitialNextRun } from "../../utils/schedule";
@@ -13,14 +14,14 @@ function validateSchedule(schedule: string, scheduleType: ScheduleType): void {
       try {
         CronExpressionParser.parse(schedule);
       } catch (err) {
-        throw new Error(`Invalid cron expression "${schedule}": ${err instanceof Error ? err.message : err}`);
+        throw new Error(`Invalid cron expression "${schedule}": ${errMsg(err)}`);
       }
       break;
     case "interval":
       try {
         parseDuration(schedule);
       } catch (err) {
-        throw new Error(`Invalid interval "${schedule}": ${err instanceof Error ? err.message : err}`);
+        throw new Error(`Invalid interval "${schedule}": ${errMsg(err)}`);
       }
       break;
     case "once": {

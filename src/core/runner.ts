@@ -13,6 +13,7 @@ import { buildJobPrompt } from "./job-prompt";
 import { getMcpServers, type McpSourceContext } from "../mcp";
 import { ActiveEngine } from "../db/models";
 import { log } from "../utils/log";
+import { errMsg, ignore } from "../utils/errors";
 import { registerActiveHandle, unregisterActiveHandle } from "./active-handles";
 import { resolveChain, ChainCursor, describeEntry, type ChainEntry, type AgentSession, type AgentSessionContext, type FailoverScope } from "../agent";
 
@@ -105,7 +106,7 @@ async function runEntry(
     const session = await entry.backend.openSession({ ...sessionCtx, model: entry.model });
     return await consumeBackendRun(session, prompt, onActivity, activeRoom);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errMsg(err);
     log.warn({ entry: describeEntry(entry), err: message }, "backend failed to start");
     return { agentText: "", sessionId: "", error: message, failover: "provider" };
   }
@@ -178,7 +179,7 @@ export interface TaskOptions {
  */
 export async function runTask(opts: TaskOptions): Promise<RunnerOutput> {
   const room = `_system/${opts.name}`;
-  await ActiveEngine.register(room, "system").catch(() => {});
+  await ignore(ActiveEngine.register(room, "system"), "register system active-engine");
   try {
     const systemPrompt = opts.systemPrompt || buildSystemPrompt("job");
     const output = await runOneShot({ systemPrompt, prompt: opts.prompt, cwd: homedir(), activeRoom: room });
@@ -189,7 +190,7 @@ export async function runTask(opts: TaskOptions): Promise<RunnerOutput> {
     }
     return output;
   } finally {
-    await ActiveEngine.unregister(room).catch(() => {});
+    await ignore(ActiveEngine.unregister(room), "unregister active-engine");
   }
 }
 
@@ -207,7 +208,7 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
   const state: Record<string, JobState> = { ...readState() };
   state[job.name] = { lastRun: timestamp, status: "running", duration_ms: 0 };
   writeState(state);
-  await ActiveEngine.register(room, "job").catch(() => {});
+  await ignore(ActiveEngine.register(room, "job"), "register job active-engine");
 
   try {
     let cwd = homedir();
@@ -300,7 +301,7 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
     return result;
   } catch (err) {
     const duration_ms = Math.round(performance.now() - startMs);
-    const errorMsg = err instanceof Error ? err.message : String(err);
+    const errorMsg = errMsg(err);
 
     const result: JobResult = {
       job: job.name,
@@ -332,6 +333,6 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
 
     return result;
   } finally {
-    await ActiveEngine.unregister(room).catch(() => {});
+    await ignore(ActiveEngine.unregister(room), "unregister active-engine");
   }
 }

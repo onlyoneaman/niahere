@@ -1,5 +1,5 @@
 import * as readline from "readline";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { homedir } from "os";
 import { getNiaHome, getPaths } from "../utils/paths";
@@ -436,7 +436,6 @@ export async function runInit(): Promise<void> {
           }
         } else if (hasDefaultReference) {
           // No description — copy defaults
-          const { copyFileSync } = await import("fs");
           copyFileSync(`${SKILL_ASSETS_DIR}/nia-reference.webp`, `${imagesDir}/reference.webp`);
           console.log(`  \u2713 copied default reference image`);
           if (existsSync(`${SKILL_ASSETS_DIR}/nia-profile.webp`)) {

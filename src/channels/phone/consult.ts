@@ -6,6 +6,7 @@
  * Heavyweight (multi-second latency) by design — keep usage selective.
  */
 import Anthropic from "@anthropic-ai/sdk";
+import { errMsg } from "../../utils/errors";
 import { loadIdentity } from "../../chat/identity";
 import { log } from "../../utils/log";
 
@@ -38,6 +39,6 @@ export async function consultClaude(question: string, callerLabel: string): Prom
     return "(no answer)";
   } catch (err) {
     log.error({ err }, "phone: consult_claude failed");
-    return `error consulting Claude: ${err instanceof Error ? err.message : String(err)}`;
+    return `error consulting Claude: ${errMsg(err)}`;
   }
 }

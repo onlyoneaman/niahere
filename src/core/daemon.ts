@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import { getPaths } from "../utils/paths";
 import { getConfig, resetConfig } from "../utils/config";
 import { log } from "../utils/log";
+import { asError, ignore } from "../utils/errors";
 import { isRunning, readPid, removePid, writePid } from "../utils/pid";
 import { ActiveEngine, Job } from "../db/models";
 import { runMigrations } from "../db/migrate";
@@ -192,7 +193,7 @@ export async function runDaemon(): Promise<void> {
     process.exit(1);
   });
   process.on("unhandledRejection", (reason) => {
-    const err = reason instanceof Error ? reason : new Error(String(reason));
+    const err = asError(reason);
     log.fatal({ err }, "unhandled rejection — cleaning up");
     removePid();
     process.exit(1);
@@ -353,7 +354,7 @@ export async function runDaemon(): Promise<void> {
     log.info("received SIGHUP, reloading config");
     resetConfig();
     await reconcileChannels();
-    await recomputeAllNextRuns().catch(() => {});
+    await ignore(recomputeAllNextRuns(), "recompute next runs after SIGHUP");
   });
 
   let shuttingDown = false;

@@ -7,6 +7,7 @@ import type { McpSourceContext } from "../../mcp";
 import { CodexNormalizer } from "./codex-normalize";
 import { mintRun, revokeRun } from "../mcp-endpoint";
 import { scopeOf, parseFailure } from "../failure";
+import { ignore } from "../../utils/errors";
 
 /**
  * Resolve the codex binary's absolute path. The daemon runs under launchd with a
@@ -256,7 +257,7 @@ class CodexSession implements AgentSession {
         };
       }
     } finally {
-      await stdout.cancel().catch(() => {});
+      await ignore(stdout.cancel(), "cancel codex stdout reader");
       revokeRun(token);
       this.proc = null;
     }

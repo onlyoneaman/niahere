@@ -1,4 +1,5 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { asError } from "../../utils/errors";
 import { randomUUID } from "crypto";
 import { existsSync } from "fs";
 import { join } from "path";
@@ -126,7 +127,7 @@ class ClaudeSession implements AgentSession {
           res = await this.iterator!.next();
         } catch (err) {
           if (this.aborted) throw new Error(this.aborted);
-          throw err instanceof Error ? err : new Error(String(err));
+          throw asError(err);
         }
         if (this.aborted) throw new Error(this.aborted);
         if (res.done) {
