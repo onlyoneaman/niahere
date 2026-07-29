@@ -192,3 +192,15 @@ export async function getLatestRoomIndex(prefix: string): Promise<number> {
   }
   return max;
 }
+
+/** How many messages of this session the consolidator has already read. */
+export async function getConsolidatedCount(sessionId: string): Promise<number> {
+  const sql = getSql();
+  const rows = await sql`SELECT consolidated_count FROM sessions WHERE id = ${sessionId}`;
+  return rows.length > 0 ? Number(rows[0].consolidated_count ?? 0) : 0;
+}
+
+export async function setConsolidatedCount(sessionId: string, count: number): Promise<void> {
+  const sql = getSql();
+  await sql`UPDATE sessions SET consolidated_count = ${count} WHERE id = ${sessionId}`;
+}

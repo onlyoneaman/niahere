@@ -10,36 +10,69 @@
  * See AGENTS.md > "Two-stage memory" for the full architecture.
  */
 
-import { Message } from "../db/models";
+import { Message, Session } from "../db/models";
 import { runTask } from "./runner";
 import { log } from "../utils/log";
 import type { SessionMessage } from "../types";
 
-/** Bounded dedup: sessionId → message count at last consolidation. Prevents re-processing
- *  the same messages while allowing re-consolidation when new turns arrive. */
-const processedCounts = new Map<string, number>();
 const inFlight = new Set<string>();
-const MAX_TRACKED = 500;
 
-/** Max messages to include in transcript (most recent). Keeps prompt size bounded. */
+/** Max messages in one transcript. Keeps the prompt bounded. */
 const MAX_TRANSCRIPT_MESSAGES = 50;
+
+/** New turns required before a session already consolidated is looked at again.
+ *  Without it, a long-running room re-sends its whole window on every message. */
+export const MIN_NEW_MESSAGES = 6;
+
+/** Prior turns replayed alongside new ones, so a learning that spans the
+ *  boundary is not cut in half. */
+export const CONTEXT_TAIL = 5;
+
+export interface ConsolidationPlan {
+  run: boolean;
+  /** Index into the session's messages to start the transcript from. */
+  from: number;
+}
+
+/**
+ * Decide whether a session is worth (re-)reading and over what window.
+ *
+ * A session is always read once — a correction can be two turns, and skipping
+ * short sessions starves the pipeline. After that it takes a real batch of new
+ * turns to justify another pass, and only the new tail is re-read.
+ */
+export function planConsolidation(total: number, consolidated: number): ConsolidationPlan {
+  const floor = Math.max(0, total - MAX_TRANSCRIPT_MESSAGES);
+
+  if (consolidated <= 0) {
+    return { run: total >= 2, from: floor };
+  }
+  if (total - consolidated < MIN_NEW_MESSAGES) {
+    return { run: false, from: floor };
+  }
+  return { run: true, from: Math.max(floor, consolidated - CONTEXT_TAIL) };
+}
 
 /** Rooms to skip (placeholder sessions). */
 function shouldSkip(room: string): boolean {
   return room.includes("placeholder");
 }
 
-/** Format conversation transcript for the extraction prompt. Cap to recent messages. */
-function formatTranscript(messages: SessionMessage[]): string {
-  const recent = messages.slice(-MAX_TRANSCRIPT_MESSAGES);
-  const skipped = messages.length - recent.length;
-  const prefix = skipped > 0 ? `[...${skipped} earlier messages omitted]\n\n` : "";
+/** Format the transcript window for the extraction prompt. */
+function formatTranscript(messages: SessionMessage[], from: number, consolidated: number): string {
+  const window = messages.slice(from);
+  const prefix = from > 0 ? `[...${from} earlier messages already consolidated, omitted]\n\n` : "";
+  const seen = Math.max(0, consolidated - from);
+  const marker = seen > 0 ? `\n\n--- everything below is NEW since the last pass ---\n` : "";
 
-  return prefix + recent.map((m) => `[${m.sender}] (${m.createdAt}): ${m.content.slice(0, 2000)}`).join("\n\n");
+  const lines = window.map(
+    (m, i) => `${i === seen && marker ? marker : ""}[${m.sender}] (${m.createdAt}): ${m.content.slice(0, 2000)}`,
+  );
+  return prefix + lines.join("\n\n");
 }
 
 /** Build the consolidation prompt from a conversation transcript. */
-function buildConsolidationPrompt(transcript: string, source: string): string {
+export function buildConsolidationPrompt(transcript: string, source: string): string {
   const today = new Date().toISOString().slice(0, 10);
   return `Job: memory-consolidation (triggered by ${source})
 
@@ -91,11 +124,27 @@ stop here and do not write anything.
    (Includes: "we're using X not Y", config changes, deployment patterns)
 4. What did the user explicitly ask to be remembered?
 
-Trivial small talk, greetings, and pure status updates are NOT answers.
-But corrections made DURING task execution ("no, check DynamoDB not S3"),
+Corrections made DURING task execution ("no, check DynamoDB not S3"),
 architecture learned while debugging ("ah, this service talks to X via Y"),
 and workflow patterns revealed by how the user works — these ARE answers.
-The bar is: would a fresh Nia session benefit from knowing this?
+
+**The bar is durability: would this still be true and useful in 30 days?**
+"Would a fresh session benefit" is too weak — it admits anything mildly
+relevant. A fact that expires with the week is noise once it expires.
+
+Never stage any of these, however interesting they seemed in the moment:
+
+- **Transient state** — what a service was doing today, a current error, a
+  job's latest output, "X is down". True this hour, misleading next month.
+- **One-off events** — a single incident, a one-time request, "we deployed
+  at 3pm". A pattern needs repetition; one occurrence is an anecdote.
+- **Derivable facts** — anything already in the repo, config, git history,
+  or \`nia status\`. If a future session can look it up, it does not need
+  remembering.
+- **Task chatter** — what was done this session, progress reports, what to
+  do next. That belongs in the work, not in who the user is.
+- **Restatements** — a rewording of something in \`memory.md\` or \`rules.md\`.
+  Reinforce the existing entry instead (Step 3.2).
 
 ## Step 3 — Update staging.md
 
@@ -128,6 +177,8 @@ For each substantive answer:
 - Do NOT message the user.
 - If nothing qualifies, do nothing. But don't be so conservative that the
   pipeline starves — if you're skipping every session, your bar is too high.
+  Most sessions should yield zero or one candidate. Several is suspicious;
+  re-check them against the exclusion list before writing.
 
 Report a one-line summary of what you did: "staged N new / reinforced M /
 skipped (trivial session)". No preamble.`;
@@ -155,26 +206,22 @@ export async function consolidateSession(sessionId: string, room: string): Promi
 
   try {
     const messages = await Message.getBySession(sessionId);
-    if (messages.length < 2) return;
-
-    // Skip if already processed this exact message count
-    if (processedCounts.get(sessionId) === messages.length) return;
+    const consolidated = await Session.getConsolidatedCount(sessionId);
+    const plan = planConsolidation(messages.length, consolidated);
+    if (!plan.run) return;
 
     inFlight.add(sessionId);
 
-    log.info({ sessionId, room, messageCount: messages.length }, "consolidator: extracting memories from chat");
+    log.info(
+      { sessionId, room, messageCount: messages.length, consolidated, from: plan.from },
+      "consolidator: extracting memories from chat",
+    );
 
-    const transcript = formatTranscript(messages);
+    const transcript = formatTranscript(messages, plan.from, consolidated);
     await runConsolidation(transcript, `chat session idle — ${room}`);
 
-    // Mark as processed only on success
-    processedCounts.set(sessionId, messages.length);
-
-    // Evict oldest entries when over cap
-    if (processedCounts.size > MAX_TRACKED) {
-      const firstKey = processedCounts.keys().next().value;
-      if (firstKey) processedCounts.delete(firstKey);
-    }
+    // Advance the watermark only on success.
+    await Session.setConsolidatedCount(sessionId, messages.length);
   } catch (err) {
     log.error({ err, sessionId, room }, "consolidator: chat extraction failed");
     throw err;
