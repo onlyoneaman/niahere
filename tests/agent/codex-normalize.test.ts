@@ -36,14 +36,13 @@ describe("CodexNormalizer", () => {
       type: "turn.completed",
       usage: { input_tokens: 100, output_tokens: 20, cached_input_tokens: 5 },
     });
-    expect(out).toEqual([
-      {
-        type: "result",
-        text: "the answer",
-        usage: { tokens: { input: 100, output: 20 } },
-        backendSessionId: "tid-9",
-      },
-    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      type: "result",
+      text: "the answer",
+      usage: { tokens: { input: 100, output: 20 } },
+      backendSessionId: "tid-9",
+    });
   });
 
   test("non-fatal error items and unknown events are ignored", () => {
@@ -87,5 +86,47 @@ describe("CodexNormalizer", () => {
     const n = new CodexNormalizer();
     const out = n.consume({ type: "turn.failed", error: { message: "the task could not be completed" } });
     expect(out[0]).toMatchObject({ type: "error", message: "the task could not be completed" });
+  });
+});
+
+describe("CodexNormalizer usage attribution", () => {
+  const turn = (model?: string) => {
+    const n = new CodexNormalizer(model);
+    n.consume({ type: "thread.started", thread_id: "t1" });
+    return n.consume({
+      type: "turn.completed",
+      usage: { input_tokens: 100, cached_input_tokens: 40, output_tokens: 7 },
+    })[0]!;
+  };
+
+  test("reports its provider so a failed-over turn is attributable", () => {
+    const ev = turn("gpt-5-codex");
+    expect(ev.type).toBe("result");
+    if (ev.type !== "result") return;
+    const usage = (ev.metadata?.model_usage as Record<string, Record<string, unknown>>)["gpt-5-codex"]!;
+    expect(usage.provider).toBe("codex");
+    expect(usage.inputTokens).toBe(100);
+    expect(usage.outputTokens).toBe(7);
+  });
+
+  test("carries codex's cached-input count, which was previously dropped", () => {
+    const ev = turn("gpt-5-codex");
+    if (ev.type !== "result") return;
+    const usage = (ev.metadata?.model_usage as Record<string, Record<string, unknown>>)["gpt-5-codex"]!;
+    expect(usage.cacheReadInputTokens).toBe(40);
+  });
+
+  test("a run on codex's own default is still attributed", () => {
+    const ev = turn(undefined);
+    if (ev.type !== "result") return;
+    const entry = Object.entries(ev.metadata?.model_usage as Record<string, Record<string, unknown>>)[0]!;
+    expect(entry[0]).toBe("default");
+    expect(entry[1].provider).toBe("codex");
+  });
+
+  test("still reports the normalized token totals on the event itself", () => {
+    const ev = turn("gpt-5-codex");
+    if (ev.type !== "result") return;
+    expect(ev.usage.tokens).toEqual({ input: 100, output: 7 });
   });
 });

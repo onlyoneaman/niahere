@@ -122,24 +122,62 @@ export async function getRecentSummaries(
   }));
 }
 
+export interface UsageTotals {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  models: string[];
+  providers: string[];
+}
+
+const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
+
+/**
+ * Fold a result's per-model usage into totals. `provider` matters because a
+ * chain that fails over makes the model name alone ambiguous about who served
+ * the turn.
+ */
+export function summarizeModelUsage(modelUsage: unknown): UsageTotals {
+  const totals: UsageTotals = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+    models: [],
+    providers: [],
+  };
+  if (!modelUsage || typeof modelUsage !== "object") return totals;
+
+  const models = new Set<string>();
+  const providers = new Set<string>();
+  for (const [key, raw] of Object.entries(modelUsage as Record<string, unknown>)) {
+    const usage = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+    models.add(str(usage.canonicalModel) ?? key);
+    const provider = str(usage.provider);
+    if (provider) providers.add(provider);
+    totals.inputTokens += num(usage.inputTokens);
+    totals.outputTokens += num(usage.outputTokens);
+    totals.cacheReadTokens += num(usage.cacheReadInputTokens);
+    totals.cacheCreationTokens += num(usage.cacheCreationInputTokens);
+  }
+  totals.models = [...models];
+  totals.providers = [...providers];
+  return totals;
+}
+
 export async function accumulateMetadata(id: string, resultMeta: Record<string, unknown>): Promise<void> {
   const sql = getSql();
 
-  const modelUsage = resultMeta.model_usage as Record<string, Record<string, number>> | undefined;
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let cacheReadTokens = 0;
-  let cacheCreationTokens = 0;
-  const newModels: string[] = [];
-  if (modelUsage) {
-    for (const [model, usage] of Object.entries(modelUsage)) {
-      newModels.push(model);
-      inputTokens += usage.inputTokens || 0;
-      outputTokens += usage.outputTokens || 0;
-      cacheReadTokens += usage.cacheReadInputTokens || 0;
-      cacheCreationTokens += usage.cacheCreationInputTokens || 0;
-    }
-  }
+  const {
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheCreationTokens,
+    models: newModels,
+    providers: newProviders,
+  } = summarizeModelUsage(resultMeta.model_usage);
 
   // Bind deltas as jsonb via sql.json — pre-stringifying would store a
   // double-encoded string scalar, making every `->>` extraction return NULL
@@ -155,9 +193,11 @@ export async function accumulateMetadata(id: string, resultMeta: Record<string, 
     total_cache_creation_tokens: cacheCreationTokens,
     message_count: 1,
     models_used: newModels,
+    providers_used: newProviders,
     channel: (resultMeta.channel as string) || null,
   });
   const modelsDelta = sql.json(newModels);
+  const providersDelta = sql.json(newProviders);
 
   // Atomic accumulate — no read-then-write race
   await sql`
@@ -173,6 +213,8 @@ export async function accumulateMetadata(id: string, resultMeta: Record<string, 
       'message_count',                COALESCE((metadata->>'message_count')::int, 0)                 + 1,
       'models_used',                  (SELECT COALESCE(jsonb_agg(DISTINCT e), '[]'::jsonb)
                                          FROM jsonb_array_elements(COALESCE(metadata->'models_used', '[]'::jsonb) || ${modelsDelta}) AS e),
+      'providers_used',               (SELECT COALESCE(jsonb_agg(DISTINCT e), '[]'::jsonb)
+                                         FROM jsonb_array_elements(COALESCE(metadata->'providers_used', '[]'::jsonb) || ${providersDelta}) AS e),
       'channel',                      COALESCE(metadata->>'channel', ${(resultMeta.channel as string) || null})
     )
     WHERE id = ${id}

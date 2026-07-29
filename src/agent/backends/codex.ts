@@ -201,7 +201,7 @@ class CodexSession implements AgentSession {
     // Started now, not after exit: an undrained pipe blocks the child.
     const stderr = drainStderr(proc.stderr);
 
-    const normalizer = new CodexNormalizer();
+    const normalizer = new CodexNormalizer(this.ctx.model);
     const stdout = proc.stdout.getReader();
     const lines = readLines(stdout)[Symbol.asyncIterator]();
     let sawTerminal = false;

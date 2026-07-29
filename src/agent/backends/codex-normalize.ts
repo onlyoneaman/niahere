@@ -14,6 +14,10 @@ import { scopeOf, parseFailure } from "../failure";
  * skill budget) and are dropped.
  */
 export class CodexNormalizer implements Normalizer {
+  /** The model this run was launched on, for usage attribution — codex's own
+   *  events don't name it. */
+  constructor(private readonly model?: string) {}
+
   private threadId = "";
   private agentText = "";
   private failed = false;
@@ -35,20 +39,30 @@ export class CodexNormalizer implements Normalizer {
         return this.fail(typeof e.message === "string" ? e.message : "");
       case "turn.failed":
         return this.fail(typeof e.error?.message === "string" ? e.error.message : "");
-      case "turn.completed":
+      case "turn.completed": {
+        const input = e.usage?.input_tokens ?? 0;
+        const output = e.usage?.output_tokens ?? 0;
         return [
           {
             type: "result",
             text: this.agentText,
-            usage: {
-              tokens: {
-                input: e.usage?.input_tokens ?? 0,
-                output: e.usage?.output_tokens ?? 0,
+            usage: { tokens: { input, output } },
+            backendSessionId: this.threadId,
+            // Same shape the Claude path emits, so one accumulator serves both
+            // and a failed-over turn is attributable to the provider that ran it.
+            metadata: {
+              model_usage: {
+                [this.model || "default"]: {
+                  provider: "codex",
+                  inputTokens: input,
+                  outputTokens: output,
+                  cacheReadInputTokens: e.usage?.cached_input_tokens ?? 0,
+                },
               },
             },
-            backendSessionId: this.threadId,
           },
         ];
+      }
       default:
         return [];
     }

@@ -170,3 +170,33 @@ describe("SdkNormalizer — result classification", () => {
     expect(result({ is_error: false, terminal_reason: "max_turns", result: "partial" }).type).toBe("result");
   });
 });
+
+// Compaction happens silently in long sessions; without this it is invisible.
+describe("SdkNormalizer — compaction", () => {
+  const boundary = (meta: Record<string, unknown>) =>
+    new SdkNormalizer().consume({ type: "system", subtype: "compact_boundary", compact_metadata: meta });
+
+  test("surfaces an automatic compaction as activity", () => {
+    const out = boundary({ trigger: "auto", pre_tokens: 152000, post_tokens: 41000 });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ type: "thinking" });
+    if (out[0]!.type === "thinking") {
+      expect(out[0].delta).toContain("compacted");
+      expect(out[0].delta).toContain("152000");
+    }
+  });
+
+  test("distinguishes a manual compaction", () => {
+    const out = boundary({ trigger: "manual", pre_tokens: 90000 });
+    if (out[0]!.type === "thinking") expect(out[0].delta).toContain("manual");
+  });
+
+  test("copes with a boundary that carries no metadata", () => {
+    expect(() => new SdkNormalizer().consume({ type: "system", subtype: "compact_boundary" })).not.toThrow();
+    expect(new SdkNormalizer().consume({ type: "system", subtype: "compact_boundary" })).toHaveLength(1);
+  });
+
+  test("other system subtypes are still ignored", () => {
+    expect(new SdkNormalizer().consume({ type: "system", subtype: "something_else" })).toEqual([]);
+  });
+});

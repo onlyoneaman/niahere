@@ -56,6 +56,17 @@ export class SdkNormalizer implements Normalizer {
       return [];
     }
 
+    if (msg.type === "system" && msg.subtype === "compact_boundary") {
+      // Long sessions compact silently; surface it so the transcript records
+      // that history was summarized and how much was dropped.
+      const meta = msg.compact_metadata ?? {};
+      const trigger = meta.trigger === "manual" ? "manual" : "auto";
+      const pre = meta.pre_tokens ?? 0;
+      const post = meta.post_tokens;
+      const shrink = post !== undefined ? `${pre} → ${post} tokens` : `${pre} tokens`;
+      return [{ type: "thinking", delta: `context compacted (${trigger}, ${shrink})` }];
+    }
+
     if (msg.type === "system") {
       // Subagent/task lifecycle (subtype init handled above).
       if (msg.subtype === "task_started" && msg.description) {
