@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- **The consolidator re-read the same transcript forever** — its watermark lived in a process-local map, so every restart lost it, and the skip guard only fired on an exactly-unchanged message count, so one new turn re-sent the last 50 messages; the watermark is a `sessions.consolidated_count` column now and a second pass needs a real batch of new turns, re-reading only the new tail.
 - **A one-shot job could keep firing while the log claimed it was disabled** — the scheduler discarded the failure of the disabling write and logged "auto-disabled" regardless; it and the invalid-schedule branch now report what actually happened.
 - **Telegram leaked its chat engines on shutdown** — `stop()` ended the bot but never closed the engines, unlike sms and whatsapp.
 
@@ -14,6 +15,7 @@
 - **One chat-session registry for every channel** — telegram, slack, sms and whatsapp each hand-rolled the same per-sender map; `ChatSessions` holds open/reuse/rotate/close once, and the allowlist check, TwiML ack and delivery-status callback move to `twilio/shared`.
 - **`cli/index.ts` is a router again** — 642 to 377 lines, with eight inlined command bodies moved into modules beside the ones already there.
 - **The phone relay is testable** — its OpenAI socket is now injectable, matching the seam the Claude and Codex backends expose, and 21 tests cover the audio bridge that had none.
+- **The consolidator stages on durability, not relevance** — the bar moved from "would a fresh session benefit" to "still true and useful in 30 days", with an explicit exclusion list for transient state, one-off events, repo-derivable facts, task chatter and restatements; the anti-starvation instruction stays, since over-eagerness was a deliberate correction from an earlier saves-nothing failure.
 - **Conventions written down** — AGENTS.md claimed all types live in `src/types/` while 35 files defined them elsewhere; co-location is the rule now, alongside the error and dynamic-import conventions.
 
 ### Removed
