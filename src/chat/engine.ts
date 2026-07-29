@@ -4,6 +4,8 @@ import { buildSystemPrompt, buildContextSuffix, getSessionContext } from "./iden
 import { buildEmployeePrompt } from "./employee-prompt";
 import { getEmployee } from "../core/employees";
 import { getAgentDefinitions, scanAgents } from "../core/agents";
+import { gapMarker } from "./gap-marker";
+import { getConfig } from "../utils/config";
 import { Session, Message, ActiveEngine, Job } from "../db/models";
 import type { Attachment, SendResult, SendCallbacks, ChatEngine, EngineOptions } from "../types";
 import { finalizeSession, cancelPending } from "../core/finalizer";
@@ -219,7 +221,13 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
       return room;
     },
 
-    async send(userMessage: string, callbacks?: SendCallbacks, attachments?: Attachment[]) {
+    async send(rawMessage: string, callbacks?: SendCallbacks, attachments?: Attachment[]) {
+      // Date the turn when time has visibly passed. Computed before anything is
+      // saved, and used for BOTH the send and the save so the stored record is
+      // exactly what the model received.
+      const marker = gapMarker(new Date(), await Message.getLastAt(room).catch(() => null), getConfig().timezone);
+      const userMessage = marker ? `${marker}\n${rawMessage}` : rawMessage;
+
       // Re-probe from the top once the failed provider's cooldown lapses, so a
       // brief outage does not pin the conversation to the fallback for good.
       if (!cursor.atHead) {

@@ -46,6 +46,16 @@ export async function getRecent(limit = 20, room?: string): Promise<RecentMessag
   }));
 }
 
+/** When the room last saw any message. Null for a room with no history. */
+export async function getLastAt(room: string): Promise<Date | null> {
+  const sql = getSql();
+  const rows = await sql`
+    SELECT created_at FROM messages WHERE room = ${room}
+    ORDER BY created_at DESC LIMIT 1
+  `;
+  return rows.length > 0 ? new Date(rows[0].created_at) : null;
+}
+
 export async function search(query: string, limit = 20, room?: string): Promise<SearchResult[]> {
   const sql = getSql();
   const pattern = `%${query}%`;

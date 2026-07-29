@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- **Stale answers after a gap** — a chat room resumes the same session indefinitely and the replayed transcript carries no timestamps, so a reply from days ago read as present-tense and the same question got the same stale answer; a turn is now prefixed with the local date and elapsed time when the day changes or more than two hours pass. The prefix is stored exactly as sent, so the transcript dates itself from then on and the failover handoff inherits it.
 - **The consolidator re-read the same transcript forever** — its watermark lived in a process-local map, so every restart lost it, and the skip guard only fired on an exactly-unchanged message count, so one new turn re-sent the last 50 messages; the watermark is a `sessions.consolidated_count` column now and a second pass needs a real batch of new turns, re-reading only the new tail.
 - **A one-shot job could keep firing while the log claimed it was disabled** — the scheduler discarded the failure of the disabling write and logged "auto-disabled" regardless; it and the invalid-schedule branch now report what actually happened.
 - **Telegram leaked its chat engines on shutdown** — `stop()` ended the bot but never closed the engines, unlike sms and whatsapp.
