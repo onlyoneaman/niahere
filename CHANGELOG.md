@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Failover always died on the fallback** — the single `model` config value was handed to whichever backend ran, so every Claude→Codex failover invoked `codex -m claude-sonnet-5` and took a 400; model ids now resolve to their own provider and can never cross backends.
+- **Codex reported a benign notice instead of the real failure** — the normalizer dropped the top-level `error`/`turn.failed` events carrying the upstream message and fell back to stderr, surfacing the "Reading additional input from stdin..." line codex prints on every non-TTY run; structured failures now come through verbatim, which is what kept the model leak hidden.
+- **A backend that could not start killed the whole run** — a missing codex binary or an unstarted MCP endpoint threw out of the chain instead of advancing to the next entry.
+- **Background tasks could not fail over** — the consolidator, summarizer, and the `alive.ts` outage-recovery agent were pinned to Claude, the provider most likely to be the thing that was down.
+
+### Changed
+
+- **Config names models, not backends** — `runner` and `fallback` are replaced by `model` plus ordered `fallback_models`, each resolving to its own provider, with any unnamed provider appended as a last resort when it is installed; `nia validate` fails on the removed keys and prints the resolved chain.
+- **Failover is scoped** — `providerDown` became `failover: "model" | "provider"`, so a rejected or overloaded model advances one entry while auth and network failures skip that provider's remaining entries.
+- **Failure classification consolidated** — five overlapping predicates in `utils/retry` plus a sixth copy in `engine.ts` collapsed into `isRetryable`/`scopeOf` in `src/agent/failure.ts`.
+- **One chain walk** — the job runner and chat engine had drifting copies of the advance/skip logic; both now use `ChainCursor`.
+
 ## [0.4.6] - 2026-07-28
 
 ### Fixed

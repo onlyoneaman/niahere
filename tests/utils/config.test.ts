@@ -123,21 +123,18 @@ describe("loadConfig", () => {
     delete process.env.DATABASE_URL;
   });
 
-  test("parses runner field with default claude", () => {
-    const config = loadConfig();
-    expect(config.runner).toBe("claude");
+  test("fallback_models defaults to empty", () => {
+    expect(loadConfig().fallback_models).toEqual([]);
   });
 
-  test("parses runner: codex", () => {
-    writeFileSync(`${TEST_DIR}/config.yaml`, `runner: codex\n`);
-    const config = loadConfig();
-    expect(config.runner).toBe("codex");
+  test("parses fallback_models in order", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, `fallback_models:\n  - gpt-5-codex\n  - sonnet\n`);
+    expect(loadConfig().fallback_models).toEqual(["gpt-5-codex", "sonnet"]);
   });
 
-  test("invalid runner falls back to claude", () => {
-    writeFileSync(`${TEST_DIR}/config.yaml`, `runner: invalid\n`);
-    const config = loadConfig();
-    expect(config.runner).toBe("claude");
+  test("drops blank and non-string fallback_models entries", () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, `fallback_models:\n  - gpt-5-codex\n  - ""\n  - 7\n`);
+    expect(loadConfig().fallback_models).toEqual(["gpt-5-codex"]);
   });
 
   test("session finalization defaults to enabled", () => {

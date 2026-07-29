@@ -96,7 +96,7 @@ describe("ClaudeSession", () => {
     expect(last.type).toBe("error");
     if (last.type === "error") {
       expect(last.retryable).toBe(true);
-      expect(last.providerDown).toBe(true); // exhausted retries → fail over
+      expect(last.failover).toBe("model"); // exhausted retries → fail over
     }
     await session.close();
   });

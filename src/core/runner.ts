@@ -14,7 +14,7 @@ import { getMcpServers, type McpSourceContext } from "../mcp";
 import { ActiveEngine } from "../db/models";
 import { log } from "../utils/log";
 import { registerActiveHandle, unregisterActiveHandle } from "./active-handles";
-import { getBackend, resolveBackends, type AgentBackend, type AgentSession, type AgentSessionContext } from "../agent";
+import { resolveChain, ChainCursor, describeEntry, type ChainEntry, type AgentSession, type AgentSessionContext, type FailoverScope } from "../agent";
 
 export { buildWorkingMemory } from "./job-prompt";
 
@@ -25,8 +25,8 @@ interface RunnerOutput {
   sessionId: string;
   terminalReason?: string;
   error?: string;
-  /** The backend reported provider-down — caller may fail over to the next backend. */
-  providerDown?: boolean;
+  /** How far the chain should skip after this run. Absent → a real failure, stop. */
+  failover?: FailoverScope;
 }
 
 // ---------------------------------------------------------------------------
@@ -55,7 +55,7 @@ async function consumeBackendRun(
   let agentText = "";
   let terminalReason: string | undefined;
   let error: string | undefined;
-  let providerDown = false;
+  let failover: FailoverScope | undefined;
 
   try {
     for await (const ev of session.send(prompt)) {
@@ -67,7 +67,7 @@ async function consumeBackendRun(
       } else if (ev.type === "error") {
         error = ev.message;
         terminalReason = ev.terminalReason;
-        providerDown = ev.providerDown;
+        failover = ev.failover;
       }
     }
   } catch (err) {
@@ -89,58 +89,74 @@ async function consumeBackendRun(
     return { agentText: "", sessionId: session.backendSessionId ?? "", terminalReason: "aborted", error: abortReason };
   }
 
-  return { agentText, sessionId: session.backendSessionId ?? "", terminalReason, error, providerDown };
+  return { agentText, sessionId: session.backendSessionId ?? "", terminalReason, error, failover };
+}
+
+/** One attempt. A backend that cannot even start (missing CLI, endpoint down)
+ *  must not take the run with it. */
+async function runEntry(
+  entry: ChainEntry,
+  sessionCtx: AgentSessionContext,
+  prompt: string,
+  onActivity?: ActivityCallback,
+  activeRoom?: string,
+): Promise<RunnerOutput> {
+  try {
+    const session = await entry.backend.openSession({ ...sessionCtx, model: entry.model });
+    return await consumeBackendRun(session, prompt, onActivity, activeRoom);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.warn({ entry: describeEntry(entry), err: message }, "backend failed to start");
+    return { agentText: "", sessionId: "", error: message, failover: "provider" };
+  }
 }
 
 /**
- * Run a job across the ordered backend chain: try the primary, and on a
- * provider-down result fail over to the next backend (replaying the same prompt;
- * continuity comes from Nia's own context, not a cross-backend session resume).
+ * Run a job down the chain. The prompt is replayed as-is: continuity comes from
+ * Nia's own context, not a cross-backend session resume.
  */
-export async function runJobAcrossBackends(
-  backends: AgentBackend[],
+export async function runJobAcrossChain(
+  chain: ChainEntry[],
   sessionCtx: AgentSessionContext,
   jobPrompt: string,
   onActivity?: ActivityCallback,
   activeRoom?: string,
 ): Promise<RunnerOutput> {
-  let output: RunnerOutput = { agentText: "", sessionId: "", error: "no backend configured" };
-  for (let i = 0; i < backends.length; i++) {
-    const backend = backends[i]!;
-    const session = await backend.openSession(sessionCtx);
-    output = await consumeBackendRun(session, jobPrompt, onActivity, activeRoom);
-    if (!output.providerDown) return output;
-    const next = backends[i + 1];
-    if (next) log.warn({ from: backend.name, to: next.name }, "provider down, failing over to next backend");
+  const cursor = new ChainCursor(chain);
+  let output: RunnerOutput = { agentText: "", sessionId: "", error: "no model configured" };
+
+  for (let entry = cursor.current; entry; ) {
+    output = await runEntry(entry, sessionCtx, jobPrompt, onActivity, activeRoom);
+    if (!output.failover) return output;
+
+    const from = describeEntry(entry);
+    entry = cursor.advance(output.failover);
+    if (entry) log.warn({ from, to: describeEntry(entry), scope: output.failover }, "failing over to next model");
   }
   return output;
 }
 
-/**
- * Run a one-shot job on the in-process Claude backend. Kept as a named export
- * (signature stable) because `alive.ts` and `runTask` call it directly.
- */
-export async function runJobWithClaude(
-  systemPrompt: string,
-  jobPrompt: string,
-  cwd: string,
-  onActivity?: ActivityCallback,
-  model?: string,
-  sourceCtx?: McpSourceContext,
-  activeRoom?: string,
-): Promise<RunnerOutput> {
-  const mcpServers = (getMcpServers(sourceCtx) as Record<string, unknown> | undefined) ?? undefined;
-  const session = await getBackend().openSession({
-    room: activeRoom ?? `_oneshot/${randomUUID()}`,
+export interface OneShotOptions {
+  systemPrompt: string;
+  prompt: string;
+  cwd: string;
+  onActivity?: ActivityCallback;
+  source?: McpSourceContext;
+  activeRoom?: string;
+}
+
+/** A one-shot run across the chain — no session, no resume. */
+export async function runOneShot(opts: OneShotOptions): Promise<RunnerOutput> {
+  const sessionCtx: AgentSessionContext = {
+    room: opts.activeRoom ?? `_oneshot/${randomUUID()}`,
     channel: "system",
-    systemPrompt,
-    cwd,
-    model,
-    mcpServers,
-    source: sourceCtx,
+    systemPrompt: opts.systemPrompt,
+    cwd: opts.cwd,
+    mcpServers: (getMcpServers(opts.source) as Record<string, unknown> | undefined) ?? undefined,
+    source: opts.source,
     resume: false,
-  });
-  return consumeBackendRun(session, jobPrompt, onActivity, activeRoom);
+  };
+  return runJobAcrossChain(resolveChain(), sessionCtx, opts.prompt, opts.onActivity, opts.activeRoom);
 }
 
 // ---------------------------------------------------------------------------
@@ -165,7 +181,7 @@ export async function runTask(opts: TaskOptions): Promise<RunnerOutput> {
   await ActiveEngine.register(room, "system").catch(() => {});
   try {
     const systemPrompt = opts.systemPrompt || buildSystemPrompt("job");
-    const output = await runJobWithClaude(systemPrompt, opts.prompt, homedir(), undefined, undefined, undefined, room);
+    const output = await runOneShot({ systemPrompt, prompt: opts.prompt, cwd: homedir(), activeRoom: room });
     if (output.error) {
       log.error({ task: opts.name, error: output.error }, "task failed");
     } else {
@@ -243,7 +259,7 @@ export async function runJob(job: JobInput, onActivity?: ActivityCallback): Prom
       source: jobSourceCtx,
       resume: false,
     };
-    output = await runJobAcrossBackends(resolveBackends(), sessionCtx, jobPrompt, onActivity, room);
+    output = await runJobAcrossChain(resolveChain(), sessionCtx, jobPrompt, onActivity, room);
 
     const duration_ms = Math.round(performance.now() - startMs);
     const ok = !output.error;

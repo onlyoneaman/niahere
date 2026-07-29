@@ -51,4 +51,41 @@ describe("CodexNormalizer", () => {
     expect(n.consume({ type: "item.completed", item: { type: "error", message: "skills shortened" } })).toEqual([]);
     expect(n.consume({ type: "turn.started" })).toEqual([]);
   });
+
+  // Captured from real codex 0.145.0: a rejected request arrives as a top-level
+  // `error` followed by `turn.failed`, both carrying a JSON-encoded API envelope.
+  const API_400 =
+    '{"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The \'claude-sonnet-5\' model is not supported when using Codex with a ChatGPT account."}}';
+
+  test("a top-level error ends the turn with the provider's message unwrapped", () => {
+    const n = new CodexNormalizer();
+    expect(n.consume({ type: "error", message: API_400 })).toEqual([
+      {
+        type: "error",
+        message: "The 'claude-sonnet-5' model is not supported when using Codex with a ChatGPT account.",
+        retryable: false,
+        failover: "model",
+      },
+    ]);
+  });
+
+  test("turn.failed ends the turn when no top-level error preceded it", () => {
+    const n = new CodexNormalizer();
+    const out = n.consume({ type: "turn.failed", error: { message: "upstream connection reset" } });
+    expect(out).toEqual([
+      { type: "error", message: "upstream connection reset", retryable: false, failover: "provider" },
+    ]);
+  });
+
+  test("turn.failed after a top-level error does not emit a second error", () => {
+    const n = new CodexNormalizer();
+    expect(n.consume({ type: "error", message: API_400 })).toHaveLength(1);
+    expect(n.consume({ type: "turn.failed", error: { message: API_400 } })).toEqual([]);
+  });
+
+  test("a non-JSON failure message passes through as-is", () => {
+    const n = new CodexNormalizer();
+    const out = n.consume({ type: "turn.failed", error: { message: "the task could not be completed" } });
+    expect(out[0]).toMatchObject({ type: "error", message: "the task could not be completed" });
+  });
 });

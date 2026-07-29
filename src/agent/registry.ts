@@ -1,51 +1,76 @@
+import { existsSync } from "fs";
 import type { AgentBackend } from "./types";
+import type { ChainEntry } from "./chain";
 import { ClaudeBackend } from "./backends/claude";
-import { CodexBackend } from "./backends/codex";
+import { CodexBackend, resolveCodexBin } from "./backends/codex";
 import { getConfig } from "../utils/config";
+import { resolveModel, providerDefault, PROVIDER_ORDER, type ProviderName } from "./models";
 
-/**
- * Backend selection — the ONE place backend identity is resolved. Consumers call
- * `getBackend()` and depend only on the `AgentBackend` interface, so no
- * `if (backend === …)` ever leaks into the orchestration loop.
- *
- * Phase 1: always the in-process Claude backend. Phase 2+ adds Codex/Gemini and
- * a role/per-job selector; Phase 3 adds the ordered-fallback failover list.
- */
+/** The ONE place backend identity is resolved. */
 let claudeBackend: ClaudeBackend | null = null;
 let codexBackend: CodexBackend | null = null;
 let override: AgentBackend | null = null;
-let chainOverride: AgentBackend[] | null = null;
+let chainOverride: ChainEntry[] | null = null;
 
-export function getBackend(name?: "claude" | "codex" | "gemini"): AgentBackend {
+export function getBackend(name?: ProviderName): AgentBackend {
   if (override) return override;
-  if (name === "codex") {
-    if (!codexBackend) codexBackend = new CodexBackend();
-    return codexBackend;
-  }
-  if (!claudeBackend) claudeBackend = new ClaudeBackend();
-  return claudeBackend;
+  if (name === "codex") return (codexBackend ??= new CodexBackend());
+  return (claudeBackend ??= new ClaudeBackend());
 }
 
-/** Test seam: force `getBackend()` to return a specific backend; pass null to reset. */
+/** Test seam: force `getBackend()` to return a specific backend; null resets. */
 export function setBackend(backend: AgentBackend | null): void {
   override = backend;
 }
 
-/** Test seam: force `resolveBackends()` to return a specific chain; null resets. */
-export function setBackendChain(backends: AgentBackend[] | null): void {
-  chainOverride = backends;
+/** Test seam: force `resolveChain()` to return a specific chain; null resets. */
+export function setBackendChain(chain: ChainEntry[] | null): void {
+  chainOverride = chain;
+}
+
+/** Gemini is resolvable in config but has no adapter yet. */
+const IMPLEMENTED: ProviderName[] = ["claude", "codex"];
+
+function isAvailable(provider: ProviderName): boolean {
+  if (provider === "claude") return true;
+  if (provider === "codex") return existsSync(resolveCodexBin());
+  return false;
+}
+
+export interface ChainDeps {
+  available: (provider: ProviderName) => boolean;
 }
 
 /**
- * The ordered backend chain for a run: the configured primary first, then any
- * fallbacks (provider-down failover), de-duplicated. Consumers try each in order
- * until one isn't provider-down.
+ * Providers the config never named are appended with their default model, so a
+ * bare config still has somewhere to go — but only if they can run here.
+ * Configured models are always kept, so a misconfiguration surfaces as a real
+ * error rather than vanishing.
  */
-export function resolveBackends(): AgentBackend[] {
-  if (chainOverride) return chainOverride;
-  if (override) return [override];
-  const cfg = getConfig();
+export function buildChain(
+  model: string,
+  fallbackModels: string[],
+  deps: ChainDeps = { available: isAvailable },
+): ChainEntry[] {
+  const configured = [model, ...fallbackModels].map(resolveModel);
+  const named = new Set(configured.map((r) => r.provider));
+  const implicit = PROVIDER_ORDER.filter((p) => !named.has(p) && deps.available(p)).map(providerDefault);
+
   const seen = new Set<string>();
-  const names = [cfg.runner, ...cfg.fallback].filter((n) => !seen.has(n) && seen.add(n));
-  return names.map((n) => getBackend(n));
+  const entries: ChainEntry[] = [];
+  for (const ref of [...configured, ...implicit]) {
+    if (!IMPLEMENTED.includes(ref.provider)) continue;
+    const key = `${ref.provider}:${ref.model ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    entries.push({ backend: getBackend(ref.provider), model: ref.model });
+  }
+  return entries;
+}
+
+export function resolveChain(): ChainEntry[] {
+  if (chainOverride) return chainOverride;
+  if (override) return [{ backend: override }];
+  const cfg = getConfig();
+  return buildChain(cfg.model, cfg.fallback_models);
 }

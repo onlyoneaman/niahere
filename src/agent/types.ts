@@ -32,9 +32,11 @@ export interface AgentUsage {
  * - `text`/`thinking`: streamed reply / status (→ onStream / onActivity).
  * - `tool`: a tool-call activity line.
  * - `result`/`error`: terminal events ending a turn.
- * - `error.retryable` (transient API failure → the backend may retry internally)
- *   and `error.providerDown` (the provider is unavailable → failover trigger) are
- *   INDEPENDENT predicates.
+ * - `error.retryable` (the backend may retry in place) is independent of
+ *   `error.failover`, which scopes how far the chain skips:
+ *   `"model"` advances one entry (possibly the same provider, another model),
+ *   `"provider"` skips that provider's remaining entries, absent stops the
+ *   chain because the task itself failed.
  */
 export type AgentEvent =
   | { type: "session"; backendSessionId: string }
@@ -52,7 +54,10 @@ export type AgentEvent =
        *  Opaque to the orchestrator. */
       metadata?: Record<string, unknown>;
     }
-  | { type: "error"; message: string; retryable: boolean; providerDown: boolean; terminalReason?: string };
+  | { type: "error"; message: string; retryable: boolean; failover?: FailoverScope; terminalReason?: string };
+
+/** How far the chain skips after a failure. See `AgentEvent`. */
+export type FailoverScope = "model" | "provider";
 
 export function isResultEvent(ev: AgentEvent): ev is Extract<AgentEvent, { type: "result" }> {
   return ev.type === "result";

@@ -1,5 +1,19 @@
 import type { AgentEvent, Normalizer } from "../types";
 import { truncate } from "../../utils/format-activity";
+import { scopeOf } from "../failure";
+
+/** Codex wraps the upstream API rejection as a JSON string; surface the inner
+ *  human message when it is one, otherwise the raw text. */
+function unwrapCodexError(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw);
+    const inner = parsed?.error?.message ?? parsed?.message;
+    if (typeof inner === "string" && inner.trim()) return inner;
+  } catch {
+    /* not JSON */
+  }
+  return raw;
+}
 
 /**
  * Pure reducer: Codex `codex exec --json` JSONL events → normalized `AgentEvent`s.
@@ -7,13 +21,15 @@ import { truncate } from "../../utils/format-activity";
  * Codex is batch (no token streaming): the assistant message arrives whole in a
  * single `item.completed`/`agent_message`, and `turn.completed` carries token
  * usage. So `text` is emitted once (full), then `result` on `turn.completed`.
- * No I/O — the session that drives it owns process lifecycle. Real errors are
- * detected from the process exit code by the session, not here (Codex `error`
- * items are often non-fatal warnings).
+ * No I/O — the session that drives it owns process lifecycle. A failed turn
+ * arrives as a top-level `error` and/or `turn.failed` carrying the upstream
+ * message; `error` *items* are non-fatal warnings (service tier, model metadata,
+ * skill budget) and are dropped.
  */
 export class CodexNormalizer implements Normalizer {
   private threadId = "";
   private agentText = "";
+  private failed = false;
 
   get backendSessionId(): string {
     return this.threadId;
@@ -28,6 +44,10 @@ export class CodexNormalizer implements Normalizer {
       case "item.started":
       case "item.completed":
         return this.consumeItem(e.type === "item.completed", e.item);
+      case "error":
+        return this.fail(typeof e.message === "string" ? e.message : "");
+      case "turn.failed":
+        return this.fail(typeof e.error?.message === "string" ? e.error.message : "");
       case "turn.completed":
         return [
           {
@@ -45,6 +65,15 @@ export class CodexNormalizer implements Normalizer {
       default:
         return [];
     }
+  }
+
+  /** Codex reports the same failure twice (`error` then `turn.failed`); only the
+   *  first ends the turn. */
+  private fail(raw: string): AgentEvent[] {
+    if (this.failed) return [];
+    this.failed = true;
+    const message = unwrapCodexError(raw);
+    return [{ type: "error", message, retryable: false, failover: scopeOf(message) }];
   }
 
   private consumeItem(completed: boolean, item: any): AgentEvent[] {

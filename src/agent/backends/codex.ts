@@ -6,7 +6,7 @@ import type { Attachment } from "../../types/attachment";
 import type { McpSourceContext } from "../../mcp";
 import { CodexNormalizer } from "./codex-normalize";
 import { mintRun, revokeRun } from "../mcp-endpoint";
-import { isCliProviderDownError } from "../../utils/retry";
+import { scopeOf } from "../failure";
 
 /**
  * Resolve the codex binary's absolute path. The daemon runs under launchd with a
@@ -161,7 +161,7 @@ class CodexSession implements AgentSession {
     this.proc = proc;
 
     const normalizer = new CodexNormalizer();
-    let sawResult = false;
+    let sawTerminal = false;
     try {
       for await (const line of readLines(proc.stdout)) {
         if (this.aborted) throw new Error(this.aborted);
@@ -177,19 +177,19 @@ class CodexSession implements AgentSession {
           if (ev.type === "session" || ev.type === "result") {
             this._sessionId = ev.backendSessionId || this._sessionId;
           }
-          if (ev.type === "result") sawResult = true;
+          if (ev.type === "result" || ev.type === "error") sawTerminal = true;
           yield ev;
         }
       }
       const exit = await proc.exited;
       if (this.aborted) throw new Error(this.aborted);
-      if (exit !== 0 && !sawResult) {
+      if (exit !== 0 && !sawTerminal) {
         const stderr = await readAll(proc.stderr);
         yield {
           type: "error",
           message: stderr.trim() || `codex exited ${exit}`,
           retryable: false,
-          providerDown: isCliProviderDownError(stderr),
+          failover: scopeOf(stderr, "provider"),
         };
       }
     } finally {

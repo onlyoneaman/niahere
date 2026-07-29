@@ -93,7 +93,36 @@ describe("CodexSession", () => {
     const events = await collect(session.send("x"));
     const err = events.at(-1)!;
     expect(err.type).toBe("error");
-    if (err.type === "error") expect(err.providerDown).toBe(true);
+    if (err.type === "error") expect(err.failover).toBe("provider");
+  });
+
+  // Codex prints "Reading additional input from stdin..." to stderr on every
+  // non-TTY run, so a structured failure must never be reported as that notice.
+  test("a structured turn failure surfaces the provider's message, not the stderr notice", async () => {
+    const envelope =
+      '{"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The \'claude-sonnet-5\' model is not supported when using Codex with a ChatGPT account."}}';
+    const spawnFn: SpawnFn = () =>
+      fakeProc(
+        [
+          JSON.stringify({ type: "thread.started", thread_id: "tid-400" }),
+          JSON.stringify({ type: "error", message: envelope }),
+          JSON.stringify({ type: "turn.failed", error: { message: envelope } }),
+        ],
+        1,
+        "Reading additional input from stdin...\n",
+      );
+    const session = await new CodexBackend({ spawnFn }).openSession(CTX);
+    const events = await collect(session.send("x"));
+
+    expect(events.filter((e) => e.type === "error")).toHaveLength(1);
+    const err = events.at(-1)!;
+    expect(err.type).toBe("error");
+    if (err.type === "error") {
+      expect(err.message).toBe(
+        "The 'claude-sonnet-5' model is not supported when using Codex with a ChatGPT account.",
+      );
+      expect(err.failover).toBe("model");
+    }
   });
 
   test("a genuine task failure is not reported as provider-down", async () => {
@@ -102,6 +131,6 @@ describe("CodexSession", () => {
     const events = await collect(session.send("x"));
     const err = events.at(-1)!;
     expect(err.type).toBe("error");
-    if (err.type === "error") expect(err.providerDown).toBe(false);
+    if (err.type === "error") expect(err.failover).toBeUndefined();
   });
 });

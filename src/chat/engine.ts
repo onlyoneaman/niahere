@@ -10,7 +10,8 @@ import { finalizeSession, cancelPending } from "../core/finalizer";
 import { log } from "../utils/log";
 import { registerActiveHandle, unregisterActiveHandle } from "../core/active-handles";
 import { resolveJobPrompt } from "../core/job-prompt";
-import { resolveBackends, type AgentSession } from "../agent";
+import { resolveChain, ChainCursor, describeEntry, type AgentSession, type FailoverScope } from "../agent";
+import { scopeOf } from "../agent/failure";
 
 const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const LONG_RUNNING_WARN = 30 * 60 * 1000; // 30 minutes
@@ -29,8 +30,7 @@ export function formatChatError(rawError: string | null | undefined): string {
 }
 
 export function getChatErrorSignal(rawError: string | null | undefined): SendResult["signal"] | undefined {
-  const error = rawError?.trim();
-  return !error || error.toLowerCase() === "unknown error" ? "provider_down" : undefined;
+  return scopeOf(rawError, "provider") === "provider" ? "provider_down" : undefined;
 }
 
 export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine> {
@@ -96,11 +96,9 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
     systemPrompt += `\n\n## Watch Mode — #${watchChannel}\n\nYou are monitoring this Slack channel. Follow the behavior instructions below.\nRespond with [NO_REPLY] if no action is needed — do not explain why.\n\n${behavior}`;
   }
 
-  // The backend chain: configured primary first, then provider-down fallbacks.
-  // Chat normally runs on the primary; a provider-down turn fails over to the
-  // next backend (answering the current message — see send()).
-  const backends = resolveBackends();
-  let backendIndex = 0;
+  // A turn that cannot be served moves down the chain and answers the current
+  // message there (see send()).
+  const cursor = new ChainCursor(resolveChain());
 
   let sessionId: string | null = null;
   if (typeof resume === "string") {
@@ -110,9 +108,8 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
     sessionId = await Session.getLatest(room);
   }
 
-  // Verify the primary backend can actually resume this session before
-  // attempting it (Claude probes the on-disk jsonl; others use their own check).
-  if (sessionId && !(await backends[0]!.canResume(sessionId, cwd))) {
+  // Only resume if the head of the chain can actually take this session id.
+  if (sessionId && !(await cursor.current!.backend.canResume(sessionId, cwd))) {
     sessionId = null;
   }
 
@@ -171,16 +168,18 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
     unregisterActiveHandle(room);
   }
 
-  /** Lazily open (and reuse) the current backend's session for this engine. */
+  /** Lazily open (and reuse) the current chain entry's session for this engine. */
   async function ensureSession(): Promise<AgentSession> {
     if (session) return session;
-    const backend = backends[backendIndex] ?? backends[0]!;
-    const s = await backend.openSession({
+    const entry = cursor.current!;
+    const s = await entry.backend.openSession({
       room,
       channel,
       systemPrompt,
       cwd,
-      model: contextModel ?? undefined,
+      // A context override names a model for the configured provider, so it
+      // only applies at the head of the chain.
+      model: (cursor.atHead ? (contextModel ?? entry.model) : entry.model) ?? undefined,
       mcpServers,
       resume: sessionId ?? false,
       subagents: getAgentDefinitions(),
@@ -227,12 +226,12 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
 
       let result: SendResult = { result: "", costUsd: 0, turns: 0 };
 
-      // Run the turn on the current backend; on a provider-down result, fail over
-      // to the next backend and answer the current message there.
+      // Run the turn on the current chain entry; a turn that cannot be served
+      // moves down the chain and answers the current message there.
       while (true) {
         const sess = await ensureSession();
         let accumulated = "";
-        let providerDown = false;
+        let failover: FailoverScope | undefined;
 
         try {
           for await (const ev of sess.send(userMessage, attachments)) {
@@ -285,7 +284,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
                 break;
               }
               case "error": {
-                providerDown = ev.providerDown;
+                failover = ev.failover;
                 log.error(
                   { room, error: ev.message, terminal_reason: ev.terminalReason },
                   "chat send failed with backend error",
@@ -294,7 +293,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
                   result: formatChatError(ev.message),
                   costUsd: 0,
                   turns: 0,
-                  signal: ev.providerDown ? "provider_down" : undefined,
+                  signal: ev.failover === "provider" ? "provider_down" : undefined,
                 };
                 break;
               }
@@ -311,12 +310,12 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
         // Re-read the backend session id post-send so finalize/DB target it.
         if (sess.backendSessionId) sessionId = sess.backendSessionId;
 
-        if (providerDown && backendIndex < backends.length - 1) {
-          backendIndex++;
-          log.warn({ room, to: backends[backendIndex]!.name }, "chat provider down, failing over to next backend");
-          await teardown(); // close the dead session so ensureSession opens the next backend
+        const next = failover && cursor.advance(failover);
+        if (next) {
+          log.warn({ room, to: describeEntry(next), scope: failover }, "chat failing over to next model");
+          await teardown(); // close the dead session so ensureSession opens the next entry
           sessionId = null; // a cross-backend session id is meaningless; start fresh
-          userSaved = false; // re-save the user turn under the new backend's session
+          userSaved = false; // re-save the user turn under the new session
           continue;
         }
         break;

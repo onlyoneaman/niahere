@@ -1,6 +1,6 @@
 import type { AgentEvent, Normalizer } from "../types";
 import { truncate } from "../../utils/format-activity";
-import { isRetryableApiError, isProviderDownError } from "../../utils/retry";
+import { isRetryable, scopeOf } from "../failure";
 
 /**
  * Pure reducer: Claude Agent SDK messages → normalized `AgentEvent`s.
@@ -120,14 +120,13 @@ export class SdkNormalizer implements Normalizer {
       };
     }
     const raw = (msg.errors?.join(", ") as string) || "unknown error";
-    // Two INDEPENDENT predicates from the same raw string:
-    //  - retryable: transient API failure → the session may retry internally.
-    //  - providerDown: blank/"unknown error" → the provider is down → failover.
+    // A transient error carries no scope yet — it only becomes one once the
+    // session has burned its retries.
     return {
       type: "error",
       message: raw,
-      retryable: isRetryableApiError(raw),
-      providerDown: isProviderDownError(raw),
+      retryable: isRetryable(raw),
+      failover: scopeOf(raw, "provider"),
       terminalReason: msg.terminal_reason,
     };
   }

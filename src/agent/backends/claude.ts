@@ -151,11 +151,12 @@ class ClaudeSession implements AgentSession {
             retry = true;
             break;
           }
-          // A retryable error that survived all our retries means the provider is
-          // effectively down for us — flag it so the consumer can fail over.
+          // A retryable error that survived every retry is a capacity problem
+          // with THIS model, not proof the provider is gone — scope it to the
+          // model so a second model on the same provider still gets its turn.
           const out =
             ev.type === "error" && ev.retryable && this.retryCount >= MAX_SEND_RETRIES
-              ? { ...ev, providerDown: true }
+              ? { ...ev, failover: ev.failover ?? ("model" as const) }
               : ev;
           yield out;
           if (out.type === "result" || out.type === "error") {

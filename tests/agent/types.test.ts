@@ -10,15 +10,15 @@ describe("AgentEvent", () => {
 
   test("isResultEvent rejects non-result events", () => {
     const t: AgentEvent = { type: "text", delta: "hi" };
-    const e: AgentEvent = { type: "error", message: "boom", retryable: false, providerDown: true };
+    const e: AgentEvent = { type: "error", message: "boom", retryable: false, failover: "provider" };
     expect(isResultEvent(t)).toBe(false);
     expect(isResultEvent(e)).toBe(false);
   });
 
-  test("error event carries retryable and providerDown independently", () => {
-    const transient: AgentEvent = { type: "error", message: "529", retryable: true, providerDown: false };
-    const down: AgentEvent = { type: "error", message: "", retryable: false, providerDown: true };
-    expect(transient).toMatchObject({ retryable: true, providerDown: false });
-    expect(down).toMatchObject({ retryable: false, providerDown: true });
+  test("error event carries retryable and failover scope independently", () => {
+    const transient: AgentEvent = { type: "error", message: "529", retryable: true, failover: undefined };
+    const down: AgentEvent = { type: "error", message: "", retryable: false, failover: "provider" };
+    expect(transient).toMatchObject({ retryable: true, failover: undefined });
+    expect(down).toMatchObject({ retryable: false, failover: "provider" });
   });
 });

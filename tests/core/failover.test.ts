@@ -1,13 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { runJobAcrossBackends } from "../../src/core/runner";
+import { runJobAcrossChain } from "../../src/core/runner";
 import { CodexBackend, type CliProc, type SpawnFn } from "../../src/agent/backends/codex";
 import { startMcpEndpoint, stopMcpEndpoint } from "../../src/agent/mcp-endpoint";
 import type { AgentBackend, AgentEvent, AgentSessionContext } from "../../src/agent";
 
-function fakeBackend(name: AgentBackend["name"], events: AgentEvent[]): AgentBackend {
+function fakeBackend(name: AgentBackend["name"], events: AgentEvent[], seenModels?: (string | undefined)[]): AgentBackend {
   return {
     name,
-    async openSession() {
+    async openSession(ctx) {
+      seenModels?.push(ctx.model);
       return {
         backendSessionId: null,
         async *send(): AsyncIterable<AgentEvent> {
@@ -23,7 +24,23 @@ function fakeBackend(name: AgentBackend["name"], events: AgentEvent[]): AgentBac
   };
 }
 
-const DOWN: AgentEvent[] = [{ type: "error", message: "", retryable: false, providerDown: true }];
+/** A backend that cannot even start — e.g. codex is not installed. */
+function throwingBackend(name: AgentBackend["name"]): AgentBackend {
+  return {
+    name,
+    async openSession() {
+      throw new Error("spawn codex ENOENT");
+    },
+    async canResume() {
+      return false;
+    },
+  };
+}
+
+const DOWN: AgentEvent[] = [{ type: "error", message: "", retryable: false, failover: "provider" }];
+const MODEL_GONE: AgentEvent[] = [
+  { type: "error", message: "model not found: x", retryable: false, failover: "model" },
+];
 const OK = (id: string): AgentEvent[] => [
   { type: "session", backendSessionId: id },
   { type: "result", text: "ok", usage: { tokens: { input: 1, output: 1 } }, backendSessionId: id },
@@ -31,18 +48,19 @@ const OK = (id: string): AgentEvent[] => [
 
 const CTX: AgentSessionContext = { room: "job/x", channel: "system", systemPrompt: "s", cwd: "/tmp", resume: false };
 
-describe("runJobAcrossBackends (failover)", () => {
-  test("fails over to the next backend when the primary is provider-down", async () => {
-    const primary = fakeBackend("claude", DOWN);
-    const fallback = fakeBackend("codex", OK("c1"));
-    const out = await runJobAcrossBackends([primary, fallback], CTX, "do it");
+describe("runJobAcrossChain (failover)", () => {
+  test("fails over to the next entry when the primary provider is down", async () => {
+    const chain = [
+      { backend: fakeBackend("claude", DOWN) },
+      { backend: fakeBackend("codex", OK("c1")), model: "gpt-5-codex" },
+    ];
+    const out = await runJobAcrossChain(chain, CTX, "do it");
     expect(out.agentText).toBe("ok");
-    expect(out.providerDown).toBeFalsy();
+    expect(out.failover).toBeUndefined();
   });
 
   test("does not fail over when the primary succeeds", async () => {
     let fallbackTried = false;
-    const primary = fakeBackend("claude", OK("p1"));
     const fallback: AgentBackend = {
       name: "codex",
       async openSession() {
@@ -53,14 +71,78 @@ describe("runJobAcrossBackends (failover)", () => {
         return false;
       },
     };
-    const out = await runJobAcrossBackends([primary, fallback], CTX, "do it");
+    const out = await runJobAcrossChain(
+      [{ backend: fakeBackend("claude", OK("p1")) }, { backend: fallback }],
+      CTX,
+      "do it",
+    );
     expect(out.agentText).toBe("ok");
     expect(fallbackTried).toBe(false);
   });
 
-  test("returns the last provider-down result when all backends are down", async () => {
-    const out = await runJobAcrossBackends([fakeBackend("claude", DOWN), fakeBackend("codex", DOWN)], CTX, "x");
-    expect(out.providerDown).toBe(true);
+  test("a model-scoped failure tries the next model on the SAME provider", async () => {
+    const seen: (string | undefined)[] = [];
+    const chain = [
+      { backend: fakeBackend("claude", MODEL_GONE, seen), model: "opus" },
+      { backend: fakeBackend("claude", OK("s1"), seen), model: "sonnet" },
+    ];
+    const out = await runJobAcrossChain(chain, CTX, "do it");
+    expect(out.agentText).toBe("ok");
+    expect(seen).toEqual(["opus", "sonnet"]);
+  });
+
+  test("a provider-scoped failure skips every remaining entry for that provider", async () => {
+    const seen: (string | undefined)[] = [];
+    const chain = [
+      { backend: fakeBackend("claude", DOWN, seen), model: "opus" },
+      { backend: fakeBackend("claude", OK("s1"), seen), model: "sonnet" },
+      { backend: fakeBackend("codex", OK("c1"), seen), model: "gpt-5-codex" },
+    ];
+    const out = await runJobAcrossChain(chain, CTX, "do it");
+    expect(out.agentText).toBe("ok");
+    expect(seen).toEqual(["opus", "gpt-5-codex"]); // sonnet never attempted
+  });
+
+  test("a genuine task failure stops the chain", async () => {
+    const failed: AgentEvent[] = [{ type: "error", message: "the tests did not pass", retryable: false }];
+    let nextTried = false;
+    const next: AgentBackend = {
+      name: "codex",
+      async openSession() {
+        nextTried = true;
+        return { backendSessionId: null, async *send() {}, abort() {}, async close() {} };
+      },
+      async canResume() {
+        return false;
+      },
+    };
+    const out = await runJobAcrossChain([{ backend: fakeBackend("claude", failed) }, { backend: next }], CTX, "x");
+    expect(nextTried).toBe(false);
+    expect(out.error).toBe("the tests did not pass");
+  });
+
+  test("a backend that cannot start advances the chain instead of killing the run", async () => {
+    const out = await runJobAcrossChain(
+      [{ backend: throwingBackend("codex") }, { backend: fakeBackend("claude", OK("c1")) }],
+      CTX,
+      "do it",
+    );
+    expect(out.agentText).toBe("ok");
+  });
+
+  test("hands each entry its own model", async () => {
+    const seen: (string | undefined)[] = [];
+    await runJobAcrossChain([{ backend: fakeBackend("claude", OK("p1"), seen), model: "claude-sonnet-5" }], CTX, "x");
+    expect(seen).toEqual(["claude-sonnet-5"]);
+  });
+
+  test("returns the last result when every entry fails over", async () => {
+    const out = await runJobAcrossChain(
+      [{ backend: fakeBackend("claude", DOWN) }, { backend: fakeBackend("codex", DOWN) }],
+      CTX,
+      "x",
+    );
+    expect(out.failover).toBe("provider");
     expect(out.error).toBe("");
   });
 });
@@ -80,7 +162,7 @@ function failingCodexProc(stderr: string): CliProc {
   };
 }
 
-describe("runJobAcrossBackends (codex in the chain)", () => {
+describe("runJobAcrossChain (codex in the chain)", () => {
   beforeAll(async () => {
     await startMcpEndpoint();
   });
@@ -92,7 +174,7 @@ describe("runJobAcrossBackends (codex in the chain)", () => {
     const codex = new CodexBackend({ spawnFn });
     const last = fakeBackend("gemini", OK("g1"));
 
-    const out = await runJobAcrossBackends([fakeBackend("claude", DOWN), codex, last], CTX, "do it");
+    const out = await runJobAcrossChain([{ backend: fakeBackend("claude", DOWN) }, { backend: codex }, { backend: last }], CTX, "do it");
 
     expect(out.agentText).toBe("ok");
   });
@@ -111,7 +193,7 @@ describe("runJobAcrossBackends (codex in the chain)", () => {
       },
     };
 
-    const out = await runJobAcrossBackends([new CodexBackend({ spawnFn }), last], CTX, "do it");
+    const out = await runJobAcrossChain([{ backend: new CodexBackend({ spawnFn }) }, { backend: last }], CTX, "do it");
 
     expect(lastTried).toBe(false);
     expect(out.error).toContain("no such file or directory");

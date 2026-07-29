@@ -10,8 +10,7 @@ const TIME_RE = /^\d{2}:\d{2}$/;
 
 const DEFAULTS: Config = {
   model: "default",
-  runner: "claude",
-  fallback: [],
+  fallback_models: [],
   timezone: process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone,
   activeHours: { start: "00:00", end: "23:59" },
   database_url: DEFAULT_DATABASE_URL,
@@ -96,10 +95,10 @@ export function loadConfig(): Config {
   // Model
   const model = typeof raw.model === "string" ? raw.model : DEFAULTS.model;
 
-  // Backends — primary "runner" + ordered "fallback" chain for provider-down failover.
-  const isBackend = (v: unknown): v is Config["runner"] => v === "claude" || v === "codex" || v === "gemini";
-  const runner: Config["runner"] = isBackend(raw.runner) ? raw.runner : DEFAULTS.runner;
-  const fallback: Config["fallback"] = Array.isArray(raw.fallback) ? raw.fallback.filter(isBackend) : DEFAULTS.fallback;
+  // Ordered fallback models; each one's provider is derived from its name.
+  const fallback_models = Array.isArray(raw.fallback_models)
+    ? raw.fallback_models.filter((m): m is string => typeof m === "string" && m.trim().length > 0)
+    : DEFAULTS.fallback_models;
 
   // Timezone
   let timezone = DEFAULTS.timezone;
@@ -252,8 +251,7 @@ export function loadConfig(): Config {
 
   return {
     model,
-    runner,
-    fallback,
+    fallback_models,
     timezone,
     activeHours: { start, end },
     database_url,

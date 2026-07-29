@@ -80,24 +80,30 @@ describe("SdkNormalizer", () => {
     }
   });
 
-  test("transient error → retryable, NOT providerDown", () => {
+  test("transient error → retryable, no failover yet", () => {
     const n = new SdkNormalizer();
     expect(n.consume({ type: "result", is_error: true, errors: ["overloaded_error"] })).toEqual([
-      { type: "error", message: "overloaded_error", retryable: true, providerDown: false },
+      { type: "error", message: "overloaded_error", retryable: true, terminalReason: undefined },
     ]);
   });
 
-  test("blank/unknown error → providerDown, NOT retryable", () => {
+  test("blank/unknown error → provider-scoped failover, NOT retryable", () => {
     const n = new SdkNormalizer();
     expect(n.consume({ type: "result", is_error: true, errors: [] })).toEqual([
-      { type: "error", message: "unknown error", retryable: false, providerDown: true },
+      { type: "error", message: "unknown error", retryable: false, failover: "provider", terminalReason: undefined },
     ]);
   });
 
-  test("specific non-transient error → neither retryable nor providerDown", () => {
+  test("a rejected model is model-scoped so the chain tries the next model", () => {
+    const n = new SdkNormalizer();
+    const out = n.consume({ type: "result", is_error: true, errors: ["model not found: gpt-5-codex"] });
+    expect(out[0]).toMatchObject({ type: "error", failover: "model" });
+  });
+
+  test("specific non-transient error → no failover, the chain stops", () => {
     const n = new SdkNormalizer();
     expect(n.consume({ type: "result", is_error: true, errors: ["oauth_org_not_allowed"] })).toEqual([
-      { type: "error", message: "oauth_org_not_allowed", retryable: false, providerDown: false },
+      { type: "error", message: "oauth_org_not_allowed", retryable: false, terminalReason: undefined },
     ]);
   });
 });

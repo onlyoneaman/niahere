@@ -125,7 +125,7 @@ async function notifyUser(message: string): Promise<void> {
 /** Run LLM recovery agent for failures it can fix (e.g. DB down). */
 async function runRecoveryAgent(failures: Check[]): Promise<{ recovered: boolean; report: string }> {
   try {
-    const { runJobWithClaude } = await import("./runner");
+    const { runOneShot } = await import("./runner");
     const { homedir } = await import("os");
 
     const failureSummary = failures.map((f) => `- ${f.name}: ${f.detail}`).join("\n");
@@ -149,7 +149,7 @@ async function runRecoveryAgent(failures: Check[]): Promise<{ recovered: boolean
 
     const jobPrompt = `Health check failures:\n${failureSummary}\n\nDiagnose and fix.`;
 
-    const result = await runJobWithClaude(systemPrompt, jobPrompt, homedir());
+    const result = await runOneShot({ systemPrompt, prompt: jobPrompt, cwd: homedir() });
 
     // Re-check after recovery attempt
     const remaining = await getFailures();

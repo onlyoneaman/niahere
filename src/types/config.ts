@@ -103,11 +103,11 @@ export interface SessionFinalizationConfig {
 export type BackendName = "claude" | "codex" | "gemini";
 
 export interface Config {
+  /** The primary model. Its provider is derived from the name — config never
+   *  names a backend directly. */
   model: string;
-  /** The primary backend for jobs and chat. */
-  runner: BackendName;
-  /** Ordered fallback backends, tried when the primary is provider-down. */
-  fallback: BackendName[];
+  /** Ordered fallback models, tried when the one before them cannot serve. */
+  fallback_models: string[];
   timezone: string;
   activeHours: { start: string; end: string };
   database_url: string;

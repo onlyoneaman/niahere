@@ -5,12 +5,12 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { setupTestDb, teardownTestDb } from "../db/setup";
 import { setBackendChain } from "../../src/agent";
-import type { AgentBackend, AgentEvent } from "../../src/agent";
+import type { AgentBackend, AgentEvent, ChainEntry } from "../../src/agent";
 
 const PREFIX = `test-chat-fo-${process.pid}`;
 
-function fakeBackend(name: AgentBackend["name"], events: AgentEvent[]): AgentBackend {
-  return {
+function entry(name: AgentBackend["name"], events: AgentEvent[]): ChainEntry {
+  const backend: AgentBackend = {
     name,
     async openSession() {
       return {
@@ -26,6 +26,7 @@ function fakeBackend(name: AgentBackend["name"], events: AgentEvent[]): AgentBac
       return false;
     },
   };
+  return { backend };
 }
 
 beforeAll(async () => {
@@ -44,8 +45,8 @@ describe("chat failover", () => {
   test("a provider-down primary fails over to the fallback, which answers", async () => {
     const sid = `${PREFIX}-1`;
     setBackendChain([
-      fakeBackend("claude", [{ type: "error", message: "", retryable: false, providerDown: true }]),
-      fakeBackend("codex", [
+      entry("claude", [{ type: "error", message: "", retryable: false, failover: "provider" }]),
+      entry("codex", [
         { type: "session", backendSessionId: sid },
         {
           type: "result",
@@ -74,11 +75,11 @@ describe("chat failover", () => {
     setBackendChain([
       // Primary opens a session, then goes provider-down mid-turn — this sets
       // userSaved=true under sid1 before failover.
-      fakeBackend("claude", [
+      entry("claude", [
         { type: "session", backendSessionId: sid1 },
-        { type: "error", message: "", retryable: false, providerDown: true },
+        { type: "error", message: "", retryable: false, failover: "provider" },
       ]),
-      fakeBackend("codex", [
+      entry("codex", [
         { type: "session", backendSessionId: sid2 },
         {
           type: "result",

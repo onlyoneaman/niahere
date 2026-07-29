@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "fs";
 import yaml from "js-yaml";
 import { getPaths } from "../utils/paths";
 import { ICON_PASS as PASS, ICON_FAIL as FAIL, ICON_WARN as WARN } from "../utils/cli";
+import { buildChain, describeEntry } from "../agent";
 
 interface Result {
   ok: boolean;
@@ -76,24 +77,27 @@ export function validateConfig(): Result {
     messages.push(`${WARN} database_url not set (will use default)`);
   }
 
-  // Backends (primary runner + fallback chain)
-  const BACKENDS = ["claude", "codex", "gemini"];
-  const runner = raw.runner as string | undefined;
-  if (runner && !BACKENDS.includes(runner)) {
-    messages.push(`${FAIL} runner must be one of ${BACKENDS.join(", ")}, got "${runner}"`);
-    ok = false;
-  } else if (runner) {
-    messages.push(`${PASS} runner: ${runner}`);
-  }
-  if (raw.fallback !== undefined) {
-    const fb = raw.fallback;
-    if (!Array.isArray(fb) || fb.some((b) => !BACKENDS.includes(b as string))) {
-      messages.push(`${FAIL} fallback must be an array of ${BACKENDS.join(", ")}`);
+  // Model chain. Keys removed in favour of model + fallback_models.
+  for (const dead of ["runner", "fallback", "codex_model"]) {
+    if (raw[dead] !== undefined) {
+      messages.push(`${FAIL} "${dead}" is no longer used — name models in model / fallback_models instead`);
       ok = false;
-    } else {
-      messages.push(`${PASS} fallback: [${fb.join(", ")}]`);
     }
   }
+  if (raw.fallback_models !== undefined) {
+    const fb = raw.fallback_models;
+    if (!Array.isArray(fb) || fb.some((m) => typeof m !== "string")) {
+      messages.push(`${FAIL} fallback_models must be an array of model names`);
+      ok = false;
+    } else {
+      messages.push(`${PASS} fallback_models: [${fb.join(", ")}]`);
+    }
+  }
+  const chain = buildChain(
+    typeof raw.model === "string" ? raw.model : "default",
+    Array.isArray(raw.fallback_models) ? (raw.fallback_models as string[]).filter((m) => typeof m === "string") : [],
+  );
+  messages.push(`${PASS} model chain: ${chain.map(describeEntry).join(" → ")}`);
 
   // Session finalization
   const sf = raw.session_finalization as Record<string, unknown> | undefined;
