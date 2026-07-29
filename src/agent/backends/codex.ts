@@ -6,7 +6,7 @@ import type { Attachment } from "../../types/attachment";
 import type { McpSourceContext } from "../../mcp";
 import { CodexNormalizer } from "./codex-normalize";
 import { mintRun, revokeRun } from "../mcp-endpoint";
-import { scopeOf } from "../failure";
+import { scopeOf, parseFailure } from "../failure";
 
 /**
  * Resolve the codex binary's absolute path. The daemon runs under launchd with a
@@ -252,7 +252,7 @@ class CodexSession implements AgentSession {
           type: "error",
           message: text.trim() || `codex exited ${exit}`,
           retryable: false,
-          failover: scopeOf(text, "provider"),
+          failover: scopeOf(parseFailure(text), "provider"),
         };
       }
     } finally {

@@ -1,19 +1,6 @@
 import type { AgentEvent, Normalizer } from "../types";
 import { truncate } from "../../utils/format-activity";
-import { scopeOf } from "../failure";
-
-/** Codex wraps the upstream API rejection as a JSON string; surface the inner
- *  human message when it is one, otherwise the raw text. */
-function unwrapCodexError(raw: string): string {
-  try {
-    const parsed = JSON.parse(raw);
-    const inner = parsed?.error?.message ?? parsed?.message;
-    if (typeof inner === "string" && inner.trim()) return inner;
-  } catch {
-    /* not JSON */
-  }
-  return raw;
-}
+import { scopeOf, parseFailure } from "../failure";
 
 /**
  * Pure reducer: Codex `codex exec --json` JSONL events → normalized `AgentEvent`s.
@@ -72,8 +59,8 @@ export class CodexNormalizer implements Normalizer {
   private fail(raw: string): AgentEvent[] {
     if (this.failed) return [];
     this.failed = true;
-    const message = unwrapCodexError(raw);
-    return [{ type: "error", message, retryable: false, failover: scopeOf(message) }];
+    const failure = parseFailure(raw);
+    return [{ type: "error", message: failure.message, retryable: false, failover: scopeOf(failure) }];
   }
 
   private consumeItem(completed: boolean, item: any): AgentEvent[] {

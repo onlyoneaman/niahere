@@ -1,5 +1,6 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { NIA_TOOLS } from "./tools/table";
+import { gateSideEffects } from "./gate";
 import type { McpSourceContext } from "./index";
 
 /**
@@ -11,7 +12,7 @@ export function createNiaMcpServer(sourceCtx?: McpSourceContext) {
   return createSdkMcpServer({
     name: "nia",
     version: "0.1.0",
-    tools: NIA_TOOLS.map((t) =>
+    tools: gateSideEffects(NIA_TOOLS).map((t) =>
       tool(t.name, t.description, t.schema, async (args: unknown) => ({
         content: [{ type: "text" as const, text: await t.handler(args, sourceCtx) }],
       })),

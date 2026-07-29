@@ -12,7 +12,7 @@ import { registerActiveHandle, unregisterActiveHandle } from "../core/active-han
 import { resolveJobPrompt } from "../core/job-prompt";
 import { truncate } from "../utils/format-activity";
 import { resolveChain, ChainCursor, describeEntry, type AgentSession, type FailoverScope } from "../agent";
-import { scopeOf } from "../agent/failure";
+import { scopeOf, parseFailure } from "../agent/failure";
 
 const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const HANDOFF_MESSAGES = 20;
@@ -33,7 +33,7 @@ export function formatChatError(rawError: string | null | undefined): string {
 }
 
 export function getChatErrorSignal(rawError: string | null | undefined): SendResult["signal"] | undefined {
-  return scopeOf(rawError, "provider") === "provider" ? "provider_down" : undefined;
+  return scopeOf(parseFailure(rawError), "provider") === "provider" ? "provider_down" : undefined;
 }
 
 export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine> {

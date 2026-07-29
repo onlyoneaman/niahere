@@ -16,6 +16,7 @@
 
 ### Security
 
+- **Side-effect tools have a per-run budget** — nothing limited how often an agent could dial a phone or message the owner, and the CLI backends' own approval flags govern only their built-ins; `place_call` and `send_message` are now capped per run at the shared tool-table boundary, so every backend including in-process Claude is covered.
 - **The codex subprocess env is an allowlist** — it was a six-name denylist, so everything else in the daemon's environment reached a third-party agent, including `OPENAI_API_KEY` and `GEMINI_API_KEY`; only what the CLI needs is passed now, and a newly-added secret is excluded by default.
 
 ### Changed
@@ -24,6 +25,7 @@
 - **Failover is scoped** — `providerDown` became `failover: "model" | "provider"`, so a rejected or overloaded model advances one entry while auth and network failures skip that provider's remaining entries.
 - **Failure classification consolidated** — five overlapping predicates in `utils/retry` plus a sixth copy in `engine.ts` collapsed into `isRetryable`/`scopeOf` in `src/agent/failure.ts`.
 - **One chain walk** — the job runner and chat engine had drifting copies of the advance/skip logic; both now use `ChainCursor`.
+- **Failures are classified on structured status, not prose** — the provider-down patterns matched the bare words "login", "credentials" and "api key" anywhere in a CLI's output, so an agent describing a login page, or codex's own informational "API key configured (run codex login to use ChatGPT)" line, read as an outage; an HTTP status is now used whenever one is available and the prose patterns are anchored to failure wording. A context-window overflow is newly treated as model-scoped, since a roomier model may cope.
 - **A provider that just failed is skipped briefly** — every job and chat turn used to rediscover the same outage from scratch and pay the full retry ladder before failing over; a provider-scoped failure now puts it in a five-minute cooldown shared across the process, and the chain never strands itself if everything is cooling down.
 
 ## [0.4.6] - 2026-07-28

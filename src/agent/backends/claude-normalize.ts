@@ -1,6 +1,6 @@
 import type { AgentEvent, Normalizer } from "../types";
 import { truncate } from "../../utils/format-activity";
-import { isRetryable, scopeOf } from "../failure";
+import { isRetryable, scopeOf, parseFailure } from "../failure";
 
 /**
  * Pure reducer: Claude Agent SDK messages → normalized `AgentEvent`s.
@@ -126,7 +126,7 @@ export class SdkNormalizer implements Normalizer {
       type: "error",
       message: raw,
       retryable: isRetryable(raw),
-      failover: scopeOf(raw, "provider"),
+      failover: scopeOf(parseFailure(raw), "provider"),
       terminalReason: msg.terminal_reason,
     };
   }

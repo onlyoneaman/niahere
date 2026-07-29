@@ -4,6 +4,7 @@ import { randomBytes, randomUUID } from "crypto";
 import type { NiaTool } from "../mcp/tools/types";
 import type { McpSourceContext } from "../mcp";
 import { log } from "../utils/log";
+import { gateSideEffects } from "../mcp/gate";
 
 /**
  * Loopback MCP endpoint — how out-of-process CLI backends (Codex/Gemini) reach
@@ -33,7 +34,7 @@ let endpointTools: NiaTool[] = [];
 /** Build a per-run MCP server whose tool closures bake in the frozen context. */
 function buildRunServer(ctx: McpSourceContext, tools: NiaTool[]): McpServer {
   const mcp = new McpServer({ name: "nia", version: "0.1.0" });
-  for (const t of tools) {
+  for (const t of gateSideEffects(tools)) {
     mcp.registerTool(t.name, { description: t.description, inputSchema: t.schema }, async (args: unknown) => ({
       content: [{ type: "text" as const, text: await t.handler(args, ctx) }],
     }));
