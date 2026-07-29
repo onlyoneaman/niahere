@@ -77,10 +77,27 @@ src/
       message.ts         # Chat message storage + room stats
       session.ts         # Session tracking
       active_engine.ts   # Active engine registry
+  agent/                 # Harness-agnostic execution seam
+    types.ts             # AgentBackend/AgentSession/AgentEvent contracts
+    models.ts            # Model name → provider resolution
+    chain.ts             # ChainEntry + ChainCursor (advance one / skip provider)
+    registry.ts          # Backend singletons, buildChain/resolveChain
+    failure.ts           # Failure classification (status first, prose fallback)
+    health.ts            # Process-wide provider cooldown
+    mcp-endpoint.ts      # Loopback HTTP MCP endpoint for CLI backends
+    message-stream.ts    # Turn queue feeding the Claude SDK query()
+    backends/
+      claude.ts          # In-process Claude Agent SDK adapter
+      claude-normalize.ts# SDK messages → AgentEvent
+      codex.ts           # `codex exec --json` subprocess adapter
+      codex-normalize.ts # Codex JSONL → AgentEvent
   mcp/
     index.ts             # MCP factory (per-query Protocol instances)
-    server.ts            # MCP tool definitions (21 tools: jobs, messaging, memory, rules, agents, watch, place_call)
-    tools.ts             # MCP tool handlers
+    server.ts            # In-process SDK server built from NIA_TOOLS
+    gate.ts              # Per-run budget for side-effect tools
+    tools/
+      table.ts           # The single tool table (both transports)
+      types.ts           # NiaTool shape
   prompts/
     index.ts             # Prompt loading and interpolation
     environment.md       # Environment/config/memory prompt template
@@ -131,6 +148,7 @@ skills/                  # 40+ skills — run `nia skills` for full list
   pptx/                  # PowerPoint generation
   ...
 tests/
+  agent/                 # Backend, chain, resolver, failure, health tests
   core/                  # Daemon, runner, scheduler tests
   chat/                  # Identity, engine tests
   channels/              # Channel registry tests
@@ -147,7 +165,8 @@ All config lives in `~/.niahere/config.yaml` with nested channel structure:
 
 ```yaml
 database_url: postgres://localhost:5432/niahere
-model: default
+model: claude-sonnet-5
+fallback_models: [gpt-5-codex]   # optional; provider is derived from each name
 timezone: Asia/Calcutta
 log_level: info
 gemini_api_key: ...
