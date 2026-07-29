@@ -16,26 +16,29 @@
  */
 import { getMcpServers } from "../mcp";
 import { runMigrations } from "../db/migrate";
-import type { Channel, ChatState, Outbound, TwilioConfig } from "../types";
+import type { Channel, Outbound, TwilioConfig } from "../types";
 import { getConfig } from "../utils/config";
 import { log } from "../utils/log";
 import { errMsg, ignore } from "../utils/errors";
 import { sendMessage as twilioSendMessage } from "./twilio/rest";
 import { getTwilioServer } from "./twilio/server";
-import { chainLock, openChatEngine } from "./common/chat-session";
-
-const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
+import { ChatSessions, chainLock } from "./common/chat-session";
+import { ackTwiml, deliveryStatusAck, isAllowedSender } from "./twilio/shared";
 
 class SmsChannel implements Channel {
   name = "sms" as const;
   private readonly twilio: TwilioConfig;
   /** Cached resolved "from" number: sms.from_number || phone.from_number */
   private readonly fromNumber: string;
-  private readonly chats = new Map<string, ChatState>();
+  private readonly chats: ChatSessions<string>;
 
   constructor(twilio: TwilioConfig, fromNumber: string) {
     this.twilio = twilio;
     this.fromNumber = fromNumber;
+    this.chats = new ChatSessions((remote) => `sms-${remote}`, () => ({
+      channel: "sms",
+      mcpServers: getMcpServers(),
+    }));
   }
 
   async start(): Promise<void> {
@@ -71,8 +74,7 @@ class SmsChannel implements Channel {
   }
 
   async stop(): Promise<void> {
-    for (const state of this.chats.values()) state.engine.close();
-    this.chats.clear();
+    this.chats.closeAll();
   }
 
   /** Outbound — used by send_message MCP tool. SMS is text-only; media is dropped with a warning. */
@@ -93,12 +95,12 @@ class SmsChannel implements Channel {
     const from = params.From || "";
     const body = params.Body || "";
 
-    if (!this.isAllowed(from)) {
+    if (!isAllowedSender(this.twilio, from)) {
       log.warn({ from }, "sms: rejecting non-allowlisted sender");
-      return new Response(EMPTY_TWIML, { status: 200, headers: { "Content-Type": "text/xml" } });
+      return ackTwiml();
     }
 
-    const state = await this.getState(from);
+    const state = await this.chats.get(from);
     // Ack the webhook immediately; reply via REST asynchronously to avoid
     // Twilio's ~15s webhook timeout when the engine takes longer.
     chainLock(state, async () => {
@@ -112,20 +114,11 @@ class SmsChannel implements Channel {
       }
     });
 
-    return new Response(EMPTY_TWIML, { status: 200, headers: { "Content-Type": "text/xml" } });
+    return ackTwiml();
   }
 
   private handleStatus(params: Record<string, string>): Response {
-    log.info(
-      {
-        messageSid: params.MessageSid,
-        status: params.MessageStatus,
-        errorCode: params.ErrorCode,
-        to: params.To,
-      },
-      "sms: delivery status",
-    );
-    return new Response("", { status: 204 });
+    return deliveryStatusAck("sms", params);
   }
 
   // --- Outbound ---
@@ -154,20 +147,6 @@ class SmsChannel implements Channel {
     }
   }
 
-  // --- Helpers ---
-
-  private isAllowed(remoteE164: string): boolean {
-    if (this.twilio.owner_number && remoteE164 === this.twilio.owner_number) return true;
-    return this.twilio.allowlist.includes(remoteE164);
-  }
-
-  private async getState(remoteE164: string): Promise<ChatState> {
-    let state = this.chats.get(remoteE164);
-    if (state) return state;
-    state = await openChatEngine(`sms-${remoteE164}`, () => ({ channel: "sms", mcpServers: getMcpServers() }));
-    this.chats.set(remoteE164, state);
-    return state;
-  }
 }
 
 export function createSmsChannel(): SmsChannel | null {

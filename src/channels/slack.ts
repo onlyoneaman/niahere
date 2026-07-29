@@ -7,9 +7,11 @@ import { Session, Message } from "../db/models";
 import { log } from "../utils/log";
 import { errMsg, ignore } from "../utils/errors";
 import { getMcpServers } from "../mcp";
-import { chainLock, openChatEngine, rotateRoom } from "./common/chat-session";
+import { ChatSessions, chainLock } from "./common/chat-session";
 import { SlackAttachmentCache } from "./slack/attachments";
 import { SlackWatchReloader } from "./slack/watch";
+
+const logActivity = (status: string) => log.debug({ status }, "slack engine activity");
 
 /** Strip markdown backticks so sentinel tokens like [NO_REPLY] match even when the LLM wraps them. */
 function cleanSentinel(text: string): string {
@@ -76,7 +78,7 @@ class SlackChannel implements Channel {
 
     this.dmUserId = config.channels.slack.dm_user_id;
 
-    const chats = new Map<string, ChatState>();
+    const chats = new ChatSessions<string>(roomPrefix, buildEngineOpts());
     const channelNames = new Map<string, string>();
 
     async function resolveChannelName(app: App, channelId: string): Promise<string> {
@@ -112,30 +114,20 @@ class SlackChannel implements Channel {
       });
     }
 
-    async function getState(
+    const getState = (
       key: string,
       watchBehavior?: { channel: string; behavior: string },
       slackCtx?: SlackContext,
-    ): Promise<ChatState> {
-      let state = chats.get(key);
-      if (state) return state;
-      state = await openChatEngine(roomPrefix(key), buildEngineOpts(watchBehavior, slackCtx));
-      chats.set(key, state);
-      return state;
-    }
+    ): Promise<ChatState> => chats.get(key, buildEngineOpts(watchBehavior, slackCtx));
 
-    async function restartChat(
+    const restartChat = (
       key: string,
       watchBehavior?: { channel: string; behavior: string },
       slackCtx?: SlackContext,
-    ): Promise<ChatState> {
-      const state = await rotateRoom(roomPrefix(key), chats.get(key), buildEngineOpts(watchBehavior, slackCtx));
-      chats.set(key, state);
-      return state;
-    }
+    ): Promise<ChatState> => chats.rotate(key, buildEngineOpts(watchBehavior, slackCtx));
 
     function withLock(key: string, fn: () => Promise<void>): void {
-      const state = chats.get(key);
+      const state = chats.peek(key);
       if (!state) {
         fn().catch((err) => log.error({ err, key }, "unhandled error in locked handler"));
         return;
@@ -178,9 +170,7 @@ class SlackChannel implements Channel {
         withLock(key, async () => {
           try {
             const { result } = await state.engine.send(subcommand, {
-              onActivity(status) {
-                log.debug({ status }, "slack engine activity");
-              },
+              onActivity: logActivity,
             });
             await respond(result.trim() || "(no response)");
           } catch (err) {
@@ -438,9 +428,7 @@ class SlackChannel implements Channel {
           const { result, messageId, signal } = await state.engine.send(
             text,
             {
-              onActivity(status) {
-                log.debug({ status }, "slack engine activity");
-              },
+              onActivity: logActivity,
             },
             attachments,
           );

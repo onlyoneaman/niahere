@@ -11,7 +11,7 @@ import { errMsg, ignore } from "../utils/errors";
 import { getMcpServers } from "../mcp";
 import { classifyMime, validateAttachment, prepareImage } from "../utils/attachment";
 import { getNiaHome } from "../utils/paths";
-import { chainLock, openChatEngine, rotateRoom } from "./common/chat-session";
+import { ChatSessions, chainLock } from "./common/chat-session";
 
 function safeExtension(filename?: string): string {
   const ext = filename?.split(".").pop();
@@ -28,7 +28,10 @@ class TelegramChannel implements Channel {
   private bot: Bot | null = null;
   private outboundChatId: number | null = null;
   private isOpen = false;
-  private readonly chats = new Map<number, ChatState>();
+  private readonly chats = new ChatSessions<number>(
+    (chatId) => this.keyOf(chatId),
+    () => ({ channel: "telegram", mcpServers: getMcpServers() }),
+  );
 
   async start(): Promise<void> {
     const config = getConfig();
@@ -52,6 +55,7 @@ class TelegramChannel implements Channel {
   }
 
   async stop(): Promise<void> {
+    this.chats.closeAll();
     if (this.bot) {
       this.bot.stop();
       this.bot = null;
@@ -83,14 +87,14 @@ class TelegramChannel implements Channel {
   private async handleStart(ctx: Context): Promise<void> {
     if (!ctx.chatId || !this.gate(ctx)) return;
     this.registerOutbound(ctx.chatId);
-    const state = await this.getState(ctx.chatId);
+    const state = await this.chats.get(ctx.chatId);
     this.withLock(ctx.chatId, () => this.processMessage(ctx, state, "hi"));
   }
 
   private async handleRestart(ctx: Context): Promise<void> {
     if (!ctx.chatId || !this.gate(ctx)) return;
     this.registerOutbound(ctx.chatId);
-    const state = await this.restartChat(ctx.chatId);
+    const state = await this.chats.rotate(ctx.chatId);
     log.info({ chatId: ctx.chatId, room: `tg-${ctx.chatId}-${state.roomIndex}` }, "new telegram conversation");
     await ctx.reply("New conversation started.");
   }
@@ -98,7 +102,7 @@ class TelegramChannel implements Channel {
   private async handleText(ctx: Context): Promise<void> {
     if (!ctx.chatId || !ctx.message?.text || !this.gate(ctx)) return;
     this.registerOutbound(ctx.chatId);
-    const state = await this.getState(ctx.chatId);
+    const state = await this.chats.get(ctx.chatId);
     const text = ctx.message.text;
     this.withLock(ctx.chatId, () => this.processMessage(ctx, state, text));
   }
@@ -106,7 +110,7 @@ class TelegramChannel implements Channel {
   private async handlePhoto(ctx: Context): Promise<void> {
     if (!ctx.chatId || !ctx.message?.photo || !this.gate(ctx)) return;
     this.registerOutbound(ctx.chatId);
-    const state = await this.getState(ctx.chatId);
+    const state = await this.chats.get(ctx.chatId);
     const chatId = ctx.chatId;
     this.withLock(chatId, async () => {
       try {
@@ -127,7 +131,7 @@ class TelegramChannel implements Channel {
   private async handleDocument(ctx: Context): Promise<void> {
     if (!ctx.chatId || !ctx.message?.document || !this.gate(ctx)) return;
     this.registerOutbound(ctx.chatId);
-    const state = await this.getState(ctx.chatId);
+    const state = await this.chats.get(ctx.chatId);
     const chatId = ctx.chatId;
     this.withLock(chatId, async () => {
       try {
@@ -203,25 +207,8 @@ class TelegramChannel implements Channel {
 
   // --- Session / state helpers ---
 
-  private async getState(chatId: number): Promise<ChatState> {
-    let state = this.chats.get(chatId);
-    if (state) return state;
-    state = await openChatEngine(this.keyOf(chatId), () => ({ channel: "telegram", mcpServers: getMcpServers() }));
-    this.chats.set(chatId, state);
-    return state;
-  }
-
-  private async restartChat(chatId: number): Promise<ChatState> {
-    const state = await rotateRoom(this.keyOf(chatId), this.chats.get(chatId), () => ({
-      channel: "telegram",
-      mcpServers: getMcpServers(),
-    }));
-    this.chats.set(chatId, state);
-    return state;
-  }
-
   private withLock(chatId: number, fn: () => Promise<void>): void {
-    const state = this.chats.get(chatId);
+    const state = this.chats.peek(chatId);
     if (!state) {
       fn().catch((err) => log.error({ err, chatId }, "unhandled error in locked handler"));
       return;

@@ -20,7 +20,8 @@
 import { getMcpServers } from "../mcp";
 import { Message } from "../db/models";
 import { runMigrations } from "../db/migrate";
-import { chainLock, openChatEngine, rotateRoom } from "./common/chat-session";
+import { ChatSessions, chainLock } from "./common/chat-session";
+import { ackTwiml, deliveryStatusAck, isAllowedSender } from "./twilio/shared";
 import type { Attachment, Channel, ChatState, Outbound, TwilioConfig, WhatsappConfig, PhoneConfig } from "../types";
 import { getConfig } from "../utils/config";
 import { log } from "../utils/log";
@@ -33,7 +34,6 @@ import { transcribeAudio } from "./twilio/transcribe";
 
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 const WA_PREFIX = "whatsapp:";
-const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
 const CHUNK_LIMIT = 4096;
 const RESET_RE = /^\s*\/(reset|new)\s*$/i;
 const VOICE_MIME_PREFIX = "audio/";
@@ -43,13 +43,14 @@ class WhatsAppChannel implements Channel {
   private readonly twilio: TwilioConfig;
   private readonly whatsapp: WhatsappConfig;
   private readonly phone: PhoneConfig;
-  private readonly chats = new Map<string, ChatState>();
+  private readonly chats: ChatSessions<string>;
   private readonly lastInboundAt = new Map<string, number>();
 
   constructor(twilio: TwilioConfig, whatsapp: WhatsappConfig, phone: PhoneConfig) {
     this.twilio = twilio;
     this.whatsapp = whatsapp;
     this.phone = phone;
+    this.chats = new ChatSessions(roomPrefix, () => ({ channel: "whatsapp", mcpServers: getMcpServers() }));
   }
 
   async start(): Promise<void> {
@@ -87,8 +88,7 @@ class WhatsAppChannel implements Channel {
   }
 
   async stop(): Promise<void> {
-    for (const state of this.chats.values()) state.engine.close();
-    this.chats.clear();
+    this.chats.closeAll();
   }
 
   /** Outbound to the owner — used by send_message MCP tool. WhatsApp has no threading. */
@@ -109,9 +109,9 @@ class WhatsAppChannel implements Channel {
     const from = (params.From || "").replace(/^whatsapp:/, "");
     const body = (params.Body || "").trim();
 
-    if (!this.isAllowed(from)) {
+    if (!isAllowedSender(this.twilio, from)) {
       log.warn({ from }, "whatsapp: rejecting non-allowlisted sender");
-      return new Response(EMPTY_TWIML, { status: 200, headers: { "Content-Type": "text/xml" } });
+      return ackTwiml();
     }
 
     this.lastInboundAt.set(from, Date.now());
@@ -119,20 +119,20 @@ class WhatsAppChannel implements Channel {
     if (RESET_RE.test(body)) {
       // Serialize through the same lock so a /reset chasing an in-flight
       // engine.send() waits its turn instead of yanking the engine away.
-      const state = await this.getState(from);
+      const state = await this.chats.get(from);
       chainLock(state, async () => {
-        const newState = await this.restartChat(from);
+        const newState = await this.chats.rotate(from);
         await this.sendTextTo(
           from,
-          `New conversation started (room ${this.roomPrefix(from)}-${newState.roomIndex}).`,
+          `New conversation started (room ${roomPrefix(from)}-${newState.roomIndex}).`,
         ).catch((err) => log.warn({ err, from }, "whatsapp: failed to send reset confirmation"));
       });
-      return new Response(EMPTY_TWIML, { status: 200, headers: { "Content-Type": "text/xml" } });
+      return ackTwiml();
     }
 
     const descriptors = extractMedia(params);
 
-    const state = await this.getState(from);
+    const state = await this.chats.get(from);
     chainLock(state, async () => {
       let userText = body;
       let attachments: Attachment[] | undefined;
@@ -216,20 +216,11 @@ class WhatsAppChannel implements Channel {
       }
     });
 
-    return new Response(EMPTY_TWIML, { status: 200, headers: { "Content-Type": "text/xml" } });
+    return ackTwiml();
   }
 
   private handleStatus(params: Record<string, string>): Response {
-    log.info(
-      {
-        messageSid: params.MessageSid,
-        status: params.MessageStatus,
-        errorCode: params.ErrorCode,
-        to: params.To,
-      },
-      "whatsapp: delivery status",
-    );
-    return new Response("", { status: 204 });
+    return deliveryStatusAck("whatsapp", params);
   }
 
   // --- Outbound ---
@@ -302,36 +293,10 @@ class WhatsAppChannel implements Channel {
     return true;
   }
 
-  // --- Helpers ---
+}
 
-  private isAllowed(remoteE164: string): boolean {
-    if (this.twilio.owner_number && remoteE164 === this.twilio.owner_number) return true;
-    return this.twilio.allowlist.includes(remoteE164);
-  }
-
-  private roomPrefix(remoteE164: string): string {
-    return `wa-${remoteE164}`;
-  }
-
-  private async getState(remoteE164: string): Promise<ChatState> {
-    let state = this.chats.get(remoteE164);
-    if (state) return state;
-    state = await openChatEngine(this.roomPrefix(remoteE164), () => ({
-      channel: "whatsapp",
-      mcpServers: getMcpServers(),
-    }));
-    this.chats.set(remoteE164, state);
-    return state;
-  }
-
-  private async restartChat(remoteE164: string): Promise<ChatState> {
-    const state = await rotateRoom(this.roomPrefix(remoteE164), this.chats.get(remoteE164), () => ({
-      channel: "whatsapp",
-      mcpServers: getMcpServers(),
-    }));
-    this.chats.set(remoteE164, state);
-    return state;
-  }
+function roomPrefix(remoteE164: string): string {
+  return `wa-${remoteE164}`;
 }
 
 /**

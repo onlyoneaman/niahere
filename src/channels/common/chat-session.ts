@@ -54,3 +54,63 @@ export async function rotateRoom(
 export function chainLock(state: ChatState, fn: () => Promise<void>): void {
   state.lock = state.lock.then(fn, fn);
 }
+
+/** Seam so the registry is testable without a database. */
+export interface SessionOpener {
+  open(prefix: string, build: EngineFactory): Promise<ChatState>;
+  rotate(prefix: string, prev: ChatState | undefined, build: EngineFactory): Promise<ChatState>;
+}
+
+const defaultOpener: SessionOpener = { open: openChatEngine, rotate: rotateRoom };
+
+/**
+ * A channel's per-sender chat sessions. Every message-driven channel keeps one
+ * of these keyed by sender, and they all want the same four things: open on
+ * first use, reuse after, rotate on `/reset`, close everything on shutdown.
+ */
+export class ChatSessions<K> {
+  private readonly states = new Map<K, ChatState>();
+
+  constructor(
+    private readonly prefixFor: (key: K) => string,
+    private readonly build: EngineFactory,
+    private readonly opener: SessionOpener = defaultOpener,
+  ) {}
+
+  /** `build` overrides the default options for this call — Slack needs it to
+   *  thread watch behavior and thread context into a newly opened engine. */
+  async get(key: K, build: EngineFactory = this.build): Promise<ChatState> {
+    const existing = this.states.get(key);
+    if (existing) return existing;
+    const state = await this.opener.open(this.prefixFor(key), build);
+    this.states.set(key, state);
+    return state;
+  }
+
+  /** Start a fresh room for this sender, closing the previous one. */
+  async rotate(key: K, build: EngineFactory = this.build): Promise<ChatState> {
+    const state = await this.opener.rotate(this.prefixFor(key), this.states.get(key), build);
+    this.states.set(key, state);
+    return state;
+  }
+
+  /** The cached session, without opening one. */
+  peek(key: K): ChatState | undefined {
+    return this.states.get(key);
+  }
+
+  /** Whether a session is already open — Slack uses it to tell a live thread
+   *  from one it should ignore. */
+  has(key: K): boolean {
+    return this.states.has(key);
+  }
+
+  keys(): Iterable<K> {
+    return this.states.keys();
+  }
+
+  closeAll(): void {
+    for (const state of this.states.values()) state.engine.close();
+    this.states.clear();
+  }
+}
