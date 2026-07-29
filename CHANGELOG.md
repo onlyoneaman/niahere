@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **A turn that died was recorded as a completed job** — the Agent SDK used to report turns killed by an exhausted API retry, a malformed tool-use give-up, or an exhausted budget as `terminal_reason: "completed"`; it now names them, and a named dead turn is reported as a failure instead of a success.
+- **Claude failures were classified on prose alone** — the result message carries `api_error_status`, which the normalizer ignored; an HTTP status now decides the failover scope with prose as the fallback, matching what the codex path already did. Rate-limit and overloaded errors delivered mid-stream only started reporting 429/529 in a recent SDK release, which is what makes this reliable.
+
+### Changed
+
+- **Agent SDK 0.3.190 → 0.3.220**, `@anthropic-ai/sdk` 0.105 → 0.115, MCP SDK 1.29 → 1.30. Picks up fixes that matter for a long-running daemon: an uncaught exception writing to stdin after the CLI subprocess exited, an abort-listener leak on shared controllers, a process-tracking leak when the spawn fails, control-protocol dedup dropping tool-use IDs after 1000 resolutions, and process-exit errors that now carry the child's stderr rather than only an exit code.
+
 ## [0.5.1] - 2026-07-29
 
 ### Fixed

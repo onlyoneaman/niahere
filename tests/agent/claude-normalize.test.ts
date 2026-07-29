@@ -107,3 +107,66 @@ describe("SdkNormalizer", () => {
     ]);
   });
 });
+
+describe("SdkNormalizer — result classification", () => {
+  const result = (over: Record<string, unknown>) =>
+    new SdkNormalizer().consume({ type: "result", session_id: "s1", result: "", ...over })[0]!;
+
+  test("an HTTP status decides the scope, not the prose", () => {
+    // 429/529 arrive with unhelpful text; the status is the reliable signal.
+    expect(result({ is_error: true, errors: ["something went wrong"], api_error_status: 429 })).toMatchObject({
+      type: "error",
+      failover: "provider",
+    });
+    expect(result({ is_error: true, errors: [""], api_error_status: 529 })).toMatchObject({ failover: "provider" });
+  });
+
+  test("a rejected model is model-scoped so the chain tries the next model", () => {
+    expect(result({ is_error: true, errors: ["no such model"], api_error_status: 404 })).toMatchObject({
+      failover: "model",
+    });
+  });
+
+  test("a plain bad request stops the chain", () => {
+    expect(result({ is_error: true, errors: ["your prompt was malformed"], api_error_status: 400 })).toMatchObject({
+      type: "error",
+      failover: undefined,
+    });
+  });
+
+  test("without a status it still falls back to prose", () => {
+    expect(result({ is_error: true, errors: [] })).toMatchObject({ failover: "provider" });
+  });
+
+  // Turns that die on an exhausted retry used to arrive as terminal_reason
+  // "completed"; the SDK now names them, and a named dead turn is not a success.
+  test("a turn that died on an API error is an error, not a completed result", () => {
+    const ev = result({ is_error: false, terminal_reason: "api_error" });
+    expect(ev.type).toBe("error");
+    if (ev.type === "error") expect(ev.failover).toBe("provider");
+  });
+
+  test("a turn that exhausted its budget is a real failure that stops the chain", () => {
+    const ev = result({ is_error: false, terminal_reason: "budget_exhausted" });
+    expect(ev.type).toBe("error");
+    if (ev.type === "error") expect(ev.failover).toBeUndefined();
+  });
+
+  test.each(["malformed_tool_use_exhausted", "structured_output_retry_exhausted", "turn_setup_failed"])(
+    "%s is reported as a failure",
+    (reason) => {
+      expect(result({ is_error: false, terminal_reason: reason }).type).toBe("error");
+    },
+  );
+
+  test("a genuinely completed turn is still a result", () => {
+    const ev = result({ is_error: false, terminal_reason: "completed", result: "done" });
+    expect(ev.type).toBe("result");
+    if (ev.type === "result") expect(ev.text).toBe("done");
+  });
+
+  test("a turn stopped by max_turns is still a result, not a failure", () => {
+    // A real completion boundary, not a dead turn — the caller reads terminalReason.
+    expect(result({ is_error: false, terminal_reason: "max_turns", result: "partial" }).type).toBe("result");
+  });
+});

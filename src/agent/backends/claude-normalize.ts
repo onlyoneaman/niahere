@@ -1,6 +1,21 @@
 import type { AgentEvent, Normalizer } from "../types";
 import { truncate } from "../../utils/format-activity";
 import { isRetryable, scopeOf, parseFailure } from "../failure";
+import type { FailoverScope } from "../types";
+
+/**
+ * Terminal reasons that mean the turn died. The SDK used to report several of
+ * these as `completed`, so a dead turn landed in the audit as a successful run.
+ * The value is how far the chain should skip; undefined means stop.
+ */
+const DEAD_TURNS: Record<string, FailoverScope | undefined> = {
+  api_error: "provider",
+  budget_exhausted: undefined,
+  malformed_tool_use_exhausted: undefined,
+  structured_output_retry_exhausted: undefined,
+  tool_deferred_unavailable: undefined,
+  turn_setup_failed: undefined,
+};
 
 /**
  * Pure reducer: Claude Agent SDK messages → normalized `AgentEvent`s.
@@ -98,6 +113,16 @@ export class SdkNormalizer implements Normalizer {
   }
 
   private consumeResult(msg: any): AgentEvent {
+    const deadTurn = msg.terminal_reason as string | undefined;
+    if (!msg.is_error && deadTurn && deadTurn in DEAD_TURNS) {
+      return {
+        type: "error",
+        message: (msg.errors?.join(", ") as string) || `turn ended: ${deadTurn}`,
+        retryable: false,
+        failover: DEAD_TURNS[deadTurn],
+        terminalReason: deadTurn,
+      };
+    }
     if (!msg.is_error) {
       return {
         type: "result",
@@ -126,7 +151,11 @@ export class SdkNormalizer implements Normalizer {
       type: "error",
       message: raw,
       retryable: isRetryable(raw),
-      failover: scopeOf(parseFailure(raw), "provider"),
+      // api_error_status is the reliable signal; prose is the fallback.
+      failover: scopeOf(
+        { ...parseFailure(raw), status: typeof msg.api_error_status === "number" ? msg.api_error_status : undefined },
+        "provider",
+      ),
       terminalReason: msg.terminal_reason,
     };
   }

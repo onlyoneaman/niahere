@@ -82,8 +82,10 @@ function scopeOfStatus(status: number, message: string): FailoverScope | undefin
  */
 export function scopeOf(failure: Failure, blank?: FailoverScope): FailoverScope | undefined {
   const t = failure.message.trim();
-  if (!t || t.toLowerCase() === "unknown error") return blank;
+  // A status is authoritative even when the message is empty — the prose that
+  // accompanies a 429 or 529 is routinely unhelpful.
   if (failure.status !== undefined) return scopeOfStatus(failure.status, t);
+  if (!t || t.toLowerCase() === "unknown error") return blank;
   if (MODEL_SCOPED.some((p) => p.test(t))) return "model";
   if (PROVIDER_SCOPED.some((p) => p.test(t))) return "provider";
   return undefined;
