@@ -58,6 +58,17 @@ export interface RelayOpts {
   model: string;
   voice: string;
   context: CallContext;
+  /** Injectable so the bridge is testable without dialing OpenAI. */
+  openAiWsFactory?: (url: string, key: string) => OpenAiSocket;
+}
+
+/** The slice of the realtime socket the relay drives. */
+export interface OpenAiSocket extends WebSocketLike {
+  addEventListener(type: string, listener: (ev: any) => void): void;
+}
+
+function connectOpenAi(url: string, key: string): OpenAiSocket {
+  return new WebSocket(url, { headers: { Authorization: `Bearer ${key}` } } as any) as unknown as OpenAiSocket;
 }
 
 export interface WebSocketLike {
@@ -77,7 +88,7 @@ export interface RelayHandle {
 }
 
 export function createRelay(opts: RelayOpts): RelayHandle {
-  const { twilioWs, openAiKey, model, voice, context } = opts;
+  const { twilioWs, openAiKey, model, voice, context, openAiWsFactory = connectOpenAi } = opts;
   const transcript: TranscriptTurn[] = [];
   let endedReason: RelayEndReason = "twilio_stop";
   let errorMsg: string | undefined;
@@ -85,9 +96,7 @@ export function createRelay(opts: RelayOpts): RelayHandle {
   let pendingAssistantText = "";
 
   const openAiUrl = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`;
-  const openAiWs = new WebSocket(openAiUrl, {
-    headers: { Authorization: `Bearer ${openAiKey}` },
-  } as any);
+  const openAiWs = openAiWsFactory(openAiUrl, openAiKey);
 
   /** Whether a response is currently in flight on the OpenAI side. */
   let responseActive = false;
