@@ -1,5 +1,25 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **A one-shot job could keep firing while the log claimed it was disabled** — the scheduler discarded the failure of the disabling write and logged "auto-disabled" regardless; it and the invalid-schedule branch now report what actually happened.
+- **Telegram leaked its chat engines on shutdown** — `stop()` ended the bot but never closed the engines, unlike sms and whatsapp.
+
+### Changed
+
+- **Ignored failures leave a trace** — all 43 `.catch(() => {})` became `ignore(promise, context)`, identical in behavior but logged, so a persistent cleanup failure is discoverable rather than silent.
+- **Error handling uses the helpers that already existed** — `errMsg` was hand-inlined at 22 sites and now is not; the separate "normalize before rethrowing" shape became `asError`, which keeps the original instance so a rethrow retains its stack.
+- **One chat-session registry for every channel** — telegram, slack, sms and whatsapp each hand-rolled the same per-sender map; `ChatSessions` holds open/reuse/rotate/close once, and the allowlist check, TwiML ack and delivery-status callback move to `twilio/shared`.
+- **`cli/index.ts` is a router again** — 642 to 377 lines, with eight inlined command bodies moved into modules beside the ones already there.
+- **The phone relay is testable** — its OpenAI socket is now injectable, matching the seam the Claude and Codex backends expose, and 21 tests cover the audio bridge that had none.
+- **Conventions written down** — AGENTS.md claimed all types live in `src/types/` while 35 files defined them elsewhere; co-location is the rule now, alongside the error and dynamic-import conventions.
+
+### Removed
+
+- **Six unreferenced exports** — `clearStale`, `getSkillNames`, `hangupCall`, `resetTwilioServer`, `updateCallUrl`, `updateIncomingPhoneNumber`.
+
 ## [0.5.0] - 2026-07-29
 
 ### Fixed
