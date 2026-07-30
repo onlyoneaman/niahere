@@ -7,6 +7,11 @@
 - **Provider attribution recorded the deployment target, not the backend** — the claude path passed the SDK's `modelUsage` through untouched, and its `provider` field names firstParty/bedrock/vertex, so `providers_used` filled with `firstParty` while the codex path wrote `codex`; one vocabulary now, so the column answers whether a turn failed over.
 - **Codex counted its cached prompt twice** — `input_tokens` is the whole prompt with `cached_input_tokens` a slice of it, where Claude reports the two as siblings; one accumulator summed both, inflating every codex turn's input by its cache hit. The slice now comes out, and `cache_write_input_tokens` is recorded rather than discarded.
 - **A codex turn looked free** — codex reports no cost, which folded in as `$0` and made a session that failed over look cheaper than one that never left Claude; sessions now carry `unpriced_turns` so an unknown cost is visible instead of absorbed.
+- **Turn metadata vanished without a word** — when a reply's metadata failed to store, the engine silently re-saved the message without it; 484 turns over eight days on the mini lost their usage record that way. The reply still takes priority, but the drop is logged now.
+
+### Added
+
+- **`nia usage`** — tokens and cost per day, model, provider or room, read from the per-turn message ledger rather than the session rollup, so a model's numbers can still be told apart. `--days N --by day|model|provider|room --room R --json`. Turns nobody priced are reported as unpriced rather than free.
 
 ## [0.5.2] - 2026-07-29
 

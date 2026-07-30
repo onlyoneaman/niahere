@@ -203,6 +203,12 @@ switch (command) {
     break;
   }
 
+  case "usage": {
+    const { usageCommand } = await import("./usage");
+    await usageCommand(process.argv.slice(3));
+    break;
+  }
+
   case "seed": {
     await import("../db/seed");
     break;
@@ -337,6 +343,7 @@ Daemon:
   model [name]                    Show or set global Claude model
   health                          Check daemon, db, channels, config
   logs [-f] [--channel ch]        Daemon logs (filter by channel)
+  usage [--days N --by dim --room R --json]  Tokens and cost per day/model/provider/room
 
 Chat:
   chat [-c] [-r] [--employee|--agent|--job name]  Interactive chat

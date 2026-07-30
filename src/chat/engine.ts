@@ -323,7 +323,11 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
                   };
                   try {
                     messageId = await Message.save(saveParams);
-                  } catch {
+                  } catch (e) {
+                    // Saving the reply matters more than saving its usage, but a
+                    // silent drop cost eight days of the ledger before anyone
+                    // looked.
+                    log.error({ room, error: errMsg(e) }, "dropping turn metadata; message saved without it");
                     messageId = await Message.save({ ...saveParams, metadata: undefined });
                   }
                   await Session.touch(sessionId);
