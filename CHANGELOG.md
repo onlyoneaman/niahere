@@ -5,6 +5,8 @@
 ### Fixed
 
 - **Provider attribution recorded the deployment target, not the backend** — the claude path passed the SDK's `modelUsage` through untouched, and its `provider` field names firstParty/bedrock/vertex, so `providers_used` filled with `firstParty` while the codex path wrote `codex`; one vocabulary now, so the column answers whether a turn failed over.
+- **Codex counted its cached prompt twice** — `input_tokens` is the whole prompt with `cached_input_tokens` a slice of it, where Claude reports the two as siblings; one accumulator summed both, inflating every codex turn's input by its cache hit. The slice now comes out, and `cache_write_input_tokens` is recorded rather than discarded.
+- **A codex turn looked free** — codex reports no cost, which folded in as `$0` and made a session that failed over look cheaper than one that never left Claude; sessions now carry `unpriced_turns` so an unknown cost is visible instead of absorbed.
 
 ## [0.5.2] - 2026-07-29
 

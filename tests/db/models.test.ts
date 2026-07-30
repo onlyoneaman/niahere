@@ -181,6 +181,44 @@ describe("Message model", () => {
 });
 
 describe("Session.accumulateMetadata", () => {
+  test("a turn nobody priced is counted, not treated as free", async () => {
+    // Codex reports tokens and no cost. Folding that in as $0 makes a session
+    // that failed over look cheaper than one that did not.
+    const sql = getSql();
+    const id = `test-unpriced-${Date.now()}`;
+    await Session.create(id, TEST_ROOM);
+
+    await Session.accumulateMetadata(id, {
+      cost_usd: 0.25,
+      model_usage: { "claude-sonnet-5": { provider: "claude", inputTokens: 10 } },
+    });
+    await Session.accumulateMetadata(id, {
+      model_usage: { "gpt-5-codex": { provider: "codex", inputTokens: 60 } },
+    });
+
+    const [row] = await sql`
+      SELECT
+        (metadata->>'total_cost_usd')::real AS cost,
+        (metadata->>'unpriced_turns')::int AS unpriced,
+        (metadata->>'total_input_tokens')::int AS input
+      FROM sessions WHERE id = ${id}
+    `;
+    expect(row.cost).toBeCloseTo(0.25, 5);
+    expect(row.unpriced).toBe(1);
+    // The tokens still land — only the dollar figure is unknown.
+    expect(row.input).toBe(70);
+  });
+
+  test("a genuinely free turn is not counted as unpriced", async () => {
+    const sql = getSql();
+    const id = `test-free-${Date.now()}`;
+    await Session.create(id, TEST_ROOM);
+    await Session.accumulateMetadata(id, { cost_usd: 0, model_usage: {} });
+
+    const [row] = await sql`SELECT (metadata->>'unpriced_turns')::int AS unpriced FROM sessions WHERE id = ${id}`;
+    expect(row.unpriced).toBe(0);
+  });
+
   test("accumulates usage totals as queryable numbers across turns", async () => {
     const sql = getSql();
     const id = `test-accum-${Date.now()}`;

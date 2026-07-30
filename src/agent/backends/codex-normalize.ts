@@ -40,7 +40,11 @@ export class CodexNormalizer implements Normalizer {
       case "turn.failed":
         return this.fail(typeof e.error?.message === "string" ? e.error.message : "");
       case "turn.completed": {
-        const input = e.usage?.input_tokens ?? 0;
+        // Codex counts like OpenAI: `input_tokens` is the whole prompt with
+        // `cached_input_tokens` a slice of it. Claude reports the two as
+        // siblings and one accumulator sums both, so the slice comes out here.
+        const cacheRead = e.usage?.cached_input_tokens ?? 0;
+        const input = Math.max(0, (e.usage?.input_tokens ?? 0) - cacheRead);
         const output = e.usage?.output_tokens ?? 0;
         return [
           {
@@ -50,13 +54,16 @@ export class CodexNormalizer implements Normalizer {
             backendSessionId: this.threadId,
             // Same shape the Claude path emits, so one accumulator serves both
             // and a failed-over turn is attributable to the provider that ran it.
+            // No cost: codex reports none, and an invented zero would read as a
+            // free turn.
             metadata: {
               model_usage: {
                 [this.model || "default"]: {
                   provider: "codex",
                   inputTokens: input,
                   outputTokens: output,
-                  cacheReadInputTokens: e.usage?.cached_input_tokens ?? 0,
+                  cacheReadInputTokens: cacheRead,
+                  cacheCreationInputTokens: e.usage?.cache_write_input_tokens ?? 0,
                 },
               },
             },

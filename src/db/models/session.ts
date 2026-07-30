@@ -182,8 +182,14 @@ export async function accumulateMetadata(id: string, resultMeta: Record<string, 
   // Bind deltas as jsonb via sql.json — pre-stringifying would store a
   // double-encoded string scalar, making every `->>` extraction return NULL
   // and silently zeroing all accumulated totals.
+  // Codex reports tokens but no cost. Folding that in as $0 would make a
+  // session that failed over look cheaper than one that never left Claude, so
+  // the unknown is counted rather than absorbed.
+  const priced = typeof resultMeta.cost_usd === "number";
+
   const delta = sql.json({
     total_cost_usd: (resultMeta.cost_usd as number) || 0,
+    unpriced_turns: priced ? 0 : 1,
     total_turns: (resultMeta.turns as number) || 0,
     total_duration_ms: (resultMeta.duration_ms as number) || 0,
     total_duration_api_ms: (resultMeta.duration_api_ms as number) || 0,
@@ -203,6 +209,7 @@ export async function accumulateMetadata(id: string, resultMeta: Record<string, 
   await sql`
     UPDATE sessions SET metadata = jsonb_build_object(
       'total_cost_usd',              COALESCE((metadata->>'total_cost_usd')::real, 0)              + (${delta}->>'total_cost_usd')::real,
+      'unpriced_turns',               COALESCE((metadata->>'unpriced_turns')::int, 0)               + (${delta}->>'unpriced_turns')::int,
       'total_turns',                  COALESCE((metadata->>'total_turns')::int, 0)                  + (${delta}->>'total_turns')::int,
       'total_duration_ms',            COALESCE((metadata->>'total_duration_ms')::real, 0)            + (${delta}->>'total_duration_ms')::real,
       'total_duration_api_ms',        COALESCE((metadata->>'total_duration_api_ms')::real, 0)        + (${delta}->>'total_duration_api_ms')::real,
