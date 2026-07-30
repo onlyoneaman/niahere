@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { runJobAcrossChain } from "../../src/core/runner";
 import { CodexBackend, type CliProc, type SpawnFn } from "../../src/agent/backends/codex";
 import { startMcpEndpoint, stopMcpEndpoint } from "../../src/agent/mcp-endpoint";
@@ -200,5 +200,57 @@ describe("runJobAcrossChain (codex in the chain)", () => {
 
     expect(lastTried).toBe(false);
     expect(out.error).toContain("no such file or directory");
+  });
+});
+
+describe("runJobAcrossChain (why it failed over)", () => {
+  const DEAD: AgentEvent[] = [
+    { type: "error", message: "unknown error", retryable: false, failover: "provider", terminalReason: "api_error" },
+  ];
+
+  test("names the reason it left a provider, not just that it left", async () => {
+    // A job that failed over used to log only from/to/scope, so the cause was
+    // absent from the record entirely — the reason two nightly jobs failed for
+    // four days could not be read back out of the log.
+    const lines: Record<string, unknown>[] = [];
+    const { log } = await import("../../src/utils/log");
+    const spy = spyOn(log, "warn").mockImplementation(((obj: Record<string, unknown>) => {
+      lines.push(obj);
+    }) as typeof log.warn);
+
+    await runJobAcrossChain(
+      [{ backend: fakeBackend("claude", DEAD), model: "claude-sonnet-5" }, { backend: fakeBackend("codex", OK("c1")) }],
+      CTX,
+      "do it",
+    );
+    spy.mockRestore();
+
+    const failover = lines.find((l) => l.to !== undefined)!;
+    expect(failover).toMatchObject({ scope: "provider", terminal_reason: "api_error" });
+    expect(failover.err).toBe("unknown error");
+  });
+
+  test("an exhausted chain reports every provider it burned, not only the last", async () => {
+    const out = await runJobAcrossChain(
+      [
+        { backend: fakeBackend("claude", DEAD), model: "claude-sonnet-5" },
+        { backend: fakeBackend("codex", [{ type: "error", message: "request timed out", retryable: false }]) },
+      ],
+      CTX,
+      "do it",
+    );
+
+    expect(out.error).toContain("request timed out");
+    expect(out.error).toContain("claude:claude-sonnet-5");
+    expect(out.error).toContain("unknown error");
+  });
+
+  test("a chain that never failed over reports the plain error", async () => {
+    const out = await runJobAcrossChain(
+      [{ backend: fakeBackend("claude", [{ type: "error", message: "bad prompt", retryable: false }]) }],
+      CTX,
+      "do it",
+    );
+    expect(out.error).toBe("bad prompt");
   });
 });

@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **A job that failed over never said why** — the runner logged from/to/scope but not the failure it was reacting to, and an exhausted chain reported only the last backend's message; two nightly jobs failed for four days with no recoverable cause. The failover warning now carries the error and terminal reason, and a run that burned several providers names each one.
+
 ## [0.5.3] - 2026-07-30
 
 ### Fixed

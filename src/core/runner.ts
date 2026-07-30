@@ -125,15 +125,30 @@ export async function runJobAcrossChain(
 ): Promise<RunnerOutput> {
   const cursor = new ChainCursor(chain);
   let output: RunnerOutput = { agentText: "", sessionId: "", error: "no model configured" };
+  const abandoned: string[] = [];
+
+  // The last entry's message alone hides why the chain started walking, which
+  // is usually the more useful half.
+  const withTrail = (out: RunnerOutput): RunnerOutput =>
+    out.error && abandoned.length > 0 ? { ...out, error: `${out.error} (after ${abandoned.join("; ")})` } : out;
 
   for (let entry = cursor.current; entry; ) {
     output = await runEntry(entry, sessionCtx, jobPrompt, onActivity, activeRoom);
-    if (!output.failover) return output;
+    if (!output.failover) return withTrail(output);
 
     const from = describeEntry(entry);
+    if (output.error) abandoned.push(`${from}: ${output.error}`);
     entry = cursor.advance(output.failover);
-    if (entry) log.warn({ from, to: describeEntry(entry), scope: output.failover }, "failing over to next model");
+    if (entry) {
+      log.warn(
+        { from, to: describeEntry(entry), scope: output.failover, err: output.error, terminal_reason: output.terminalReason },
+        "failing over to next model",
+      );
+    }
   }
+
+  // The chain ran out: the final entry's own failure is already the last trail
+  // entry, so reporting it twice adds nothing.
   return output;
 }
 
