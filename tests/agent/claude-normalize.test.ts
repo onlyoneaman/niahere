@@ -80,6 +80,51 @@ describe("SdkNormalizer", () => {
     }
   });
 
+  test("model_usage names the backend, not the SDK's deployment target", () => {
+    // The SDK's own `provider` is firstParty/bedrock/vertex — a different axis
+    // from the chain's identity, and the only one the codex path reports.
+    const n = new SdkNormalizer();
+    const out = n.consume({
+      type: "result",
+      is_error: false,
+      result: "answer",
+      session_id: "s9",
+      modelUsage: {
+        "claude-sonnet-5": { provider: "firstParty", inputTokens: 10, outputTokens: 2, cacheReadInputTokens: 900 },
+      },
+    });
+    const ev = out[0]!;
+    if (ev.type !== "result") throw new Error("expected result");
+    expect(ev.metadata?.model_usage).toEqual({
+      "claude-sonnet-5": { provider: "claude", inputTokens: 10, outputTokens: 2, cacheReadInputTokens: 900 },
+    });
+  });
+
+  test("every model on a turn is attributed, not just the first", () => {
+    const n = new SdkNormalizer();
+    const out = n.consume({
+      type: "result",
+      is_error: false,
+      result: "answer",
+      modelUsage: {
+        "claude-sonnet-5": { provider: "firstParty", inputTokens: 10 },
+        "claude-haiku-4-5": { inputTokens: 3 },
+      },
+    });
+    const ev = out[0]!;
+    if (ev.type !== "result") throw new Error("expected result");
+    const usage = ev.metadata?.model_usage as Record<string, { provider: string }>;
+    expect(Object.values(usage).map((u) => u.provider)).toEqual(["claude", "claude"]);
+  });
+
+  test("a turn the SDK reported no model usage for stays absent", () => {
+    const n = new SdkNormalizer();
+    const out = n.consume({ type: "result", is_error: false, result: "answer" });
+    const ev = out[0]!;
+    if (ev.type !== "result") throw new Error("expected result");
+    expect(ev.metadata?.model_usage).toBeUndefined();
+  });
+
   test("transient error → retryable, no failover yet", () => {
     const n = new SdkNormalizer();
     expect(n.consume({ type: "result", is_error: true, errors: ["overloaded_error"] })).toEqual([

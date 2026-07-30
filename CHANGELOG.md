@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Provider attribution recorded the deployment target, not the backend** — the claude path passed the SDK's `modelUsage` through untouched, and its `provider` field names firstParty/bedrock/vertex, so `providers_used` filled with `firstParty` while the codex path wrote `codex`; one vocabulary now, so the column answers whether a turn failed over.
+
 ## [0.5.2] - 2026-07-29
 
 ### Fixed

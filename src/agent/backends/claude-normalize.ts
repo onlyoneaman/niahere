@@ -18,6 +18,21 @@ const DEAD_TURNS: Record<string, FailoverScope | undefined> = {
 };
 
 /**
+ * Stamp the chain's provider over the SDK's own, which names the deployment
+ * target (firstParty/bedrock/vertex) — a different axis from which backend ran
+ * the turn, and the one `providers_used` has to answer.
+ */
+function attribute(modelUsage: unknown): Record<string, unknown> | undefined {
+  if (!modelUsage || typeof modelUsage !== "object") return undefined;
+  return Object.fromEntries(
+    Object.entries(modelUsage as Record<string, unknown>).map(([model, usage]) => [
+      model,
+      { ...(usage as object), provider: "claude" },
+    ]),
+  );
+}
+
+/**
  * Pure reducer: Claude Agent SDK messages → normalized `AgentEvent`s.
  *
  * Ports the consume-loop handling that lived inline in `engine.ts` and
@@ -151,7 +166,7 @@ export class SdkNormalizer implements Normalizer {
           session_id: msg.session_id,
           subtype: msg.subtype,
           usage: msg.usage,
-          model_usage: msg.modelUsage,
+          model_usage: attribute(msg.modelUsage),
         },
       };
     }
