@@ -201,6 +201,7 @@ export class SdkNormalizer implements Normalizer {
         usage: { costUsd: msg.total_cost_usd ?? 0, turns: msg.num_turns ?? 0 },
         backendSessionId: msg.session_id ?? "",
         terminalReason: msg.terminal_reason,
+        ...(msg.structured_output === undefined ? {} : { structured: msg.structured_output }),
         metadata: {
           cost_usd: msg.total_cost_usd,
           turns: msg.num_turns,

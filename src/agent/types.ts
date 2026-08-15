@@ -49,6 +49,9 @@ export type AgentEvent =
       usage: AgentUsage;
       backendSessionId: string;
       terminalReason?: string;
+      /** The validated object, when the session asked for an `outputSchema`.
+       *  Absent means the backend produced none — callers must still cope. */
+      structured?: unknown;
       /** Backend-native metadata the consumer persists to the session/message DB
        *  row (Claude: total_cost_usd, num_turns, duration_ms, usage, modelUsage…).
        *  Opaque to the orchestrator. */
@@ -90,6 +93,12 @@ export interface AgentSessionContext {
    * only when interactive (jobs keep the leaner one-shot option set).
    */
   interactive?: boolean;
+  /**
+   * JSON Schema the final answer must satisfy. Both backends can enforce it —
+   * Claude via `outputFormat`, codex via `--output-schema` — so a caller gets a
+   * validated object instead of parsing a sentinel out of prose.
+   */
+  outputSchema?: Record<string, unknown>;
 }
 
 /**

@@ -1,4 +1,5 @@
-import { existsSync, readdirSync } from "fs";
+import { existsSync, readdirSync, mkdtempSync, writeFileSync, rmSync } from "fs";
+import { tmpdir } from "os";
 import { homedir } from "os";
 import { join, dirname } from "path";
 import type { AgentBackend, AgentSession, AgentSessionContext, AgentEvent } from "../types";
@@ -274,6 +275,16 @@ class CodexSession implements AgentSession {
       "-c",
       `mcp_servers.nia.bearer_token_env_var="NIA_MCP_TOKEN"`,
     );
+    // codex takes the schema as a file path, so it needs somewhere to live for
+    // the length of the run.
+    let schemaDir: string | null = null;
+    if (this.ctx.outputSchema) {
+      schemaDir = mkdtempSync(join(tmpdir(), "nia-codex-schema-"));
+      const schemaPath = join(schemaDir, "schema.json");
+      writeFileSync(schemaPath, JSON.stringify(this.ctx.outputSchema));
+      args.push("--output-schema", schemaPath);
+    }
+
     const media = attachmentPaths(attachments);
     for (const path of media.paths) args.push("-i", path);
     if (this.ctx.model && this.ctx.model !== "default") args.push("-m", this.ctx.model);
@@ -287,7 +298,7 @@ class CodexSession implements AgentSession {
     // Started now, not after exit: an undrained pipe blocks the child.
     const stderr = drainStderr(proc.stderr);
 
-    const normalizer = new CodexNormalizer(this.ctx.model);
+    const normalizer = new CodexNormalizer(this.ctx.model, !!this.ctx.outputSchema);
     const stdout = proc.stdout.getReader();
     const lines = readLines(stdout)[Symbol.asyncIterator]();
     let sawTerminal = false;
@@ -345,6 +356,7 @@ class CodexSession implements AgentSession {
     } finally {
       await ignore(stdout.cancel(), "cancel codex stdout reader");
       revokeRun(token);
+      if (schemaDir) rmSync(schemaDir, { recursive: true, force: true });
       this.proc = null;
     }
   }

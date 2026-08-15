@@ -11,12 +11,9 @@ import { ChatSessions, chainLock } from "./common/chat-session";
 import { SlackAttachmentCache } from "./slack/attachments";
 import { SlackWatchReloader } from "./slack/watch";
 
-const logActivity = (status: string) => log.debug({ status }, "slack engine activity");
+import { WATCH_JUDGEMENT_SCHEMA, decideWatchReply } from "./common/watch-judgement";
 
-/** Strip markdown backticks so sentinel tokens like [NO_REPLY] match even when the LLM wraps them. */
-function cleanSentinel(text: string): string {
-  return text.replace(/`/g, "").trim();
-}
+const logActivity = (status: string) => log.debug({ status }, "slack engine activity");
 
 interface SlackReactionClient {
   reactions: {
@@ -111,6 +108,9 @@ class SlackChannel implements Channel {
         channel: "slack",
         mcpServers: getMcpServers({ channel: "slack", room, ...slackCtx }),
         watchBehavior,
+        // Only a watch turn answers a yes/no question; ordinary chat replies
+        // are prose and must stay prose.
+        ...(watchBehavior ? { outputSchema: WATCH_JUDGEMENT_SCHEMA } : {}),
       });
     }
 
@@ -425,7 +425,7 @@ class SlackChannel implements Channel {
           .catch((err) => log.debug({ err, channel: msg.channel }, "slack: failed to add thinking reaction"));
 
         try {
-          const { result, messageId, signal } = await state.engine.send(
+          const { result, messageId, signal, structured } = await state.engine.send(
             text,
             {
               onActivity: logActivity,
@@ -442,20 +442,17 @@ class SlackChannel implements Channel {
             return;
           }
 
-          const reply = result.trim();
-          const cleaned = cleanSentinel(reply);
+          const decision = decideWatchReply(structured, result);
+          const reply = decision.text;
 
-          // [NO_REPLY] anywhere in the reply suppresses the send. If it appeared
-          // alongside real content the model got confused — warn so we can spot it.
-          if (!reply || cleaned.includes("[NO_REPLY]")) {
-            const exact = !reply || cleaned === "[NO_REPLY]";
-            if (exact) {
-              log.info({ channel: msg.channel, key }, "slack: agent chose not to reply");
-            } else {
+          if (!decision.send) {
+            if (decision.ambiguous) {
               log.warn(
-                { channel: msg.channel, key, reply },
+                { channel: msg.channel, key, reply: result.trim(), source: decision.source },
                 "slack: [NO_REPLY] sentinel mixed with content; suppressing send",
               );
+            } else {
+              log.info({ channel: msg.channel, key, source: decision.source }, "slack: agent chose not to reply");
             }
             if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "sent"), "record sent delivery status");
             return;

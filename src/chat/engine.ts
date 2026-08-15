@@ -99,7 +99,13 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
   // Watch mode: inject behavior into system prompt
   if (opts.watchBehavior) {
     const { channel: watchChannel, behavior } = opts.watchBehavior;
-    systemPrompt += `\n\n## Watch Mode — #${watchChannel}\n\nYou are monitoring this Slack channel. Follow the behavior instructions below.\nRespond with [NO_REPLY] if no action is needed — do not explain why.\n\n${behavior}`;
+    // With a schema the decision is a field, so asking for a sentinel as well
+    // invites the model to send both — which is exactly the ambiguity the
+    // schema is here to remove.
+    const stayQuiet = opts.outputSchema
+      ? `Set "reply" to null if no action is needed — do not explain why. Most turns are null.`
+      : `Respond with [NO_REPLY] if no action is needed — do not explain why.`;
+    systemPrompt += `\n\n## Watch Mode — #${watchChannel}\n\nYou are monitoring this Slack channel. Follow the behavior instructions below.\n${stayQuiet}\n\n${behavior}`;
   }
 
   // A turn that cannot be served moves down the chain and answers the current
@@ -197,6 +203,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
       channel,
       systemPrompt: systemPrompt + handoff,
       cwd,
+      outputSchema: opts.outputSchema,
       // A context override names a model for the configured provider, so it
       // only applies at the head of the chain.
       model: (cursor.atHead ? (contextModel ?? entry.model) : entry.model) ?? undefined,
@@ -342,7 +349,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
                   await Session.touch(sessionId);
                   void ignore(Session.accumulateMetadata(sessionId, { ...(ev.metadata ?? {}), channel }), "accumulate session metadata");
                 }
-                result = { result: ev.text, costUsd, turns, messageId };
+                result = { result: ev.text, costUsd, turns, messageId, structured: ev.structured };
                 break;
               }
               case "error": {

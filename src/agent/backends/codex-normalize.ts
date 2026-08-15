@@ -14,10 +14,24 @@ import { estimateCodexCost } from "../pricing";
  * message; `error` *items* are non-fatal warnings (service tier, model metadata,
  * skill budget) and are dropped.
  */
+/** codex answers a schema by making its final message the JSON object. */
+export function parseStructured(text: string): unknown {
+  const trimmed = text.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
+  if (!trimmed) return undefined;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return undefined;
+  }
+}
+
 export class CodexNormalizer implements Normalizer {
   /** The model this run was launched on, for usage attribution — codex's own
    *  events don't name it. */
-  constructor(private readonly model?: string) {}
+  constructor(
+    private readonly model?: string,
+    private readonly expectsSchema = false,
+  ) {}
 
   private threadId = "";
   private agentText = "";
@@ -59,6 +73,9 @@ export class CodexNormalizer implements Normalizer {
             text: this.agentText,
             usage: { tokens: { input, output } },
             backendSessionId: this.threadId,
+            ...(this.expectsSchema && parseStructured(this.agentText) !== undefined
+              ? { structured: parseStructured(this.agentText) }
+              : {}),
             // Same shape the Claude path emits, so one accumulator serves both
             // and a failed-over turn is attributable to the provider that ran it.
             // No cost: codex reports none, and an invented zero would read as a

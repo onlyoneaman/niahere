@@ -6,6 +6,8 @@ export interface SendResult {
   signal?: "provider_down";
   /** DB message ID for delivery status tracking (only set for agent replies) */
   messageId?: number;
+  /** Validated object, when the engine was opened with an `outputSchema`. */
+  structured?: unknown;
 }
 
 export type StreamCallback = (textSoFar: string) => void;
@@ -38,4 +40,6 @@ export interface EngineOptions {
   job?: string;
   /** Watch channel behavior — injected into system prompt for watch-mode engines. */
   watchBehavior?: { channel: string; behavior: string };
+  /** JSON Schema the final answer must satisfy, enforced by whichever backend runs. */
+  outputSchema?: Record<string, unknown>;
 }

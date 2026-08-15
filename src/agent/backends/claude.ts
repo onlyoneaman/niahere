@@ -106,6 +106,7 @@ class ClaudeSession implements AgentSession {
       // same cwd; jobs always run with a unique id and never auto-continued.
       if (this.ctx.interactive) options.continue = false;
     }
+    if (this.ctx.outputSchema) options.outputFormat = { type: "json_schema", schema: this.ctx.outputSchema };
     if (this.ctx.mcpServers) options.mcpServers = this.ctx.mcpServers;
     if (this.ctx.subagents && Object.keys(this.ctx.subagents).length > 0) options.agents = this.ctx.subagents;
 
