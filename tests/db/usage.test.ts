@@ -45,7 +45,7 @@ describe("queryUsage", () => {
     );
     await turn(
       a,
-      { "gpt-5-codex": { provider: "codex", inputTokens: 60, outputTokens: 5, cacheReadInputTokens: 40 } },
+      { "gpt-5.6-sol": { provider: "codex", inputTokens: 60, outputTokens: 5, cacheReadInputTokens: 40 } },
       "2026-07-20T11:00:00Z",
     );
     await turn(
@@ -66,7 +66,7 @@ describe("queryUsage", () => {
     const all = await rows();
     expect(all.length).toBeGreaterThan(0);
     const codex = all.find((r) => r.provider === "codex")!;
-    expect(codex).toMatchObject({ model: "gpt-5-codex", inputTokens: 60, cacheReadTokens: 40 });
+    expect(codex).toMatchObject({ model: "gpt-5.6-sol", inputTokens: 60, cacheReadTokens: 40 });
   });
 
   test("the SDK's deployment target folds into the backend that ran it", async () => {

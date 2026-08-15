@@ -20,7 +20,7 @@ describe("resolveModel", () => {
 
   test("full model ids resolve by prefix", () => {
     expect(resolveModel("claude-sonnet-5")).toEqual({ provider: "claude", model: "claude-sonnet-5" });
-    expect(resolveModel("gpt-5-codex")).toEqual({ provider: "codex", model: "gpt-5-codex" });
+    expect(resolveModel("gpt-5.6-sol")).toEqual({ provider: "codex", model: "gpt-5.6-sol" });
     expect(resolveModel("o3-mini")).toEqual({ provider: "codex", model: "o3-mini" });
     expect(resolveModel("gemini-2.5-pro")).toEqual({ provider: "gemini", model: "gemini-2.5-pro" });
   });

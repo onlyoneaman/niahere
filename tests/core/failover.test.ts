@@ -55,7 +55,7 @@ describe("runJobAcrossChain (failover)", () => {
   test("fails over to the next entry when the primary provider is down", async () => {
     const chain = [
       { backend: fakeBackend("claude", DOWN) },
-      { backend: fakeBackend("codex", OK("c1")), model: "gpt-5-codex" },
+      { backend: fakeBackend("codex", OK("c1")), model: "gpt-5.6-sol" },
     ];
     const out = await runJobAcrossChain(chain, CTX, "do it");
     expect(out.agentText).toBe("ok");
@@ -99,11 +99,11 @@ describe("runJobAcrossChain (failover)", () => {
     const chain = [
       { backend: fakeBackend("claude", DOWN, seen), model: "opus" },
       { backend: fakeBackend("claude", OK("s1"), seen), model: "sonnet" },
-      { backend: fakeBackend("codex", OK("c1"), seen), model: "gpt-5-codex" },
+      { backend: fakeBackend("codex", OK("c1"), seen), model: "gpt-5.6-sol" },
     ];
     const out = await runJobAcrossChain(chain, CTX, "do it");
     expect(out.agentText).toBe("ok");
-    expect(seen).toEqual(["opus", "gpt-5-codex"]); // sonnet never attempted
+    expect(seen).toEqual(["opus", "gpt-5.6-sol"]); // sonnet never attempted
   });
 
   test("a genuine task failure stops the chain", async () => {

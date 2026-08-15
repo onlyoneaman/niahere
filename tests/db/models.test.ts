@@ -193,7 +193,7 @@ describe("Session.accumulateMetadata", () => {
       model_usage: { "claude-sonnet-5": { provider: "claude", inputTokens: 10 } },
     });
     await Session.accumulateMetadata(id, {
-      model_usage: { "gpt-5-codex": { provider: "codex", inputTokens: 60 } },
+      model_usage: { "gpt-5.6-sol": { provider: "codex", inputTokens: 60 } },
     });
 
     const [row] = await sql`

@@ -18,10 +18,10 @@ describe("summarizeModelUsage", () => {
   test("records which provider served the turn", () => {
     // A multi-provider chain makes the model name alone ambiguous for cost attribution.
     const totals = summarizeModelUsage({
-      "gpt-5-codex": { inputTokens: 5, outputTokens: 1, provider: "codex" },
+      "gpt-5.6-sol": { inputTokens: 5, outputTokens: 1, provider: "codex" },
     });
     expect(totals.providers).toEqual(["codex"]);
-    expect(totals.models).toEqual(["gpt-5-codex"]);
+    expect(totals.models).toEqual(["gpt-5.6-sol"]);
   });
 
   test("prefers the canonical model name when the SDK gives one", () => {

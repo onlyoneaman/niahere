@@ -128,13 +128,13 @@ describe("loadConfig", () => {
   });
 
   test("parses fallback_models in order", () => {
-    writeFileSync(`${TEST_DIR}/config.yaml`, `fallback_models:\n  - gpt-5-codex\n  - sonnet\n`);
-    expect(loadConfig().fallback_models).toEqual(["gpt-5-codex", "sonnet"]);
+    writeFileSync(`${TEST_DIR}/config.yaml`, `fallback_models:\n  - gpt-5.6-sol\n  - sonnet\n`);
+    expect(loadConfig().fallback_models).toEqual(["gpt-5.6-sol", "sonnet"]);
   });
 
   test("drops blank and non-string fallback_models entries", () => {
-    writeFileSync(`${TEST_DIR}/config.yaml`, `fallback_models:\n  - gpt-5-codex\n  - ""\n  - 7\n`);
-    expect(loadConfig().fallback_models).toEqual(["gpt-5-codex"]);
+    writeFileSync(`${TEST_DIR}/config.yaml`, `fallback_models:\n  - gpt-5.6-sol\n  - ""\n  - 7\n`);
+    expect(loadConfig().fallback_models).toEqual(["gpt-5.6-sol"]);
   });
 
   test("session finalization defaults to enabled", () => {

@@ -57,3 +57,41 @@ export function resolveModel(name: string): ModelRef {
 export function providerDefault(provider: ProviderName): ModelRef {
   return { provider };
 }
+
+/** Providers with an adapter. Gemini resolves in config but cannot run. */
+export const IMPLEMENTED: readonly ProviderName[] = ["claude", "codex"];
+
+export interface ChainDeps {
+  available: (provider: ProviderName) => boolean;
+}
+
+/**
+ * The ordered attempts a chain will make, as model refs — no backends built, so
+ * this is safe to call from anywhere that only wants to inspect the plan.
+ *
+ * Providers the config never named are appended with their default model, so a
+ * bare config still has somewhere to go — but only if they can run here.
+ * Configured models are always kept, so a misconfiguration surfaces as a real
+ * error rather than vanishing.
+ */
+export function planChain(model: string, fallbackModels: string[], deps: ChainDeps): ModelRef[] {
+  const configured = [model, ...fallbackModels].map(resolveModel);
+  const named = new Set(configured.map((r) => r.provider));
+  const implicit = PROVIDER_ORDER.filter((p) => !named.has(p) && deps.available(p)).map(providerDefault);
+
+  const seen = new Set<string>();
+  const plan: ModelRef[] = [];
+  for (const ref of [...configured, ...implicit]) {
+    if (!IMPLEMENTED.includes(ref.provider)) continue;
+    const key = `${ref.provider}:${ref.model ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    plan.push(ref);
+  }
+  return plan;
+}
+
+/** `provider:model` for logs and health output. */
+export function describeRef(ref: ModelRef): string {
+  return `${ref.provider}:${ref.model ?? "default"}`;
+}

@@ -40,14 +40,14 @@ describe("rollup", () => {
   });
 
   test("a bucket where nothing was priced reports no cost, not zero", () => {
-    const [only] = rollup([row({ model: "gpt-5-codex", costUsd: null, unpricedTurns: 1 })], "model");
+    const [only] = rollup([row({ model: "gpt-5.6-sol", costUsd: null, unpricedTurns: 1 })], "model");
     expect(only!.costUsd).toBeNull();
     expect(only!.unpricedTurns).toBe(1);
   });
 
   test("a partly-priced bucket keeps the known cost and flags the rest", () => {
     const mixed = rollup(
-      [row({ costUsd: 0.4 }), row({ model: "gpt-5-codex", costUsd: null, unpricedTurns: 1 })],
+      [row({ costUsd: 0.4 }), row({ model: "gpt-5.6-sol", costUsd: null, unpricedTurns: 1 })],
       "day",
     );
     expect(mixed[0]).toMatchObject({ costUsd: 0.4, unpricedTurns: 1, turns: 2 });

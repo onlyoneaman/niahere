@@ -16,8 +16,8 @@ const shape = (chain: { backend: { name: string }; model?: string }[]) =>
 
 describe("buildChain", () => {
   test("puts the configured model first and its fallbacks after, in order", () => {
-    const chain = buildChain("claude-sonnet-5", ["gpt-5-codex"], { available: () => true });
-    expect(shape(chain).slice(0, 2)).toEqual(["claude:claude-sonnet-5", "codex:gpt-5-codex"]);
+    const chain = buildChain("claude-sonnet-5", ["gpt-5.6-sol"], { available: () => true });
+    expect(shape(chain).slice(0, 2)).toEqual(["claude:claude-sonnet-5", "codex:gpt-5.6-sol"]);
   });
 
   test("appends an implicit entry for any provider the config never named", () => {
@@ -26,8 +26,8 @@ describe("buildChain", () => {
   });
 
   test("a codex-only config still falls back to claude", () => {
-    const chain = buildChain("gpt-5-codex", [], { available: () => true });
-    expect(shape(chain)).toEqual(["codex:gpt-5-codex", "claude:default"]);
+    const chain = buildChain("gpt-5.6-sol", [], { available: () => true });
+    expect(shape(chain)).toEqual(["codex:gpt-5.6-sol", "claude:default"]);
   });
 
   test("keeps several models from the same provider", () => {
@@ -41,8 +41,8 @@ describe("buildChain", () => {
   });
 
   test("keeps an explicitly configured model even when the provider looks unavailable", () => {
-    const chain = buildChain("gpt-5-codex", [], { available: (p) => p === "claude" });
-    expect(shape(chain)).toEqual(["codex:gpt-5-codex", "claude:default"]);
+    const chain = buildChain("gpt-5.6-sol", [], { available: (p) => p === "claude" });
+    expect(shape(chain)).toEqual(["codex:gpt-5.6-sol", "claude:default"]);
   });
 
   test("de-duplicates repeated provider:model pairs", () => {

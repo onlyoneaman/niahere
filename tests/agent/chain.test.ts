@@ -24,18 +24,18 @@ describe("ChainCursor", () => {
   });
 
   test("a provider-scoped failure skips the rest of that provider", () => {
-    const c = cursorFor([entry("claude", "opus"), entry("claude", "sonnet"), entry("codex", "gpt-5-codex")]);
-    expect(describeEntry(c.advance("provider")!)).toBe("codex:gpt-5-codex");
+    const c = cursorFor([entry("claude", "opus"), entry("claude", "sonnet"), entry("codex", "gpt-5.6-sol")]);
+    expect(describeEntry(c.advance("provider")!)).toBe("codex:gpt-5.6-sol");
   });
 
   test("a provider written off stays skipped on later advances", () => {
     const c = cursorFor([
       entry("claude", "opus"),
-      entry("codex", "gpt-5-codex"),
+      entry("codex", "gpt-5.6-sol"),
       entry("claude", "sonnet"),
       entry("codex", "o3-mini"),
     ]);
-    expect(describeEntry(c.advance("provider")!)).toBe("codex:gpt-5-codex");
+    expect(describeEntry(c.advance("provider")!)).toBe("codex:gpt-5.6-sol");
     expect(describeEntry(c.advance("model")!)).toBe("codex:o3-mini");
   });
 
@@ -65,8 +65,8 @@ describe("ChainCursor and provider cooldown", () => {
   test("a later cursor starts past a provider still in cooldown", () => {
     const h = health();
     h.markDown("claude");
-    const c = cursorFor([entry("claude", "opus"), entry("codex", "gpt-5-codex")], h);
-    expect(describeEntry(c.current!)).toBe("codex:gpt-5-codex");
+    const c = cursorFor([entry("claude", "opus"), entry("codex", "gpt-5.6-sol")], h);
+    expect(describeEntry(c.current!)).toBe("codex:gpt-5.6-sol");
   });
 
   test("a cursor still starts at the head when every provider is cooling down", () => {

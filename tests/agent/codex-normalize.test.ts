@@ -100,11 +100,11 @@ describe("CodexNormalizer usage attribution", () => {
     })[0]!;
   };
 
-  const usageOf = (ev: AgentEvent, model = "gpt-5-codex") =>
+  const usageOf = (ev: AgentEvent, model = "gpt-5.6-sol") =>
     (ev as { metadata?: { model_usage?: Record<string, Record<string, unknown>> } }).metadata!.model_usage![model]!;
 
   test("reports its provider so a failed-over turn is attributable", () => {
-    const ev = turn("gpt-5-codex");
+    const ev = turn("gpt-5.6-sol");
     expect(ev.type).toBe("result");
     if (ev.type !== "result") return;
     const usage = usageOf(ev);
@@ -117,7 +117,7 @@ describe("CodexNormalizer usage attribution", () => {
     // `cached_input_tokens` is the cached slice of it. Claude reports the two
     // as siblings, and one accumulator sums both — so the slice has to come
     // out or every codex turn inflates its own prompt.
-    const ev = turn("gpt-5-codex");
+    const ev = turn("gpt-5.6-sol");
     if (ev.type !== "result") return;
     const usage = usageOf(ev);
     expect(usage.inputTokens).toBe(60);
@@ -125,13 +125,13 @@ describe("CodexNormalizer usage attribution", () => {
   });
 
   test("a cached count larger than the prompt never yields negative tokens", () => {
-    const ev = turn("gpt-5-codex", { input_tokens: 10, cached_input_tokens: 40, output_tokens: 1 });
+    const ev = turn("gpt-5.6-sol", { input_tokens: 10, cached_input_tokens: 40, output_tokens: 1 });
     if (ev.type !== "result") return;
     expect(usageOf(ev).inputTokens).toBe(0);
   });
 
   test("cache writes are recorded, not discarded", () => {
-    const ev = turn("gpt-5-codex", {
+    const ev = turn("gpt-5.6-sol", {
       input_tokens: 100,
       cached_input_tokens: 40,
       cache_write_input_tokens: 25,
@@ -144,7 +144,7 @@ describe("CodexNormalizer usage attribution", () => {
   test("claims no cost, because codex reports none", () => {
     // A missing cost must not read as a free turn: the accumulator counts it
     // as unpriced instead of adding zero.
-    const ev = turn("gpt-5-codex");
+    const ev = turn("gpt-5.6-sol");
     if (ev.type !== "result") return;
     expect(ev.metadata?.cost_usd).toBeUndefined();
     expect(usageOf(ev).costUSD).toBeUndefined();
@@ -159,7 +159,7 @@ describe("CodexNormalizer usage attribution", () => {
   });
 
   test("still reports the normalized token totals on the event itself", () => {
-    const ev = turn("gpt-5-codex");
+    const ev = turn("gpt-5.6-sol");
     if (ev.type !== "result") return;
     expect(ev.usage.tokens).toEqual({ input: 60, output: 7 });
   });
