@@ -14,7 +14,7 @@ import { asError, errMsg, ignore } from "../utils/errors";
 import { registerActiveHandle, unregisterActiveHandle } from "../core/active-handles";
 import { resolveJobPrompt } from "../core/job-prompt";
 import { truncate } from "../utils/format-activity";
-import { resolveChain, ChainCursor, describeEntry, type AgentSession, type FailoverScope } from "../agent";
+import { resolveChain, ChainCursor, describeEntry, providerHealth, type AgentSession, type FailoverScope } from "../agent";
 import { scopeOf, parseFailure } from "../agent/failure";
 
 const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
@@ -287,6 +287,14 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
             switch (ev.type) {
               case "session": {
                 if (!sessionId || ev.backendSessionId !== sessionId) {
+                  // A backend that cannot resume hands back a fresh id every
+                  // turn. Only the last one was ever reachable by the idle
+                  // timer, so every earlier session in the conversation was
+                  // dropped without a summary.
+                  if (sessionId) {
+                    const superseded = sessionId;
+                    void ignore(finalizeSession(superseded, room), "finalize superseded session");
+                  }
                   sessionId = ev.backendSessionId;
                   await Session.create(sessionId, room);
                 }
@@ -308,6 +316,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
                 callbacks?.onActivity?.(ev.summary ?? ev.name);
                 break;
               case "result": {
+                providerHealth.markServed(cursor.current!.backend.name, cursor.atHead);
                 const costUsd = ev.usage.costUsd ?? 0;
                 const turns = ev.usage.turns ?? 0;
                 let messageId: number | undefined;

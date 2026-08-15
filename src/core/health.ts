@@ -6,9 +6,69 @@ import { isRunning, readPid } from "../utils/pid";
 import { errMsg } from "../utils/errors";
 import { localTime } from "../utils/time";
 import { withRetry } from "../utils/retry";
+import { codexAvailable, codexModelSlugs } from "../agent/catalog";
+import { providerHealth } from "../agent/health";
+import { IMPLEMENTED, describeRef, planChain, resolveModel, type ModelRef } from "../agent/models";
 
 export type CheckStatus = "ok" | "warn" | "fail";
 export type Check = { name: string; status: CheckStatus; detail: string };
+
+/** Past this, the chain is not falling back — it has moved. */
+export const FAILOVER_INCIDENT_MS = 60 * 60 * 1000;
+
+/**
+ * Failover is meant to be invisible for a blip and impossible to miss for an
+ * outage. Nothing distinguished the two, so Nia answered as Codex for sixteen
+ * days without a word.
+ */
+export function auditFailover(streakMs: number | null, server: string | null): Check {
+  if (streakMs === null) return { name: "failover", status: "ok", detail: "primary serving" };
+  const hours = streakMs / 3_600_000;
+  const since = hours >= 1 ? `${hours.toFixed(1)}h` : `${Math.round(streakMs / 60_000)}m`;
+  const who = server ? ` (${server} covering)` : "";
+  return streakMs >= FAILOVER_INCIDENT_MS
+    ? { name: "failover", status: "fail", detail: `primary has not served for ${since}${who}` }
+    : { name: "failover", status: "warn", detail: `failed over ${since} ago${who}` };
+}
+
+/**
+ * A model retired upstream still parses, still resolves to a provider, and still
+ * takes a full turn to fail. Judge the configured names against what the
+ * provider will actually accept so a retirement reads as a warning here rather
+ * than as an outage later.
+ */
+export function auditModelPlan(
+  configured: string[],
+  plan: ModelRef[],
+  codex: { available: boolean; slugs: string[] | null },
+): Check {
+  const problems: string[] = [];
+  let primaryBroken = false;
+
+  configured.forEach((name, i) => {
+    const ref = resolveModel(name);
+    let problem: string | null = null;
+    if (!IMPLEMENTED.includes(ref.provider)) {
+      problem = `${name}: no ${ref.provider} adapter`;
+    } else if (ref.provider === "codex" && !codex.available) {
+      problem = `${name}: codex CLI not installed`;
+    } else if (ref.provider === "codex" && ref.model && codex.slugs && !codex.slugs.includes(ref.model)) {
+      problem = `${name}: retired — codex no longer offers it`;
+    }
+    if (problem) {
+      problems.push(problem);
+      if (i === 0) primaryBroken = true;
+    }
+  });
+
+  const chain = plan.map(describeRef).join(" → ") || "(empty)";
+  if (problems.length === 0) return { name: "models", status: "ok", detail: chain };
+  return {
+    name: "models",
+    status: primaryBroken ? "fail" : "warn",
+    detail: `${problems.join("; ")} — chain: ${chain}`,
+  };
+}
 
 /** Run all health checks. Returns structured results usable by CLI and alive monitor. */
 export async function runHealthChecks(): Promise<Check[]> {
@@ -151,6 +211,21 @@ export async function runHealthChecks(): Promise<Check[]> {
       });
     }
   }
+
+  // Model chain
+  const codex = codexAvailable();
+  const plan = planChain(config.model, config.fallback_models, {
+    available: (p) => (p === "codex" ? codex : p === "claude"),
+  });
+  const needsCatalog = plan.some((r) => r.provider === "codex" && r.model);
+  checks.push(
+    auditModelPlan([config.model, ...config.fallback_models], plan, {
+      available: codex,
+      slugs: needsCatalog && codex ? await codexModelSlugs() : null,
+    }),
+  );
+
+  checks.push(auditFailover(providerHealth.fallbackStreakMs(), providerHealth.lastServer()));
 
   // API keys
   const geminiKey = config.gemini_api_key;

@@ -15,7 +15,7 @@ import { ActiveEngine } from "../db/models";
 import { log } from "../utils/log";
 import { errMsg, ignore } from "../utils/errors";
 import { registerActiveHandle, unregisterActiveHandle } from "./active-handles";
-import { resolveChain, ChainCursor, describeEntry, type ChainEntry, type AgentSession, type AgentSessionContext, type FailoverScope } from "../agent";
+import { resolveChain, ChainCursor, describeEntry, providerHealth, type ChainEntry, type AgentSession, type AgentSessionContext, type FailoverScope } from "../agent";
 
 export { buildWorkingMemory } from "./job-prompt";
 
@@ -134,7 +134,10 @@ export async function runJobAcrossChain(
 
   for (let entry = cursor.current; entry; ) {
     output = await runEntry(entry, sessionCtx, jobPrompt, onActivity, activeRoom);
-    if (!output.failover) return withTrail(output);
+    if (!output.failover) {
+      providerHealth.markServed(entry.backend.name, cursor.atHead);
+      return withTrail(output);
+    }
 
     const from = describeEntry(entry);
     if (output.error) abandoned.push(`${from}: ${output.error}`);
