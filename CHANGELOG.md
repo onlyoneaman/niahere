@@ -1,5 +1,26 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **A failing provider could not say so, and Nia answered as codex for 16 days** — an errored result routinely carries an empty `errors` array, which the normalizer collapsed to the string "unknown error"; 649 chat failures on the mini named no cause, so nothing raised a question while every turn quietly failed over. The message now reports whatever the result still carries (`api_error_status`, `subtype`, `stop_reason`, `terminal_reason`), and `scopeOf` recognizes cause-less messages as a class so failover behaviour is unchanged.
+- **New terminal reasons read as completed turns** — the SDK's `TerminalReason` union grew `blocking_limit`, `rapid_refill_breaker`, `model_error`, `prompt_too_long` and `image_error`, none of which Nia classified; an exhausted plan arrived as `is_error: false` and looked like success. Limits are provider-scoped, model faults model-scoped, and a bad image stops the chain.
+- **Codex progress chatter was reported as the cause of failure** — the stderr tail was yielded verbatim, so every job failure ever recorded on the mini blamed "Reading additional input from stdin...". Chatter is filtered out, and a codex that explains nothing says so.
+- **Codex inherited the daemon's stdin** — `codex exec` appends piped stdin to the prompt even when one was passed as an argument; it is now explicitly ignored.
+- **Sessions replaced mid-conversation were never summarised** — a backend that cannot resume returns a fresh id every turn, and only the last was reachable by the idle timer; 848 of 971 eligible sessions on the mini were dropped. A superseded session is now enqueued for finalization.
+- **The documented codex fallback names a model that no longer exists** — OpenAI dropped the `*-codex` naming, so `gpt-5-codex` is gone from the catalog and that chain entry could only ever answer with "model is not supported"; the config example and the test fixtures now name `gpt-5.6-sol`.
+
+### Added
+
+- **`failover` health check** — failover is meant to be invisible for a blip and impossible to miss for an outage, and nothing told the two apart. `providerHealth` now records whether the chain's primary served each turn; a fallback covering for under an hour warns, longer fails.
+- **`models` health check** — prints the chain that will actually be walked, implicit tail included, and checks each configured codex model against `codex debug models`; a retired name is a warning as a fallback and a failure as the primary, and an unreadable catalog reports nothing rather than a false alarm.
+- **Codex continuity** — `canResume` answers from codex's own rollout store (searching a 7-day window), and a resumable session continues via `codex exec resume` without re-sending the system prompt. Image attachments are passed through with `-i`; ones held only in memory are reported rather than dropped.
+
+### Changed
+
+- **`@anthropic-ai/claude-agent-sdk` 0.3.220 → 0.3.233**, `@anthropic-ai/sdk` 0.115.0 → 0.117.1. Task/todo tools left off the default surface on newer models, per the SDK default.
+
 ## [0.5.4] - 2026-07-30
 
 ### Fixed
