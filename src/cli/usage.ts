@@ -23,6 +23,8 @@ export interface UsageBucket {
   cacheWriteTokens: number;
   /** null when nothing in the bucket carried a cost. */
   costUsd: number | null;
+  /** List-rate projection for turns nobody billed. Never added to `costUsd`. */
+  estimatedCostUsd: number | null;
   turns: number;
   unpricedTurns: number;
 }
@@ -63,6 +65,7 @@ export function rollup(rows: UsageRow[], by: Dimension): UsageBucket[] {
         cacheReadTokens: row.cacheReadTokens,
         cacheWriteTokens: row.cacheWriteTokens,
         costUsd: row.costUsd,
+        estimatedCostUsd: row.estimatedCostUsd,
         turns: row.turns,
         unpricedTurns: row.unpricedTurns,
       });
@@ -77,12 +80,20 @@ export function rollup(rows: UsageRow[], by: Dimension): UsageBucket[] {
     // A known cost survives an unknown one beside it; only an all-unknown
     // bucket reports nothing.
     seen.costUsd = seen.costUsd === null && row.costUsd === null ? null : (seen.costUsd ?? 0) + (row.costUsd ?? 0);
+    seen.estimatedCostUsd =
+      seen.estimatedCostUsd === null && row.estimatedCostUsd === null
+        ? null
+        : (seen.estimatedCostUsd ?? 0) + (row.estimatedCostUsd ?? 0);
   }
 
   const buckets = [...byKey.values()];
   return by === "day"
     ? buckets.sort((a, b) => a.key.localeCompare(b.key))
-    : buckets.sort((a, b) => (b.costUsd ?? 0) - (a.costUsd ?? 0) || b.turns - a.turns);
+    : buckets.sort(
+        (a, b) =>
+          (b.costUsd ?? 0) + (b.estimatedCostUsd ?? 0) - ((a.costUsd ?? 0) + (a.estimatedCostUsd ?? 0)) ||
+          b.turns - a.turns,
+      );
 }
 
 export function compactTokens(n: number): string {
@@ -108,6 +119,7 @@ const COLUMNS: [string, (b: UsageBucket) => string][] = [
   ["Cache rd", (b) => compactTokens(b.cacheReadTokens)],
   ["Cache wr", (b) => compactTokens(b.cacheWriteTokens)],
   ["Cost", (b) => formatCost(b.costUsd)],
+  ["Est.", (b) => formatCost(b.estimatedCostUsd)],
 ];
 
 export function renderTable(buckets: UsageBucket[], label: string): string[] {
@@ -121,6 +133,10 @@ export function renderTable(buckets: UsageBucket[], label: string): string[] {
     sum.turns += b.turns;
     sum.unpricedTurns += b.unpricedTurns;
     sum.costUsd = sum.costUsd === null && b.costUsd === null ? null : (sum.costUsd ?? 0) + (b.costUsd ?? 0);
+    sum.estimatedCostUsd =
+      sum.estimatedCostUsd === null && b.estimatedCostUsd === null
+        ? null
+        : (sum.estimatedCostUsd ?? 0) + (b.estimatedCostUsd ?? 0);
     return sum;
   }, emptyBucket("Total"));
 
@@ -131,7 +147,14 @@ export function renderTable(buckets: UsageBucket[], label: string): string[] {
 
   const out = [`${BOLD}${line(header)}${RESET}`, ...body.map(line), `${BOLD}${line(rows.at(-1)!)}${RESET}`];
   if (total.unpricedTurns > 0) {
-    out.push(`${DIM}${total.unpricedTurns} of ${total.turns} turns report no cost (codex bills no per-token price)${RESET}`);
+    // "Est." is what those tokens would have cost on the API. It is a
+    // projection, not a bill — the subscription already covered them — but a
+    // silent zero is how a total provider outage read as a saving.
+    const est =
+      total.estimatedCostUsd === null
+        ? "no published rate for the model that served them"
+        : `~${formatCost(total.estimatedCostUsd)} at list rates, covered by subscription`;
+    out.push(`${DIM}${total.unpricedTurns} of ${total.turns} turns were not billed per token — ${est}${RESET}`);
   }
   return out;
 }
@@ -144,6 +167,7 @@ function emptyBucket(key: string): UsageBucket {
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
     costUsd: null,
+    estimatedCostUsd: null,
     turns: 0,
     unpricedTurns: 0,
   };

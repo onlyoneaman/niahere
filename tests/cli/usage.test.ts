@@ -12,6 +12,7 @@ const row = (over: Partial<UsageRow>): UsageRow => ({
   cacheReadTokens: 0,
   cacheWriteTokens: 0,
   costUsd: 0,
+  estimatedCostUsd: null,
   turns: 1,
   unpricedTurns: 0,
   ...over,

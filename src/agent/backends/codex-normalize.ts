@@ -1,6 +1,7 @@
 import type { AgentEvent, Normalizer } from "../types";
 import { truncate } from "../../utils/format-activity";
 import { scopeOf, parseFailure } from "../failure";
+import { estimateCodexCost } from "../pricing";
 
 /**
  * Pure reducer: Codex `codex exec --json` JSONL events → normalized `AgentEvent`s.
@@ -46,6 +47,12 @@ export class CodexNormalizer implements Normalizer {
         const cacheRead = e.usage?.cached_input_tokens ?? 0;
         const input = Math.max(0, (e.usage?.input_tokens ?? 0) - cacheRead);
         const output = e.usage?.output_tokens ?? 0;
+        const estimated = estimateCodexCost(this.model, {
+          inputTokens: input,
+          outputTokens: output,
+          cacheReadInputTokens: cacheRead,
+          cacheCreationInputTokens: e.usage?.cache_write_input_tokens ?? 0,
+        });
         return [
           {
             type: "result",
@@ -64,6 +71,10 @@ export class CodexNormalizer implements Normalizer {
                   outputTokens: output,
                   cacheReadInputTokens: cacheRead,
                   cacheCreationInputTokens: e.usage?.cache_write_input_tokens ?? 0,
+                  // What the API would have charged. Deliberately not `costUSD`:
+                  // the subscription covers these tokens, so this is a
+                  // projection and must never be added to a reported bill.
+                  ...(estimated === null ? {} : { estimatedCostUSD: estimated }),
                 },
               },
             },

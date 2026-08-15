@@ -13,6 +13,7 @@
 
 ### Added
 
+- **Codex turns carry a cost estimate** — codex bills nothing per token, so its turns reported no cost at all, and a total Claude outage read as weekly spend falling $552 → $0.00. `nia usage` gains an `Est.` column projecting list rates (GPT-5.6 tiers, 90% cache-read discount, 1.25x cache writes); it is kept strictly apart from `costUsd` because a subscription-covered projection is not a bill, and an unrated model stays unpriced rather than valued at zero.
 - **`failover` health check** — failover is meant to be invisible for a blip and impossible to miss for an outage, and nothing told the two apart. `providerHealth` now records whether the chain's primary served each turn; a fallback covering for under an hour warns, longer fails.
 - **`models` health check** — prints the chain that will actually be walked, implicit tail included, and checks each configured codex model against `codex debug models`; a retired name is a warning as a fallback and a failure as the primary, and an unreadable catalog reports nothing rather than a false alarm.
 - **Codex continuity** — `canResume` answers from codex's own rollout store (searching a 7-day window), and a resumable session continues via `codex exec resume` without re-sending the system prompt. Image attachments are passed through with `-i`; ones held only in memory are reported rather than dropped.
