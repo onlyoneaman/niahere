@@ -10,12 +10,57 @@ import type { FailoverScope } from "../types";
  */
 const DEAD_TURNS: Record<string, FailoverScope | undefined> = {
   api_error: "provider",
+  // This account is out of capacity, not this model — another provider can
+  // still answer. Left unmapped, an exhausted plan reads as a completed turn.
+  blocking_limit: "provider",
+  rapid_refill_breaker: "provider",
+  // The model is the problem; the next one in the chain may not be.
+  model_error: "model",
+  prompt_too_long: "model",
   budget_exhausted: undefined,
+  // No provider will parse the image differently, so there is nothing to fail
+  // over to — stop and say so.
+  image_error: undefined,
   malformed_tool_use_exhausted: undefined,
   structured_output_retry_exhausted: undefined,
   tool_deferred_unavailable: undefined,
   turn_setup_failed: undefined,
 };
+
+/**
+ * Say as much about a failed turn as the result message allows.
+ *
+ * `errors` is routinely empty on an errored result. Collapsing that to the
+ * string "unknown error" cost sixteen days of Nia answering as Codex with 649
+ * failures that named no cause and so raised no question. Anything the message
+ * still carries beats a word that means nothing.
+ */
+export function describeFailure(msg: {
+  errors?: unknown;
+  subtype?: unknown;
+  stop_reason?: unknown;
+  terminal_reason?: unknown;
+  api_error_status?: unknown;
+  result?: unknown;
+}): string {
+  const errors = Array.isArray(msg.errors) ? msg.errors.filter((e) => typeof e === "string" && e.trim()) : [];
+  if (errors.length > 0) return errors.join(", ");
+
+  const parts: string[] = [];
+  const add = (label: string, value: unknown) => {
+    if (typeof value === "string" && value.trim()) parts.push(`${label}=${value.trim()}`);
+    else if (typeof value === "number") parts.push(`${label}=${value}`);
+  };
+  add("http", msg.api_error_status);
+  add("subtype", msg.subtype);
+  add("stop_reason", msg.stop_reason);
+  add("terminal_reason", msg.terminal_reason);
+  if (typeof msg.result === "string" && msg.result.trim()) parts.push(`result=${truncate(msg.result.trim(), 200)}`);
+
+  return parts.length > 0
+    ? `claude reported an error with no message (${parts.join(" ")})`
+    : "claude reported an error with no message and no detail";
+}
 
 /**
  * Stamp the chain's provider over the SDK's own, which names the deployment
@@ -170,7 +215,7 @@ export class SdkNormalizer implements Normalizer {
         },
       };
     }
-    const raw = (msg.errors?.join(", ") as string) || "unknown error";
+    const raw = describeFailure(msg);
     // A transient error carries no scope yet — it only becomes one once the
     // session has burned its retries.
     return {

@@ -132,11 +132,33 @@ describe("SdkNormalizer", () => {
     ]);
   });
 
-  test("blank/unknown error → provider-scoped failover, NOT retryable", () => {
+  test("a cause-less error still fails over to the provider, and says so", () => {
     const n = new SdkNormalizer();
     expect(n.consume({ type: "result", is_error: true, errors: [] })).toEqual([
-      { type: "error", message: "unknown error", retryable: false, failover: "provider", terminalReason: undefined },
+      {
+        type: "error",
+        message: "claude reported an error with no message and no detail",
+        retryable: false,
+        failover: "provider",
+        terminalReason: undefined,
+      },
     ]);
+  });
+
+  test("an empty errors array reports whatever the result still carries", () => {
+    const n = new SdkNormalizer();
+    const [ev] = n.consume({
+      type: "result",
+      is_error: true,
+      errors: [],
+      api_error_status: 401,
+      subtype: "error_during_execution",
+      terminal_reason: "api_error",
+    });
+    expect(ev).toMatchObject({ type: "error", failover: "provider" });
+    expect(ev.type === "error" && ev.message).toBe(
+      "claude reported an error with no message (http=401 subtype=error_during_execution terminal_reason=api_error)",
+    );
   });
 
   test("a rejected model is model-scoped so the chain tries the next model", () => {
@@ -243,5 +265,54 @@ describe("SdkNormalizer — compaction", () => {
 
   test("other system subtypes are still ignored", () => {
     expect(new SdkNormalizer().consume({ type: "system", subtype: "something_else" })).toEqual([]);
+  });
+});
+
+describe("terminal reasons the SDK grew", () => {
+  // The 0.3.233 TerminalReason union added limit and model signals. Unmapped,
+  // an exhausted plan arrives as is_error:false and reads as a completed turn —
+  // which is how Nia answered as Codex for sixteen days without saying why.
+  test("an exhausted plan is provider-scoped, so another provider answers", () => {
+    const n = new SdkNormalizer();
+    const [ev] = n.consume({ type: "result", is_error: false, terminal_reason: "blocking_limit" });
+    expect(ev).toMatchObject({ type: "error", failover: "provider", terminalReason: "blocking_limit" });
+  });
+
+  test("a rate-limit breaker is provider-scoped too", () => {
+    const n = new SdkNormalizer();
+    expect(n.consume({ type: "result", is_error: false, terminal_reason: "rapid_refill_breaker" })[0]).toMatchObject({
+      type: "error",
+      failover: "provider",
+    });
+  });
+
+  test("a model error moves to the next model, not the next provider", () => {
+    const n = new SdkNormalizer();
+    expect(n.consume({ type: "result", is_error: false, terminal_reason: "model_error" })[0]).toMatchObject({
+      type: "error",
+      failover: "model",
+    });
+  });
+
+  test("an over-long prompt is worth trying on a bigger model", () => {
+    const n = new SdkNormalizer();
+    expect(n.consume({ type: "result", is_error: false, terminal_reason: "prompt_too_long" })[0]).toMatchObject({
+      type: "error",
+      failover: "model",
+    });
+  });
+
+  test("a bad image stops the chain — no provider will read it differently", () => {
+    const n = new SdkNormalizer();
+    const [ev] = n.consume({ type: "result", is_error: false, terminal_reason: "image_error" });
+    expect(ev).toMatchObject({ type: "error" });
+    expect(ev.type === "error" && ev.failover).toBeUndefined();
+  });
+
+  test("a genuinely completed turn is still a result", () => {
+    const n = new SdkNormalizer();
+    expect(n.consume({ type: "result", is_error: false, terminal_reason: "completed", result: "ok" })[0]?.type).toBe(
+      "result",
+    );
   });
 });

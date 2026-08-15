@@ -12,6 +12,10 @@ import type { FailoverScope } from "./types";
 
 const RETRYABLE = [/\b500\b/i, /internal server error/i, /overloaded/i, /529/, /rate limit/i];
 
+/** Messages that name no cause. They still have to fail over — a backend that
+ *  cannot say what went wrong has not said it is healthy. */
+const OPAQUE = [/^unknown error$/i, /reported an error with no message/i];
+
 const MODEL_SCOPED = [
   /model .*not (found|supported|available|allowed)/i,
   /(unknown|invalid|unsupported) model/i,
@@ -85,7 +89,7 @@ export function scopeOf(failure: Failure, blank?: FailoverScope): FailoverScope 
   // A status is authoritative even when the message is empty — the prose that
   // accompanies a 429 or 529 is routinely unhelpful.
   if (failure.status !== undefined) return scopeOfStatus(failure.status, t);
-  if (!t || t.toLowerCase() === "unknown error") return blank;
+  if (!t || OPAQUE.some((p) => p.test(t))) return blank;
   if (MODEL_SCOPED.some((p) => p.test(t))) return "model";
   if (PROVIDER_SCOPED.some((p) => p.test(t))) return "provider";
   return undefined;
