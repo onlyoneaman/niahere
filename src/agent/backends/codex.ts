@@ -34,6 +34,52 @@ export function resolveCodexBin(): string {
   return cachedCodexBin;
 }
 
+/**
+ * `codex exec -i` takes a path, not bytes. Channels that cache their uploads to
+ * disk (Slack, Telegram) give us one; anything held only in memory cannot be
+ * passed without materializing it, so it is reported rather than dropped.
+ */
+export function attachmentPaths(attachments?: Attachment[]): { paths: string[]; skipped: number } {
+  const paths: string[] = [];
+  let skipped = 0;
+  for (const a of attachments ?? []) {
+    if (a.sourcePath && existsSync(a.sourcePath)) paths.push(a.sourcePath);
+    else skipped++;
+  }
+  return { paths, skipped };
+}
+
+/** codex writes rollouts to `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl`. */
+export function codexHome(): string {
+  return process.env.CODEX_HOME || join(homedir(), ".codex");
+}
+
+/**
+ * Only recent days are searched. Resume exists to continue the conversation in
+ * front of us; anything older replays from Nia's own transcript instead, and
+ * walking every rollout ever written (thousands of files) to prove a negative
+ * would cost more than the resume saves.
+ */
+const RESUME_WINDOW_DAYS = 7;
+
+export function findRollout(sessionId: string, now: Date = new Date()): string | null {
+  if (!/^[0-9a-f-]{32,}$/i.test(sessionId)) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  for (let i = 0; i < RESUME_WINDOW_DAYS; i++) {
+    const d = new Date(now.getTime() - i * 86_400_000);
+    const dir = join(codexHome(), "sessions", String(d.getFullYear()), pad(d.getMonth() + 1), pad(d.getDate()));
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      continue; // no sessions that day
+    }
+    const hit = entries.find((f) => f.startsWith("rollout-") && f.endsWith(`${sessionId}.jsonl`));
+    if (hit) return join(dir, hit);
+  }
+  return null;
+}
+
 /** Minimal spawned-process surface, injectable so the session is unit-testable. */
 export interface CliProc {
   stdout: ReadableStream<Uint8Array>;
@@ -75,6 +121,10 @@ function defaultSpawn(args: string[], opts: { cwd: string; env: Record<string, s
   const proc = Bun.spawn([resolveCodexBin(), ...args], {
     cwd: opts.cwd,
     env: opts.env,
+    // The prompt goes in as an argument. `codex exec` still appends piped stdin
+    // as a <stdin> block, so leaving it to whatever the daemon inherited lets
+    // the parent's descriptor become part of the prompt.
+    stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -117,6 +167,33 @@ function idleAfter(ms: number): { promise: Promise<typeof IDLE>; cancel: () => v
 
 const STDERR_CAP = 16_000;
 
+/** Progress chatter codex writes to stderr on a healthy run. Reporting it as
+ *  the cause of a failure is how "Reading additional input from stdin..." came
+ *  to be the recorded error for every job that ever failed. */
+const STDERR_NOISE = [
+  /^reading additional input from stdin/i,
+  /^\s*$/,
+  /^\[?\d{4}-\d{2}-\d{2}T[\d:.]+Z?\]?\s*$/,
+  /^workdir:/i,
+  /^model:/i,
+  /^provider:/i,
+  /^approval:/i,
+  /^sandbox:/i,
+  /^reasoning (effort|summaries):/i,
+  /^--------$/,
+  /^openai codex v/i,
+];
+
+/** Drop the chatter, keep the diagnosis. Empty means codex said nothing useful. */
+export function meaningfulStderr(text: string): string {
+  return text
+    .split("\n")
+    .map((l) => l.trimEnd())
+    .filter((l) => l.trim() && !STDERR_NOISE.some((p) => p.test(l.trim())))
+    .join("\n")
+    .trim();
+}
+
 /**
  * Consume stderr to EOF, keeping only the tail. Must run alongside the process:
  * an undrained pipe blocks the child once its buffer fills.
@@ -153,14 +230,14 @@ export class CodexBackend implements AgentBackend {
     return new CodexSession(ctx, this.spawnFn, this.idleTimeoutMs);
   }
 
-  async canResume(): Promise<boolean> {
-    // v1: no thread resume; failover/continuity replays history from Nia's DB.
-    return false;
+  /** codex keys rollouts by session id alone — cwd does not narrow the search. */
+  async canResume(backendSessionId: string, _cwd: string): Promise<boolean> {
+    return findRollout(backendSessionId) !== null;
   }
 }
 
 class CodexSession implements AgentSession {
-  private _sessionId: string | null = null;
+  private _sessionId: string | null;
   private aborted: string | null = null;
   private proc: CliProc | null = null;
   private idledOut = false;
@@ -169,20 +246,24 @@ class CodexSession implements AgentSession {
     private ctx: AgentSessionContext,
     private spawnFn: SpawnFn,
     private idleTimeoutMs: number,
-  ) {}
+  ) {
+    this._sessionId = typeof ctx.resume === "string" ? ctx.resume : null;
+  }
 
   get backendSessionId(): string | null {
     return this._sessionId;
   }
 
-  async *send(text: string, _attachments?: Attachment[]): AsyncIterable<AgentEvent> {
+  async *send(text: string, attachments?: Attachment[]): AsyncIterable<AgentEvent> {
     const source: McpSourceContext = this.ctx.source ?? { channel: this.ctx.channel, room: this.ctx.room };
     const { url, token } = await mintRun(source);
 
-    const fullPrompt = `${this.ctx.systemPrompt}\n\n---\n\n${text}`;
-    const args = [
-      "exec",
-      fullPrompt,
+    // Resuming carries the system prompt with the thread, so re-sending it would
+    // stack a second copy on every turn.
+    const resumable = this._sessionId && findRollout(this._sessionId);
+    const prompt = resumable ? text : `${this.ctx.systemPrompt}\n\n---\n\n${text}`;
+    const args = resumable ? ["exec", "resume", this._sessionId!, prompt] : ["exec", prompt];
+    args.push(
       "--json",
       "--skip-git-repo-check",
       "--dangerously-bypass-approvals-and-sandbox",
@@ -192,8 +273,13 @@ class CodexSession implements AgentSession {
       `mcp_servers.nia.url="${url}"`,
       "-c",
       `mcp_servers.nia.bearer_token_env_var="NIA_MCP_TOKEN"`,
-    ];
+    );
+    const media = attachmentPaths(attachments);
+    for (const path of media.paths) args.push("-i", path);
     if (this.ctx.model && this.ctx.model !== "default") args.push("-m", this.ctx.model);
+    if (media.skipped > 0) {
+      yield { type: "thinking", delta: `${media.skipped} attachment(s) had no file on disk and were not sent to codex` };
+    }
 
     const proc = this.spawnFn(args, { cwd: this.ctx.cwd, env: subprocessEnv({ NIA_MCP_TOKEN: token }) });
     this.proc = proc;
@@ -248,10 +334,10 @@ class CodexSession implements AgentSession {
       const exit = await proc.exited;
       if (this.aborted) throw new Error(this.aborted);
       if (exit !== 0 && !sawTerminal) {
-        const text = await stderr;
+        const text = meaningfulStderr(await stderr);
         yield {
           type: "error",
-          message: text.trim() || `codex exited ${exit}`,
+          message: text || `codex exited ${exit} without reporting a cause`,
           retryable: false,
           failover: scopeOf(parseFailure(text), "provider"),
         };

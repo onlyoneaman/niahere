@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync } from "fs";
-import { CodexBackend, resolveCodexBin, type CliProc, type SpawnFn } from "../../src/agent/backends/codex";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import { CodexBackend, resolveCodexBin, meaningfulStderr, findRollout, attachmentPaths, type CliProc, type SpawnFn } from "../../src/agent/backends/codex";
 import { startMcpEndpoint, stopMcpEndpoint, liveRunCount } from "../../src/agent/mcp-endpoint";
 import type { AgentEvent, AgentSessionContext } from "../../src/agent/types";
 
@@ -223,5 +225,86 @@ describe("CodexSession", () => {
     const err = events.at(-1)!;
     expect(err.type).toBe("error");
     if (err.type === "error") expect(err.failover).toBeUndefined();
+  });
+});
+
+describe("meaningfulStderr", () => {
+  test("drops codex's progress chatter", () => {
+    expect(meaningfulStderr("Reading additional input from stdin...\n")).toBe("");
+    expect(meaningfulStderr("OpenAI Codex v0.147.0\nworkdir: /x\nmodel: gpt-5.6-sol\n--------\n")).toBe("");
+  });
+
+  test("keeps a real diagnosis, chatter and all", () => {
+    const out = meaningfulStderr("Reading additional input from stdin...\nError: not logged in\n");
+    expect(out).toBe("Error: not logged in");
+  });
+
+  test("empty means codex explained nothing", () => {
+    expect(meaningfulStderr("   \n\n  ")).toBe("");
+  });
+});
+
+describe("codex continuity", () => {
+  const home = mkdtempSync(join(tmpdir(), "codexhome-"));
+  const uuid = "019cb324-07cb-7693-8874-1e741f2e147f";
+  const day = new Date("2026-08-15T10:00:00Z");
+
+  beforeAll(() => {
+    process.env.CODEX_HOME = home;
+    const dir = join(home, "sessions", "2026", "08", "15");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `rollout-2026-08-15T15-30-08-${uuid}.jsonl`), "{}\n");
+  });
+  afterAll(() => {
+    delete process.env.CODEX_HOME;
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  test("finds a rollout written today", () => {
+    expect(findRollout(uuid, day)).toContain(`${uuid}.jsonl`);
+  });
+
+  test("finds one written days ago, inside the window", () => {
+    expect(findRollout(uuid, new Date("2026-08-20T10:00:00Z"))).toContain(uuid);
+  });
+
+  test("gives up past the window rather than walking every rollout ever", () => {
+    expect(findRollout(uuid, new Date("2026-09-30T10:00:00Z"))).toBeNull();
+  });
+
+  test("an unknown session is not resumable", () => {
+    expect(findRollout("019cb324-0000-0000-0000-000000000000", day)).toBeNull();
+  });
+
+  test("a non-uuid session id is rejected without touching the disk", () => {
+    expect(findRollout("../../etc/passwd", day)).toBeNull();
+  });
+
+  test("canResume answers from the rollout store", async () => {
+    const backend = new CodexBackend();
+    expect(await backend.canResume(uuid, "/tmp")).toBe(true);
+    expect(await backend.canResume("019cb324-0000-0000-0000-000000000000", "/tmp")).toBe(false);
+  });
+});
+
+describe("attachmentPaths", () => {
+  test("passes through files that exist on disk", () => {
+    const f = join(tmpdir(), `att-${Date.now()}.png`);
+    writeFileSync(f, "x");
+    const out = attachmentPaths([{ type: "image", data: Buffer.from(""), mimeType: "image/png", sourcePath: f } as never]);
+    expect(out).toEqual({ paths: [f], skipped: 0 });
+    rmSync(f, { force: true });
+  });
+
+  test("counts in-memory attachments as skipped rather than dropping them quietly", () => {
+    const out = attachmentPaths([
+      { type: "image", data: Buffer.from(""), mimeType: "image/png" } as never,
+      { type: "image", data: Buffer.from(""), mimeType: "image/png", sourcePath: "/nope/missing.png" } as never,
+    ]);
+    expect(out).toEqual({ paths: [], skipped: 2 });
+  });
+
+  test("no attachments is not an error", () => {
+    expect(attachmentPaths(undefined)).toEqual({ paths: [], skipped: 0 });
   });
 });
