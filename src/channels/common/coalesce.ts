@@ -119,3 +119,60 @@ export function mergeMessages(items: Pending[]): Pending {
   const header = `[${parts.length} messages arrived together while you were working. Answer all of them.]`;
   return { text: `${header}\n\n${parts.join("\n\n")}`, attachments };
 }
+
+/** An inbound message plus whatever the channel needs to answer it. */
+export interface Inbound<C> extends Pending {
+  ctx: C;
+}
+
+export interface TurnPump<K, C> {
+  /** Deliver a message. Runs now, or joins the next turn for that room. */
+  push(key: K, item: Inbound<C>): void;
+  /** Resolves once every room has drained. Tests and shutdown. */
+  idle(): Promise<void>;
+  /** Forget a room's queue — call when its session is closed. */
+  forget(key: K): void;
+}
+
+/**
+ * One place where inbound messages become turns.
+ *
+ * Every message-driven channel had the same shape open-coded: take the room
+ * lock, send one message, post one reply. Batching had to live wherever that
+ * shape lived, so putting it in each channel would have meant four copies of
+ * the trickiest part. This owns the queue and the lock; channels keep only what
+ * is genuinely theirs — how to acknowledge a message, and how to post a reply.
+ */
+export function createTurnPump<K, C>(
+  lockFor: (key: K) => Schedule,
+  run: (key: K, batch: Inbound<C>[], merged: Pending) => Promise<void>,
+  options: CoalescerOptions = {},
+): TurnPump<K, C> {
+  const queues = new Map<K, Coalescer>();
+
+  function queueFor(key: K): Coalescer {
+    let q = queues.get(key);
+    if (!q) {
+      q = createCoalescer(
+        async (batch) => {
+          await run(key, batch as Inbound<C>[], mergeMessages(batch));
+        },
+        { ...options, schedule: lockFor(key) },
+      );
+      queues.set(key, q);
+    }
+    return q;
+  }
+
+  return {
+    push(key, item) {
+      queueFor(key).push(item);
+    },
+    async idle() {
+      await Promise.all([...queues.values()].map((q) => q.idle()));
+    },
+    forget(key) {
+      queues.delete(key);
+    },
+  };
+}

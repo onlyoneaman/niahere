@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createCoalescer, mergeMessages, type Pending } from "../../src/channels/common/coalesce";
+import { createCoalescer, createTurnPump, mergeMessages, type Pending } from "../../src/channels/common/coalesce";
 
 /** A processor whose completion the test controls, so "in flight" is a real state. */
 function gated() {
@@ -263,5 +263,80 @@ describe("createCoalescer with the channel's own lock", () => {
     c.push(msg("c"));
     await c.idle();
     expect(batches).toEqual([["a"], ["b", "c"]]);
+  });
+});
+
+describe("createTurnPump", () => {
+  function harness() {
+    const locks = new Map<string, Promise<void>>();
+    const lockFor = (key: string) => (fn: () => Promise<void>) => {
+      const chain = (locks.get(key) ?? Promise.resolve()).then(fn, fn);
+      locks.set(key, chain);
+    };
+    const turns: Array<{ key: string; texts: string[]; merged: string; ctxs: string[] }> = [];
+    return { lockFor, turns, locks };
+  }
+
+  const inbound = (text: string, ctx: string) => ({ text, attachments: [], ctx });
+
+  test("each room queues independently — a busy room never blocks another", async () => {
+    const h = harness();
+    const pump = createTurnPump<string, string>(h.lockFor, async (key, batch, merged) => {
+      h.turns.push({ key, texts: batch.map((b) => b.text), merged: merged.text, ctxs: batch.map((b) => b.ctx) });
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    pump.push("roomA", inbound("a1", "ctxA1"));
+    pump.push("roomB", inbound("b1", "ctxB1"));
+    await tick();
+    pump.push("roomA", inbound("a2", "ctxA2"));
+    await pump.idle();
+
+    const rooms = h.turns.map((t) => t.key);
+    expect(rooms.filter((r) => r === "roomA")).toEqual(["roomA", "roomA"]);
+    expect(rooms.filter((r) => r === "roomB")).toEqual(["roomB"]);
+  });
+
+  test("a batch hands back every message's context, not just the last", async () => {
+    // Slack needs each message's ts to clear its reaction; losing the earlier
+    // ones would strand a thinking emoji forever.
+    const h = harness();
+    const pump = createTurnPump<string, string>(h.lockFor, async (key, batch, merged) => {
+      h.turns.push({ key, texts: batch.map((b) => b.text), merged: merged.text, ctxs: batch.map((b) => b.ctx) });
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    pump.push("r", inbound("first", "ts-1"));
+    await tick();
+    pump.push("r", inbound("second", "ts-2"));
+    pump.push("r", inbound("third", "ts-3"));
+    await pump.idle();
+
+    expect(h.turns[0]!.ctxs).toEqual(["ts-1"]);
+    expect(h.turns[1]!.ctxs).toEqual(["ts-2", "ts-3"]);
+    expect(h.turns[1]!.merged).toContain("2 messages");
+  });
+
+  test("the merged text for a lone message is untouched", async () => {
+    const h = harness();
+    const pump = createTurnPump<string, string>(h.lockFor, async (key, batch, merged) => {
+      h.turns.push({ key, texts: batch.map((b) => b.text), merged: merged.text, ctxs: [] });
+    });
+    pump.push("r", inbound("just this", "c"));
+    await pump.idle();
+    expect(h.turns[0]!.merged).toBe("just this");
+  });
+
+  test("forgetting a room drops its queue without disturbing others", async () => {
+    const h = harness();
+    const pump = createTurnPump<string, string>(h.lockFor, async (key, batch, merged) => {
+      h.turns.push({ key, texts: batch.map((b) => b.text), merged: merged.text, ctxs: [] });
+    });
+    pump.push("gone", inbound("x", "c"));
+    await pump.idle();
+    pump.forget("gone");
+    pump.push("kept", inbound("y", "c"));
+    await pump.idle();
+    expect(h.turns.map((t) => t.key)).toEqual(["gone", "kept"]);
   });
 });

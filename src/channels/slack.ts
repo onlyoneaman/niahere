@@ -1,4 +1,5 @@
 import { App } from "@slack/bolt";
+import type { WebClient } from "@slack/web-api";
 import type { Channel, ChatState, Attachment, Outbound, Recipient } from "../types";
 import { getConfig, updateRawConfig } from "../utils/config";
 import { relativeTime } from "../utils/format";
@@ -12,8 +13,22 @@ import { SlackAttachmentCache } from "./slack/attachments";
 import { SlackWatchReloader } from "./slack/watch";
 
 import { decideWatchReply } from "./common/watch-judgement";
+import { createTurnPump } from "./common/coalesce";
 
 const logActivity = (status: string) => log.debug({ status }, "slack engine activity");
+
+/** What answering a Slack message needs, carried per message so a coalesced
+ *  turn can still reply in the right thread and clear every reaction. */
+interface SlackTurnCtx {
+  msg: { channel: string; ts: string; thread_ts?: string; user?: string };
+  /** Bolt hands the web client to each event; a coalesced turn borrows the
+   *  newest message's. */
+  client: WebClient;
+  say: (text: string) => Promise<unknown>;
+  replyThreadTs?: string;
+  isDm: boolean;
+  watchBehavior?: { channel: string; behavior: string };
+}
 
 interface SlackReactionClient {
   reactions: {
@@ -131,6 +146,126 @@ class SlackChannel implements Channel {
       }
       chainLock(state, fn);
     }
+
+    /**
+     * One inbound message becomes one turn — unless others arrive while that
+     * turn is running, in which case they answer together. Scheduling goes
+     * through withLock so a coalesced turn and `/nia <subcommand>` still cannot
+     * overlap on the same engine.
+     */
+    const slackPump = createTurnPump<string, SlackTurnCtx>(
+      (key) => (fn) => withLock(key, fn),
+      async (key, batch, merged) => {
+        // The newest message decides where the reply goes; every message in the
+        // batch needs its own reaction cleared.
+        const last = batch[batch.length - 1]!.ctx;
+        const { msg, say, replyThreadTs, isDm, watchBehavior, client } = last;
+        let text = merged.text;
+
+        const clearReactions = async () => {
+          // Every message in the batch was acknowledged on arrival; clear them all.
+          for (const item of batch) {
+            await item.ctx.client.reactions
+              .remove({ channel: item.ctx.msg.channel, timestamp: item.ctx.msg.ts, name: "thinking_face" })
+              .catch((err) => log.debug({ err, channel: item.ctx.msg.channel }, "slack: failed to remove thinking reaction"));
+          }
+        };
+
+        let state: ChatState;
+        try {
+          state = await getState(key, watchBehavior, {
+            slackChannelId: msg.channel,
+            slackThreadTs: replyThreadTs,
+          });
+        } catch (err) {
+          log.error({ err, key }, "slack: failed to create chat engine");
+          await clearReactions();
+          return;
+        }
+
+        // For flat DM messages (no thread), prepend recent notifications so
+        // the bot knows what jobs/watches recently sent to this user.
+        if (isDm && !msg.thread_ts) {
+          try {
+            const dmPrefix = `slack-dm-${msg.user}`;
+            const notifications = await Message.getRecentNotifications(dmPrefix);
+            if (notifications.length > 0) {
+              const lines = notifications.map((n) => {
+                const ago = relativeTime(new Date(n.createdAt), new Date());
+                const src = n.source ? ` via ${n.source}` : "";
+                return `- (${ago}${src}): ${n.content}`;
+              });
+              text = `[Recent notifications you sent to the user]\n${lines.join("\n")}\n\n[Current message]\n${text}`;
+            }
+          } catch (err) {
+            log.warn({ err }, "slack: failed to load recent notifications for DM context");
+          }
+        }
+
+        if (batch.length > 1) {
+          log.info({ channel: msg.channel, key, merged: batch.length }, "slack: answering messages together");
+        }
+
+        try {
+          const { result, messageId, signal, structured } = await state.engine.send(
+            text,
+            { onActivity: logActivity },
+            merged.attachments.length > 0 ? merged.attachments : undefined,
+          );
+
+          if (signal === "provider_down") {
+            await reactToSlackMessage(client, msg.channel, msg.ts, "skull").catch((err) =>
+              log.debug({ err, channel: msg.channel }, "slack: failed to add provider-down reaction"),
+            );
+            if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "sent"), "record sent delivery status");
+            log.info({ channel: msg.channel, key, reaction: "skull" }, "slack provider failure sent as reaction");
+            return;
+          }
+
+          const decision = decideWatchReply(structured, result);
+          const reply = decision.text;
+
+          if (!decision.send) {
+            if (decision.ambiguous) {
+              log.warn(
+                { channel: msg.channel, key, reply: result.trim(), source: decision.source },
+                "slack: [NO_REPLY] sentinel mixed with content; suppressing send",
+              );
+            } else {
+              log.info({ channel: msg.channel, key, source: decision.source }, "slack: agent chose not to reply");
+            }
+            if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "sent"), "record sent delivery status");
+            return;
+          }
+
+          try {
+            if (replyThreadTs) {
+              await client.chat.postMessage({ channel: msg.channel, text: reply, thread_ts: replyThreadTs });
+            } else {
+              await say(reply);
+            }
+            if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "sent"), "record sent delivery status");
+            log.info({ channel: msg.channel, key, chars: reply.length }, "slack reply sent");
+          } catch (sendErr) {
+            if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "failed"), "record failed delivery status");
+            throw sendErr;
+          }
+        } catch (err) {
+          const errText = errMsg(err);
+          log.error({ err, channel: msg.channel }, "slack message processing failed");
+          if (replyThreadTs) {
+            await ignore(
+              client.chat.postMessage({ channel: msg.channel, text: `[error] ${errText}`, thread_ts: replyThreadTs }),
+              "reply engine error in thread",
+            );
+          } else {
+            await ignore(say(`[error] ${errText}`), "reply engine error");
+          }
+        } finally {
+          await clearReactions();
+        }
+      },
+    );
 
     const self = this;
 
@@ -385,113 +520,25 @@ class SlackChannel implements Channel {
         "slack message received",
       );
 
-      let state: ChatState;
-      const slackCtx: SlackContext = {
-        slackChannelId: msg.channel,
-        slackThreadTs: replyThreadTs,
-      };
+      // Create the session before queueing: withLock chains on ChatState, so a
+      // room with none yet would run its first turn unserialized.
       try {
-        state = await getState(key, watchBehavior, slackCtx);
+        await getState(key, watchBehavior, { slackChannelId: msg.channel, slackThreadTs: replyThreadTs });
       } catch (err) {
         log.error({ err, key }, "slack: failed to create chat engine");
         return;
       }
 
-      withLock(key, async () => {
-        // For flat DM messages (no thread), prepend recent notifications so
-        // the bot knows what jobs/watches recently sent to this user.
-        if (isDm && !msg.thread_ts) {
-          try {
-            const dmPrefix = `slack-dm-${msg.user}`;
-            const notifications = await Message.getRecentNotifications(dmPrefix);
-            if (notifications.length > 0) {
-              const lines = notifications.map((n) => {
-                const ago = relativeTime(new Date(n.createdAt), new Date());
-                const src = n.source ? ` via ${n.source}` : "";
-                return `- (${ago}${src}): ${n.content}`;
-              });
-              text = `[Recent notifications you sent to the user]\n${lines.join("\n")}\n\n[Current message]\n${text}`;
-            }
-          } catch (err) {
-            log.warn({ err }, "slack: failed to load recent notifications for DM context");
-          }
-        }
+      // Acknowledge immediately rather than when its turn starts — a message
+      // waiting behind a running turn should still look received.
+      await reactToSlackMessage(client, msg.channel, msg.ts, "thinking_face").catch((err) =>
+        log.debug({ err, channel: msg.channel }, "slack: failed to add thinking reaction"),
+      );
 
-        // Add thinking reaction inside the lock so cleanup is guaranteed
-        await reactToSlackMessage(client, msg.channel, msg.ts, "thinking_face")
-          .catch((err) => log.debug({ err, channel: msg.channel }, "slack: failed to add thinking reaction"));
-
-        try {
-          const { result, messageId, signal, structured } = await state.engine.send(
-            text,
-            {
-              onActivity: logActivity,
-            },
-            attachments,
-          );
-
-          if (signal === "provider_down") {
-            await reactToSlackMessage(client, msg.channel, msg.ts, "skull").catch((err) =>
-              log.debug({ err, channel: msg.channel }, "slack: failed to add provider-down reaction"),
-            );
-            if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "sent"), "record sent delivery status");
-            log.info({ channel: msg.channel, key, reaction: "skull" }, "slack provider failure sent as reaction");
-            return;
-          }
-
-          const decision = decideWatchReply(structured, result);
-          const reply = decision.text;
-
-          if (!decision.send) {
-            if (decision.ambiguous) {
-              log.warn(
-                { channel: msg.channel, key, reply: result.trim(), source: decision.source },
-                "slack: [NO_REPLY] sentinel mixed with content; suppressing send",
-              );
-            } else {
-              log.info({ channel: msg.channel, key, source: decision.source }, "slack: agent chose not to reply");
-            }
-            if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "sent"), "record sent delivery status");
-            return;
-          }
-
-          try {
-            if (replyThreadTs) {
-              await client.chat.postMessage({
-                channel: msg.channel,
-                text: reply,
-                thread_ts: replyThreadTs,
-              });
-            } else {
-              await say(reply);
-            }
-            if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "sent"), "record sent delivery status");
-            log.info({ channel: msg.channel, key, chars: reply.length }, "slack reply sent");
-          } catch (sendErr) {
-            if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "failed"), "record failed delivery status");
-            throw sendErr;
-          }
-        } catch (err) {
-          const errText = errMsg(err);
-          log.error({ err, channel: msg.channel }, "slack message processing failed");
-
-          if (replyThreadTs) {
-            await ignore(
-              client.chat.postMessage({
-                channel: msg.channel,
-                text: `[error] ${errText}`,
-                thread_ts: replyThreadTs,
-              }),
-              "reply engine error in thread",
-            );
-          } else {
-            await ignore(say(`[error] ${errText}`), "reply engine error");
-          }
-        } finally {
-          await client.reactions
-            .remove({ channel: msg.channel, timestamp: msg.ts, name: "thinking_face" })
-            .catch((err) => log.debug({ err, channel: msg.channel }, "slack: failed to remove thinking reaction"));
-        }
+      slackPump.push(key, {
+        text,
+        attachments: attachments ?? [],
+        ctx: { msg, client, say, replyThreadTs, isDm, watchBehavior },
       });
     });
 
