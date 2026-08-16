@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **A crashed turn blocked stop, restart and update forever** — `guardActiveEngines()` counted rows in `active_engines` without ever reading `last_ping`, and nothing called `ping()`, so the column was decoration. Any row left behind by a crash, a `kill -9`, or a test aimed at the wrong database was indistinguishable from live work permanently; two such rows sat on the mini for two days and refused every `nia stop`/`restart`/`update`, including the restart whose startup calls `clearAll()` and would have cleared them. Running turns now re-stamp their row from the event loop (throttled, not on a timer — a timer outlives the work it describes, so a dead turn would keep looking alive), and the guard ignores rows silent for more than three minutes, saying how many it skipped.
+
 ## [0.5.5] - 2026-08-16
 
 ### Fixed

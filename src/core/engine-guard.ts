@@ -7,6 +7,7 @@
  */
 
 import { ActiveEngine } from "../db/models";
+import { isStale, type ActiveEngine as ActiveEngineRow } from "../db/models/active_engine";
 import { withDb } from "../db/with-db";
 import { DIM, RESET, ICON_WARN } from "../utils/cli";
 
@@ -38,21 +39,41 @@ export function withDefaultWait(opts: GuardOptions, defaultWaitMinutes: number):
 interface ActiveSummary {
   count: number;
   rooms: string[];
+  /** Rows nothing has pinged lately — ignored, but worth saying out loud. */
+  stale: number;
+}
+
+/**
+ * A row only counts as work if something is still pinging it. Without this a
+ * crash — or a test pointed at the wrong database — leaves a row that blocks
+ * stop, restart and update indefinitely, including the restart whose startup
+ * would have cleared it.
+ */
+export function partitionEngines(
+  engines: ActiveEngineRow[],
+  now: number = Date.now(),
+): { live: ActiveEngineRow[]; stale: ActiveEngineRow[] } {
+  const live: ActiveEngineRow[] = [];
+  const stale: ActiveEngineRow[] = [];
+  for (const e of engines) (isStale(e.lastPing, now) ? stale : live).push(e);
+  return { live, stale };
 }
 
 async function getActiveEngines(): Promise<ActiveSummary> {
   let count = 0;
   let rooms: string[] = [];
+  let stale = 0;
   try {
     await withDb(async () => {
-      const engines = await ActiveEngine.list();
-      count = engines.length;
-      rooms = engines.map((e) => `${e.room} (${e.channel})`);
+      const partitioned = partitionEngines(await ActiveEngine.list());
+      count = partitioned.live.length;
+      rooms = partitioned.live.map((e) => `${e.room} (${e.channel})`);
+      stale = partitioned.stale.length;
     });
   } catch {
     // DB unreachable — no engines to worry about
   }
-  return { count, rooms };
+  return { count, rooms, stale };
 }
 
 /**
@@ -62,7 +83,10 @@ async function getActiveEngines(): Promise<ActiveSummary> {
 export async function guardActiveEngines(action: string, opts: GuardOptions): Promise<boolean> {
   if (opts.force) return true;
 
-  const { count, rooms } = await getActiveEngines();
+  const { count, rooms, stale } = await getActiveEngines();
+  if (stale > 0) {
+    console.log(`${DIM}ignoring ${stale} stale engine row${stale > 1 ? "s" : ""} (no heartbeat)${RESET}`);
+  }
   if (count === 0) return true;
 
   // Active engines found

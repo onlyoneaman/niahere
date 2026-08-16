@@ -60,6 +60,9 @@ async function consumeBackendRun(
 
   try {
     for await (const ev of session.send(prompt)) {
+      // Keep the lease alive while the turn runs. Throttled, so a long job
+      // stays live without one write per event.
+      if (activeRoom) void ignore(ActiveEngine.throttledTouch(activeRoom), "touch active-engine");
       if (ev.type === "thinking") onActivity?.(ev.delta);
       else if (ev.type === "tool") onActivity?.(ev.summary ?? ev.name);
       else if (ev.type === "result") {

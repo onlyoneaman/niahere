@@ -291,6 +291,9 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
 
         try {
           for await (const ev of sess.send(userMessage, attachments)) {
+            // Keep the lease alive while the turn runs, so a slow reply is
+            // never mistaken for a crashed one.
+            void ignore(ActiveEngine.throttledTouch(room), "touch active-engine");
             switch (ev.type) {
               case "session": {
                 if (!sessionId || ev.backendSessionId !== sessionId) {
