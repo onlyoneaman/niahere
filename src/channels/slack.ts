@@ -11,7 +11,7 @@ import { ChatSessions, chainLock } from "./common/chat-session";
 import { SlackAttachmentCache } from "./slack/attachments";
 import { SlackWatchReloader } from "./slack/watch";
 
-import { WATCH_JUDGEMENT_SCHEMA, decideWatchReply } from "./common/watch-judgement";
+import { decideWatchReply } from "./common/watch-judgement";
 
 const logActivity = (status: string) => log.debug({ status }, "slack engine activity");
 
@@ -108,9 +108,6 @@ class SlackChannel implements Channel {
         channel: "slack",
         mcpServers: getMcpServers({ channel: "slack", room, ...slackCtx }),
         watchBehavior,
-        // Only a watch turn answers a yes/no question; ordinary chat replies
-        // are prose and must stay prose.
-        ...(watchBehavior ? { outputSchema: WATCH_JUDGEMENT_SCHEMA } : {}),
       });
     }
 

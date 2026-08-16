@@ -62,3 +62,63 @@ describe("WATCH_JUDGEMENT_SCHEMA", () => {
     expect(WATCH_JUDGEMENT_SCHEMA.additionalProperties).toBe(false);
   });
 });
+
+/**
+ * Differential test against the exact logic that shipped in slack.ts before the
+ * decision moved into this module. The watch path handles ~100 threads a day in
+ * production, so "it looks equivalent" is not good enough.
+ */
+describe("sentinel path is byte-equivalent to the shipped logic", () => {
+  const originalCleanSentinel = (text: string) => text.replace(/`/g, "").trim();
+  const original = (result: string) => {
+    const reply = result.trim();
+    const cleaned = originalCleanSentinel(reply);
+    if (!reply || cleaned.includes("[NO_REPLY]")) {
+      const exact = !reply || cleaned === "[NO_REPLY]";
+      return { send: false, text: "", ambiguous: !exact };
+    }
+    return { send: true, text: reply, ambiguous: false };
+  };
+
+  const corpus = [
+    "",
+    "   ",
+    "\n\n",
+    "[NO_REPLY]",
+    " [NO_REPLY] ",
+    "`[NO_REPLY]`",
+    "```[NO_REPLY]```",
+    "[NO_REPLY]\n\nbut here is a thought",
+    "Sure, here's the summary.",
+    "I think [NO_REPLY] applies here",
+    "no reply",
+    "NO_REPLY",
+    "[no_reply]",
+    "Deploy finished — 3 failures.",
+    "line one\nline two",
+    "`code` in a normal reply",
+    "a reply mentioning [NO_REPLY] mid-sentence and continuing",
+  ];
+
+  for (const input of corpus) {
+    test(`matches on ${JSON.stringify(input)}`, () => {
+      const mine = decideWatchReply(undefined, input);
+      const theirs = original(input);
+      expect(mine.send).toBe(theirs.send);
+      expect(mine.text).toBe(theirs.text);
+      expect(mine.ambiguous ?? false).toBe(theirs.ambiguous);
+    });
+  }
+
+  test("the only divergence is a log level, never a send decision", () => {
+    // Both suppress — `includes` matched the sentinel inside the asterisks all
+    // along. The old parse just could not tell a bold-wrapped bare sentinel
+    // from one mixed with content, so it warned about a model that had done
+    // nothing wrong.
+    expect(original("**[NO_REPLY]**").send).toBe(false);
+    expect(decideWatchReply(undefined, "**[NO_REPLY]**").send).toBe(false);
+
+    expect(original("**[NO_REPLY]**").ambiguous).toBe(true);
+    expect(decideWatchReply(undefined, "**[NO_REPLY]**").ambiguous).toBe(false);
+  });
+});
