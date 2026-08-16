@@ -8,6 +8,7 @@ import { localTime } from "../utils/time";
 import { withRetry } from "../utils/retry";
 import { codexAvailable, codexModelSlugs } from "../agent/catalog";
 import { providerHealth } from "../agent/health";
+import { claudeAuthStatus, codexAuthStatus, type AuthStatus } from "../agent/auth";
 import { IMPLEMENTED, describeRef, planChain, resolveModel, type ModelRef } from "../agent/models";
 
 export type CheckStatus = "ok" | "warn" | "fail";
@@ -16,19 +17,56 @@ export type Check = { name: string; status: CheckStatus; detail: string };
 /** Past this, the chain is not falling back — it has moved. */
 export const FAILOVER_INCIDENT_MS = 60 * 60 * 1000;
 
+/** "16d" reads as an outage; "384.0h" reads as a number nobody parses. */
+export function humanDuration(ms: number): string {
+  const minutes = ms / 60_000;
+  if (minutes < 60) return `${Math.round(minutes)}m`;
+  const hours = minutes / 60;
+  if (hours < 48) return `${hours.toFixed(1)}h`;
+  return `${Math.round(hours / 24)}d`;
+}
+
+/**
+ * Sign-in state, said plainly. An expired *refresh* token is terminal and
+ * always worth reporting; a lapsed access token is routine on its own and only
+ * escalates when the chain has also stopped using that provider.
+ */
+export function auditAuth(statuses: AuthStatus[]): Check {
+  const parts = statuses.map((s) => `${s.provider}: ${s.detail}`);
+  const expired = statuses.filter((s) => s.state === "expired");
+  const expiring = statuses.filter((s) => s.state === "expiring");
+
+  if (expired.length > 0) {
+    return { name: "auth", status: "fail", detail: parts.join("; ") };
+  }
+  if (expiring.length > 0) {
+    return { name: "auth", status: "warn", detail: parts.join("; ") };
+  }
+  return { name: "auth", status: "ok", detail: parts.join("; ") };
+}
+
 /**
  * Failover is meant to be invisible for a blip and impossible to miss for an
  * outage. Nothing distinguished the two, so Nia answered as Codex for sixteen
  * days without a word.
+ *
+ * When the primary has stopped serving, its sign-in is the first thing anyone
+ * would check — so check it here and name it, rather than reporting that
+ * something is wrong and leaving the cause to be discovered.
  */
-export function auditFailover(streakMs: number | null, server: string | null): Check {
+export function auditFailover(streakMs: number | null, server: string | null, primaryAuth?: AuthStatus): Check {
   if (streakMs === null) return { name: "failover", status: "ok", detail: "primary serving" };
-  const hours = streakMs / 3_600_000;
-  const since = hours >= 1 ? `${hours.toFixed(1)}h` : `${Math.round(streakMs / 60_000)}m`;
+  const since = humanDuration(streakMs);
   const who = server ? ` (${server} covering)` : "";
+  // A provider that stopped answering while its token is lapsed or expired is
+  // not a mystery; say so in the same breath.
+  const blame =
+    primaryAuth && (primaryAuth.state === "expired" || primaryAuth.state === "stale" || primaryAuth.state === "expiring")
+      ? ` — ${primaryAuth.provider} auth: ${primaryAuth.detail}`
+      : "";
   return streakMs >= FAILOVER_INCIDENT_MS
-    ? { name: "failover", status: "fail", detail: `primary has not served for ${since}${who}` }
-    : { name: "failover", status: "warn", detail: `failed over ${since} ago${who}` };
+    ? { name: "failover", status: "fail", detail: `primary has not served for ${since}${who}${blame}` }
+    : { name: "failover", status: "warn", detail: `failed over ${since} ago${who}${blame}` };
 }
 
 /**
@@ -225,7 +263,10 @@ export async function runHealthChecks(): Promise<Check[]> {
     }),
   );
 
-  checks.push(auditFailover(providerHealth.fallbackStreakMs(), providerHealth.lastServer()));
+  const auth = [claudeAuthStatus(), codexAuthStatus()];
+  checks.push(auditAuth(auth));
+  const primary = auth.find((a) => a.provider === plan[0]?.provider);
+  checks.push(auditFailover(providerHealth.fallbackStreakMs(), providerHealth.lastServer(), primary));
 
   // API keys
   const geminiKey = config.gemini_api_key;

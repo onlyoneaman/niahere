@@ -241,6 +241,24 @@ async function heartbeat(): Promise<void> {
     }
   }
 
+  // Sign-in failures are reported directly, before the recovery agent is asked
+  // to think about anything. The agent runs through the same model chain that
+  // is failing, so an expired credential is precisely the case where it is
+  // least able to explain itself — and the fix is a human running `claude`
+  // anyway, not something an agent can do.
+  const authFailure = failures.find((f) => f.name === "auth" || f.name === "failover");
+  if (authFailure && !recoveryAttempted) {
+    recoveryAttempted = true;
+    log.error({ check: authFailure.name, detail: authFailure.detail }, "alive: provider sign-in problem");
+    await notifyUser(
+      authFailure.name === "auth"
+        ? `Nia's provider sign-in needs attention — ${authFailure.detail}`
+        : `Nia is not using its primary model — ${authFailure.detail}`,
+    );
+    lastFailures = failureNames;
+    return;
+  }
+
   // Run LLM recovery agent once per outage (fallback for non-trivial issues)
   if (!recoveryAttempted) {
     recoveryAttempted = true;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { auditModelPlan, auditFailover, FAILOVER_INCIDENT_MS } from "../../src/core/health";
+import { auditModelPlan, auditFailover, auditAuth, humanDuration, FAILOVER_INCIDENT_MS } from "../../src/core/health";
+import type { AuthStatus } from "../../src/agent/auth";
 import { createProviderHealth } from "../../src/agent/health";
 import { planChain } from "../../src/agent/models";
 
@@ -101,5 +102,59 @@ describe("providerHealth failover tracking", () => {
     h.markServed("codex", false);
     t += 60_000;
     expect(h.fallbackStreakMs()).toBe(120_000);
+  });
+});
+
+describe("auditAuth", () => {
+  const s = (over: Partial<AuthStatus>): AuthStatus =>
+    ({ provider: "claude", state: "ok", detail: "valid for 4h", ...over }) as AuthStatus;
+
+  it("passes when every provider is signed in", () => {
+    expect(auditAuth([s({}), s({ provider: "codex" })]).status).toBe("ok");
+  });
+
+  it("fails when a sign-in has actually expired", () => {
+    const c = auditAuth([s({ state: "expired", detail: "sign-in expired 1d ago — run `claude` to sign in again" })]);
+    expect(c.status).toBe("fail");
+    expect(c.detail).toContain("run `claude`");
+  });
+
+  it("warns before re-auth becomes unavoidable", () => {
+    expect(auditAuth([s({ state: "expiring", detail: "renew within 2d" })]).status).toBe("warn");
+  });
+
+  it("does not cry wolf over a merely lapsed access token", () => {
+    // The nightly case: idle daemon, token renewable on next use.
+    expect(auditAuth([s({ state: "stale", detail: "lapsed 9h ago, renewable" })]).status).toBe("ok");
+  });
+
+  it("stays quiet when it cannot see the credentials at all", () => {
+    expect(auditAuth([s({ state: "unknown", detail: "keychain" })]).status).toBe("ok");
+  });
+});
+
+describe("auditFailover names the cause", () => {
+  it("blames the primary's lapsed sign-in when the chain has moved", () => {
+    const c = auditFailover(16 * 24 * 3_600_000, "codex", {
+      provider: "claude",
+      state: "stale",
+      detail: "access token lapsed 16d ago, renewable",
+    });
+    expect(c.status).toBe("fail");
+    expect(c.detail).toContain("claude auth");
+    expect(c.detail).toContain("16d");
+  });
+
+  it("says nothing about auth when the sign-in is healthy", () => {
+    const c = auditFailover(90 * 60_000, "codex", { provider: "claude", state: "ok", detail: "valid for 4h" });
+    expect(c.detail).not.toContain("auth");
+  });
+});
+
+describe("humanDuration", () => {
+  it("reads as an outage, not as a number nobody parses", () => {
+    expect(humanDuration(45 * 60_000)).toBe("45m");
+    expect(humanDuration(90 * 60_000)).toBe("1.5h");
+    expect(humanDuration(16 * 24 * 3_600_000)).toBe("16d");
   });
 });
