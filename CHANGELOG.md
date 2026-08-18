@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **`nia health` hung after printing** — the delivery check added in 0.5.9 read pending rows with a bare `getSql()` instead of `withDb()`, so every check ran and printed and then the command never exited, held open by a connection nobody closed. The daemon's monitor was unaffected; the CLI was not.
+
 ## [0.5.9] - 2026-08-18
 
 ### Fixed

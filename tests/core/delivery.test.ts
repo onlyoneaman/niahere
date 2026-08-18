@@ -59,3 +59,14 @@ describe("auditDelivery", () => {
     expect(c.detail.length).toBeLessThan(200);
   });
 });
+
+describe("the health check must let the CLI exit", () => {
+  // 0.5.9 read pending rows with a bare getSql(). Every check printed, then
+  // `nia health` hung forever on an open connection nobody closed.
+  test("the delivery check goes through withDb", async () => {
+    const src = await Bun.file("src/core/health.ts").text();
+    const block = src.slice(src.indexOf("auditDelivery("), src.indexOf("auditDelivery(") + 400);
+    expect(src).toContain("withDb");
+    expect(block).not.toMatch(/getSql\(\)/);
+  });
+});

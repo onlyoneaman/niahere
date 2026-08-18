@@ -272,8 +272,12 @@ export async function runHealthChecks(): Promise<Check[]> {
   // Replies written but never confirmed sent. 25 code paths write this column
   // and, until now, nothing read it.
   try {
+    // withDb, not a bare getSql(): the CLI must be able to exit afterwards, and
+    // a lazily-opened connection nobody closes keeps the event loop alive.
+    const { withDb } = await import("../db/with-db");
     const { Message } = await import("../db/models");
-    checks.push(auditDelivery(await Message.listPendingDeliveries()));
+    const pending = await withDb(() => Message.listPendingDeliveries());
+    checks.push(auditDelivery(pending));
   } catch (err) {
     checks.push({ name: "delivery", status: "warn", detail: errMsg(err) });
   }
