@@ -154,3 +154,14 @@ export async function getRoomStats(): Promise<RoomStats[]> {
     lastActivity: r.last_activity ? String(r.last_activity) : null,
   }));
 }
+
+/** Replies still marked pending — written, never confirmed sent. */
+export async function listPendingDeliveries(limit = 200): Promise<{ room: string; createdAt: string }[]> {
+  const sql = getSql();
+  const rows = await sql`
+    SELECT room, created_at FROM messages
+    WHERE is_from_agent AND delivery_status = 'pending'
+    ORDER BY created_at ASC LIMIT ${limit}
+  `;
+  return rows.map((r) => ({ room: String(r.room), createdAt: String(r.created_at) }));
+}

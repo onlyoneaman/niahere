@@ -13,6 +13,7 @@ import { log } from "../utils/log";
 import { asError, errMsg, ignore } from "../utils/errors";
 import { registerActiveHandle, unregisterActiveHandle } from "../core/active-handles";
 import { resolveJobPrompt } from "../core/job-prompt";
+import { initialDeliveryStatus } from "../core/delivery";
 import { truncate } from "../utils/format-activity";
 import { resolveChain, ChainCursor, describeEntry, providerHealth, type AgentSession, type FailoverScope } from "../agent";
 import { scopeOf, parseFailure } from "../agent/failure";
@@ -337,7 +338,7 @@ export async function createChatEngine(opts: EngineOptions): Promise<ChatEngine>
                     sender: "nia",
                     content: ev.text,
                     isFromAgent: true,
-                    deliveryStatus: "pending" as const,
+                    deliveryStatus: initialDeliveryStatus(channel),
                     metadata: ev.metadata,
                   };
                   try {

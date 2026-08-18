@@ -9,10 +9,11 @@ import { withRetry } from "../utils/retry";
 import { codexAvailable, codexModelSlugs } from "../agent/catalog";
 import { providerHealth } from "../agent/health";
 import { claudeAuthStatus, codexAuthStatus, type AuthStatus } from "../agent/auth";
+import { auditDelivery } from "./delivery";
 import { IMPLEMENTED, describeRef, planChain, resolveModel, type ModelRef } from "../agent/models";
 
-export type CheckStatus = "ok" | "warn" | "fail";
-export type Check = { name: string; status: CheckStatus; detail: string };
+export type { Check, CheckStatus } from "../types/health";
+import type { Check } from "../types/health";
 
 /** Past this, the chain is not falling back — it has moved. */
 export const FAILOVER_INCIDENT_MS = 60 * 60 * 1000;
@@ -267,6 +268,15 @@ export async function runHealthChecks(): Promise<Check[]> {
   checks.push(auditAuth(auth));
   const primary = auth.find((a) => a.provider === plan[0]?.provider);
   checks.push(auditFailover(providerHealth.fallbackStreakMs(), providerHealth.lastServer(), primary));
+
+  // Replies written but never confirmed sent. 25 code paths write this column
+  // and, until now, nothing read it.
+  try {
+    const { Message } = await import("../db/models");
+    checks.push(auditDelivery(await Message.listPendingDeliveries()));
+  } catch (err) {
+    checks.push({ name: "delivery", status: "warn", detail: errMsg(err) });
+  }
 
   // API keys
   const geminiKey = config.gemini_api_key;
