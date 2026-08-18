@@ -211,6 +211,16 @@ export const NIA_TOOLS: NiaTool[] = [
     handler: (args) => handlers.addRule(args.rule),
   },
   {
+    name: "search_memory",
+    description:
+      "Search all durable memory, including older entries that are not in your prompt. Only the newest and the curated sections are loaded each session, so check here before concluding something was never recorded.",
+    schema: {
+      query: z.string().describe("Text to look for in saved memories"),
+      limit: z.number().optional().describe("Max matches to return (default 20)"),
+    },
+    handler: (args) => handlers.searchMemory(args.query, args.limit),
+  },
+  {
     name: "read_memory",
     description:
       "Read all saved memories. Use this to check what you already know before saving duplicates, or to recall context about the owner, past incidents, preferences, etc.",

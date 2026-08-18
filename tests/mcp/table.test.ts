@@ -23,6 +23,7 @@ const EXPECTED_TOOLS = [
   "enable_watch_channel",
   "disable_watch_channel",
   "add_rule",
+  "search_memory",
   "read_memory",
   "add_memory",
   "list_agents",

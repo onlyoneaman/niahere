@@ -7,6 +7,7 @@ import { getAgentsSummary } from "../core/agents";
 import { getEmployeesSummary } from "../core/employees";
 import { Session } from "../db/models";
 import type { Mode } from "../types";
+import { splitMemory } from "../utils/memory-window";
 
 export { type SkillInfo } from "../core/skills";
 
@@ -18,11 +19,18 @@ function loadFile(dir: string, name: string): string {
 
 export function loadIdentity(): string {
   const { selfDir } = getPaths();
-  const files = ["identity.md", "owner.md", "soul.md", "rules.md", "memory.md"];
-  return files
-    .map((f) => loadFile(selfDir, f))
-    .filter(Boolean)
-    .join("\n\n");
+  // Rules load whole: they are verbs, and an unloaded rule is simply not
+  // followed. Memory is nouns — the newest and the curated sections load, the
+  // rest is one `search_memory` call away.
+  const always = ["identity.md", "owner.md", "soul.md", "rules.md"];
+  const parts = always.map((f) => loadFile(selfDir, f)).filter(Boolean);
+
+  const memory = loadFile(selfDir, "memory.md");
+  if (memory) {
+    const { loaded, pointer } = splitMemory(memory);
+    parts.push(loaded + pointer);
+  }
+  return parts.filter(Boolean).join("\n\n");
 }
 
 export function buildSystemPrompt(mode: Mode = "chat", channel: string = "terminal"): string {

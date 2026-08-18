@@ -4,17 +4,23 @@ import { join } from "path";
 import { getPaths } from "../../utils/paths";
 import { scanAgents } from "../../core/agents";
 import { listEmployeesForMcp } from "../../core/employees";
-import { readMemory as readMemoryUtil, addMemory as addMemoryUtil } from "../../utils/memory";
+import { readMemory as readMemoryUtil, addMemory as addMemoryUtil, searchMemory as searchMemoryUtil } from "../../utils/memory";
+import { findSecret } from "../../utils/secrets";
 
 export function addRule(rule: string): string {
+  const trimmed = rule.trim();
+  if (!trimmed) return "Rejected: empty rule.";
+  const secret = findSecret(trimmed);
+  if (secret) return `Rejected: looks like a ${secret}. Rules load into every session's prompt — put credentials in config.yaml.`;
   const { selfDir } = getPaths();
   const rulesPath = join(selfDir, "rules.md");
-  const line = `\n- ${rule}\n`;
+  const line = `\n- ${trimmed}\n`;
   appendFileSync(rulesPath, line, "utf8");
   return `Rule added to rules.md. Takes effect on next new session.`;
 }
 
 export const readMemory = readMemoryUtil;
+export const searchMemory = searchMemoryUtil;
 export const addMemory = addMemoryUtil;
 
 export function listAgents(): string {
