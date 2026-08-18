@@ -12,7 +12,7 @@ import { ChatSessions, chainLock } from "./common/chat-session";
 import { SlackAttachmentCache } from "./slack/attachments";
 import { SlackWatchReloader } from "./slack/watch";
 
-import { decideWatchReply } from "./common/watch-judgement";
+import { decideWatchReply, shouldSuppressReply } from "./common/reply";
 import { createTurnPump } from "./common/coalesce";
 
 const logActivity = (status: string) => log.debug({ status }, "slack engine activity");
@@ -304,7 +304,8 @@ class SlackChannel implements Channel {
             const { result } = await state.engine.send(subcommand, {
               onActivity: logActivity,
             });
-            await respond(result.trim() || "(no response)");
+            if (shouldSuppressReply(result)) return;
+            await respond(result.trim());
           } catch (err) {
             const errText = errMsg(err);
             await respond(`[error] ${errText}`);

@@ -1,28 +1,38 @@
 import { getConfig, updateRawConfig } from "../utils/config";
 import { getPaths } from "../utils/paths";
 import { errMsg } from "../utils/errors";
-import { fail, ICON_PASS, ICON_FAIL } from "../utils/cli";
+import { fail, ICON_PASS, ICON_FAIL, parseArgs } from "../utils/cli";
 import { log } from "../utils/log";
 
+const SEND_USAGE = "Usage: nia send [-c channel] [--to <slack-channel-id>] [--thread <ts>] <message>";
+
+export interface SendArgs {
+  channel?: string;
+  toChannelId?: string;
+  threadTs?: string;
+  message: string;
+  help: boolean;
+}
+
+/** Extracted so the parse is testable — `nia send --help` used to DM the flag. */
+export function parseSendArgs(args: string[] = process.argv.slice(3)): SendArgs {
+  const parsed = parseArgs(args);
+  return {
+    channel: parsed.getString("channel") || parsed.getString("c"),
+    toChannelId: parsed.getString("to"),
+    threadTs: parsed.getString("thread"),
+    message: parsed.positional.join(" "),
+    help: parsed.help,
+  };
+}
+
 export async function sendCommand(): Promise<void> {
-  const args = process.argv.slice(3);
-  let channel: string | undefined;
-  let toChannelId: string | undefined;
-  let threadTs: string | undefined;
-  const msgParts: string[] = [];
-  for (let i = 0; i < args.length; i++) {
-    if ((args[i] === "--channel" || args[i] === "-c") && args[i + 1]) {
-      channel = args[++i];
-    } else if (args[i] === "--to" && args[i + 1]) {
-      toChannelId = args[++i];
-    } else if (args[i] === "--thread" && args[i + 1]) {
-      threadTs = args[++i];
-    } else {
-      msgParts.push(args[i]);
-    }
+  let { channel, toChannelId, threadTs, message, help } = parseSendArgs();
+  if (help) {
+    console.log(SEND_USAGE);
+    return;
   }
-  const message = msgParts.join(" ");
-  if (!message) fail("Usage: nia send [-c channel] [--to <slack-channel-id>] [--thread <ts>] <message>");
+  if (!message) fail(SEND_USAGE);
 
   // --to implies slack channel
   if (toChannelId) channel = channel || "slack";

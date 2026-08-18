@@ -23,6 +23,8 @@ import { errMsg, ignore } from "../utils/errors";
 import { sendMessage as twilioSendMessage } from "./twilio/rest";
 import { getTwilioServer } from "./twilio/server";
 import { ChatSessions, chainLock } from "./common/chat-session";
+import { Message } from "../db/models";
+import { shouldSuppressReply } from "./common/reply";
 import { ackTwiml, deliveryStatusAck, isAllowedSender } from "./twilio/shared";
 
 class SmsChannel implements Channel {
@@ -105,8 +107,13 @@ class SmsChannel implements Channel {
     // Twilio's ~15s webhook timeout when the engine takes longer.
     chainLock(state, async () => {
       try {
-        const { result } = await state.engine.send(body);
-        const reply = result.trim() || "(no response)";
+        const { result, messageId } = await state.engine.send(body);
+        const reply = result.trim();
+        if (shouldSuppressReply(reply)) {
+          if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "sent"), "record suppressed delivery status");
+          log.info({ from }, "sms: agent chose not to reply");
+          return;
+        }
         await this.sendTo(from, reply);
       } catch (err) {
         log.error({ err, from }, "sms: engine error");

@@ -21,6 +21,7 @@ import { getMcpServers } from "../mcp";
 import { Message } from "../db/models";
 import { runMigrations } from "../db/migrate";
 import { ChatSessions, chainLock } from "./common/chat-session";
+import { shouldSuppressReply } from "./common/reply";
 import { ackTwiml, deliveryStatusAck, isAllowedSender } from "./twilio/shared";
 import type { Attachment, Channel, ChatState, Outbound, TwilioConfig, WhatsappConfig, PhoneConfig } from "../types";
 import { getConfig } from "../utils/config";
@@ -201,7 +202,12 @@ class WhatsAppChannel implements Channel {
 
       try {
         const { result, messageId } = await state.engine.send(userText || "(media only)", {}, attachments);
-        const reply = result.trim() || "(no response)";
+        const reply = result.trim();
+        if (shouldSuppressReply(reply)) {
+          if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "sent"), "record suppressed delivery status");
+          log.info({ from }, "whatsapp: agent chose not to reply");
+          return;
+        }
         try {
           await this.sendTextTo(from, reply);
           if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "sent"), "record sent delivery status");

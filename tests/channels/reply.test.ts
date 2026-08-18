@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { decideWatchReply, WATCH_JUDGEMENT_SCHEMA } from "../../src/channels/common/watch-judgement";
+import { decideWatchReply, shouldSuppressReply, cleanControlReply, WATCH_JUDGEMENT_SCHEMA } from "../../src/channels/common/reply";
 
 describe("decideWatchReply — structured", () => {
   test("a null reply is a decision to stay quiet, not a missing answer", () => {
@@ -120,5 +120,39 @@ describe("sentinel path is byte-equivalent to the shipped logic", () => {
 
     expect(original("**[NO_REPLY]**").ambiguous).toBe(true);
     expect(decideWatchReply(undefined, "**[NO_REPLY]**").ambiguous).toBe(false);
+  });
+});
+
+describe("shouldSuppressReply — the cross-channel guard", () => {
+  test("suppresses empty and known control artifacts", () => {
+    for (const t of ["", "   ", "[NO_REPLY]", "`[NO_REPLY]`", "--help", "`--help`", "-h"]) {
+      expect(shouldSuppressReply(t)).toBe(true);
+    }
+  });
+
+  test("does not suppress a real answer that mentions a flag", () => {
+    // The reason this matches exactly rather than by substring.
+    expect(shouldSuppressReply("Use `--help` to see CLI flags.")).toBe(false);
+    expect(shouldSuppressReply("help")).toBe(false);
+    expect(shouldSuppressReply("Here is the -h output you asked for")).toBe(false);
+  });
+
+  test("normalizes lightweight formatting", () => {
+    expect(cleanControlReply(" `--help` ")).toBe("--help");
+    expect(cleanControlReply("**[NO_REPLY]**")).toBe("[NO_REPLY]");
+  });
+});
+
+describe("the two matchers differ on purpose", () => {
+  test("a watch turn suppresses a sentinel mixed with content; an ordinary reply does not", () => {
+    const mixed = "[NO_REPLY]\n\nbut here is a thought";
+    // Watch: staying quiet is the safer reading of a confused judgement.
+    expect(decideWatchReply(undefined, mixed)).toMatchObject({ send: false, ambiguous: true });
+    // Ordinary channels: substring matching here would swallow real answers.
+    expect(shouldSuppressReply(mixed)).toBe(false);
+  });
+
+  test("a watch turn also drops CLI artifacts, and does not call them ambiguous", () => {
+    expect(decideWatchReply(undefined, "--help")).toMatchObject({ send: false, ambiguous: false });
   });
 });

@@ -12,6 +12,7 @@ import { getMcpServers } from "../mcp";
 import { classifyMime, validateAttachment, prepareImage } from "../utils/attachment";
 import { getNiaHome } from "../utils/paths";
 import { ChatSessions, chainLock } from "./common/chat-session";
+import { shouldSuppressReply } from "./common/reply";
 
 function safeExtension(filename?: string): string {
   const ext = filename?.split(".").pop();
@@ -187,7 +188,12 @@ class TelegramChannel implements Channel {
 
     try {
       const { result, messageId } = await state.engine.send(text, {}, attachments);
-      const reply = result.trim() || "(no response)";
+      const reply = result.trim();
+        if (shouldSuppressReply(reply)) {
+          if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "sent"), "record suppressed delivery status");
+          log.info({ chatId }, "telegram: agent chose not to reply");
+          return;
+        }
       try {
         await bot.api.sendMessage(chatId, reply);
         if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "sent"), "record sent delivery status");

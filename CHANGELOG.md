@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- **Control artifacts were delivered as messages** — `--help`, `-h` and empty replies reached users on every channel, and `nia send --help` sent the flag itself as a DM because the hand-rolled arg loop treated it as message text. Channels now share one `shouldSuppressReply`, `nia send` parses through `parseArgs` (so `--` still lets a literal `--help` through), and the `"(no response)"` placeholder is gone — silence is silence. Ported from work found uncommitted on the mini.
+- **Two sentinel parsers that disagreed** — `watch-judgement.ts` and a separate `reply.ts` both cleaned and matched `[NO_REPLY]`, with different rules. Merged into `src/channels/common/reply.ts`. The two matchers that remain differ deliberately and are pinned by a test: a watch turn suppresses a sentinel tangled up with content, where an ordinary reply must not, or "Use `--help` to see the flags" would vanish.
 - **Turns recorded a credential field that could not tell credentials apart** — 0.5.7 stored the SDK's `apiKeySource` as the record of which credential served a turn. Probing it directly shows it only describes *API key* provenance: it returns `"none"` for the inherited CLI login and for a configured oauth token alike, so it can never distinguish the two — which was the whole reason for storing it. (It also emits values outside its own declared union, `"none"` and `"ANTHROPIC_API_KEY"`.) Turns now record the credential Nia resolved itself, which it knows authoritatively; the SDK field is kept alongside because it is genuinely informative when an API key is in play.
 
 ## [0.5.7] - 2026-08-18
