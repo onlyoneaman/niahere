@@ -136,3 +136,17 @@ describe("claudeAuthStatus with a credential Nia owns", () => {
     expect(s.detail).toContain("renewed only when the CLI is used here");
   });
 });
+
+describe("the auth check agrees with the backend about which credential is used", () => {
+  test("a token in config.yaml is reported, not the file on disk", async () => {
+    // The check used to read only the environment while the backend read config
+    // first, so a configured token showed up as "Claude Code login".
+    const { resolveClaudeCredential } = await import("../../src/agent/credentials");
+    const configured = resolveClaudeCredential(
+      { anthropic_oauth_token: "sk-ant-oat-from-config", anthropic_api_key: null } as never,
+      () => undefined,
+    );
+    expect(configured.kind).toBe("oauth_token");
+    expect(configured.value).toBe("sk-ant-oat-from-config");
+  });
+});

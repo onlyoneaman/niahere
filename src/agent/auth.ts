@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 import type { ProviderName } from "./models";
+import { resolveClaudeCredential } from "./credentials";
+import { getConfig } from "../utils/config";
 
 /**
  * Provider sign-in state, read from whatever each CLI stores on disk.
@@ -43,6 +45,17 @@ const defaultReader: AuthReader = {
   env: (k) => process.env[k],
 };
 
+/** Config is optional here: a health check must never fail because config is
+ *  unreadable, it must say so. */
+function credentialConfig(): { anthropic_oauth_token: string | null; anthropic_api_key: string | null } {
+  try {
+    const c = getConfig();
+    return { anthropic_oauth_token: c.anthropic_oauth_token, anthropic_api_key: c.anthropic_api_key };
+  } catch {
+    return { anthropic_oauth_token: null, anthropic_api_key: null };
+  }
+}
+
 export function claudeCredentialsPath(): string {
   return join(homedir(), ".claude", ".credentials.json");
 }
@@ -62,12 +75,15 @@ function ago(ms: number): string {
 export function claudeAuthStatus(now: number = Date.now(), reader: AuthReader = defaultReader): AuthStatus {
   const base = { provider: "claude" as const };
 
-  // A credential Nia was handed does not lapse because nobody logged in today,
-  // so there is no expiry to police — only which one is in play.
-  if (reader.env("CLAUDE_CODE_OAUTH_TOKEN")) {
+  // Ask the same resolver the backend uses. Reading the environment here while
+  // the backend also reads config meant the check could report one credential
+  // while a different one served the turn — the exact ambiguity this exists to
+  // remove.
+  const credential = resolveClaudeCredential(credentialConfig(), reader.env);
+  if (credential.kind === "oauth_token") {
     return { ...base, state: "ok", detail: "configured oauth token (subscription, no refresh needed)" };
   }
-  if (reader.env("ANTHROPIC_API_KEY")) {
+  if (credential.kind === "api_key") {
     return { ...base, state: "ok", detail: "configured API key (metered — billed per token)" };
   }
 
