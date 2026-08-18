@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.9] - 2026-08-18
+
+### Fixed
+
+- **The whole of memory was loaded into every prompt** — `memory.md` had grown to 36.5 KB and, with `rules.md`, over half the chat system prompt, paid on every turn of every channel. Only the newest and the hand-curated sections load now; the rest is one `search_memory` call away. On the mini that is **11.8 KB loaded instead of 36.5 KB, 24.7 KB saved per turn**, with all four topical sections kept and 128 older memories still reachable. `rules.md` is deliberately untouched: rules are verbs and an unloaded rule is simply not followed, where memory is nouns and can be fetched. The prompt says how many memories are withheld and how to reach them, so this is disclosure rather than amnesia — and search is a plain scan, which at this size beats an index that must be kept in sync and cannot invent a near-match.
+- **Nothing stopped a credential being written into durable memory** — `memory.md` and `rules.md` load into every session's system prompt, so a key stored there is handed to every model on every turn until a human notices and edits the file. `addMemory()` checked length and line count and no more; `addRule()` validated nothing at all and appended straight to disk. Both now refuse recognised credentials — Anthropic, OpenAI, Slack, GitHub, AWS, Google, Twilio, bearer headers, private-key blocks, and database URLs carrying a password — and say where the value belongs instead. Patterns are anchored on each issuer's own format rather than on words like "key" or "token", so discussing credentials still works and pasting one does not. `addRule()` also stops appending a bare dash for an empty rule.
+- **Replies were marked undelivered forever, and nothing ever looked** — 25 code paths write `delivery_status` and none read it, so a crash between the pending write and the channel send would lose a message silently. Scout flagged it; checking the data first changed the fix. 23 of the 30 stuck rows on the mini were `nia run`, REPL and job replies, which print to stdout and have no delivery to confirm — a naive reconciliation would have re-sent months of terminal output into Slack. Local channels now record `sent` immediately, a migration resolves the historical artifacts, and a `delivery` health check reports what genuinely never confirmed. It reports rather than retries on purpose: the row proves a send *started*, not whether the API completed, so retrying would double-send to a real person after any crash that happened late.
+
 ## [0.5.8] - 2026-08-18
 
 ### Fixed
