@@ -74,19 +74,35 @@ describe("codexAuthStatus", () => {
   const idToken = (exp: number) =>
     `x.${Buffer.from(JSON.stringify({ exp: Math.floor(exp / 1000) })).toString("base64url")}.y`;
 
-  test("reads expiry out of the stored id token", () => {
+  test("reads expiry from the access token, which is what authenticates", () => {
     const s = codexAuthStatus(
       NOW,
-      reader({ "auth.json": JSON.stringify({ auth_mode: "chatgpt", tokens: { id_token: idToken(NOW + hours(3)) } }) }),
+      reader({ "auth.json": JSON.stringify({ auth_mode: "chatgpt", tokens: { access_token: idToken(NOW + hours(3)) } }) }),
     );
     expect(s.state).toBe("ok");
     expect(s.detail).toContain("chatgpt");
   });
 
+  test("ignores a lapsed id_token when the access token is live", () => {
+    // The mini's real shape: id_token expired 190h ago, access_token valid for
+    // two more days, codex serving perfectly. Reading id_token reported a
+    // permanent false alarm on every healthy install.
+    const s = codexAuthStatus(
+      NOW,
+      reader({
+        "auth.json": JSON.stringify({
+          auth_mode: "chatgpt",
+          tokens: { id_token: idToken(NOW - hours(190)), access_token: idToken(NOW + hours(48)) },
+        }),
+      }),
+    );
+    expect(s.state).toBe("ok");
+  });
+
   test("a lapsed codex token is stale, same as claude's", () => {
     const s = codexAuthStatus(
       NOW,
-      reader({ "auth.json": JSON.stringify({ auth_mode: "chatgpt", tokens: { id_token: idToken(NOW - hours(2)) } }) }),
+      reader({ "auth.json": JSON.stringify({ auth_mode: "chatgpt", tokens: { access_token: idToken(NOW - hours(2)) } }) }),
     );
     expect(s.state).toBe("stale");
   });

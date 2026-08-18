@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **The codex auth check cried wolf on every healthy install** — it read expiry from `id_token`, a short-lived OIDC identity token that lapses about an hour after each refresh, so it reported "token lapsed 8d ago" on the mini while codex was serving perfectly and its `access_token` had two days left. It now reads `access_token`, which is what actually authenticates. A check that reports a problem where there is none trains you to ignore it, which is the same failure as staying silent.
+
 ## [0.5.10] - 2026-08-18
 
 ### Fixed

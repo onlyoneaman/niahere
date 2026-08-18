@@ -144,7 +144,10 @@ export function codexAuthStatus(now: number = Date.now(), reader: AuthReader = d
   }
 
   const tokens = (auth.tokens ?? {}) as Record<string, unknown>;
-  const exp = jwtExpiry(typeof tokens.id_token === "string" ? tokens.id_token : undefined);
+  // access_token is what authenticates. id_token is a short-lived OIDC identity
+  // token that lapses about an hour after every refresh, so reading it reports
+  // "lapsed" for any healthy install — a permanent false alarm.
+  const exp = jwtExpiry(typeof tokens.access_token === "string" ? tokens.access_token : undefined);
   const mode = typeof auth.auth_mode === "string" ? auth.auth_mode : "oauth";
   if (exp === undefined) return { ...base, state: "unknown", detail: `${mode} sign-in, no readable expiry` };
   if (exp <= now) return { ...base, state: "stale", detail: `${mode} token lapsed ${ago(now - exp)} ago, renewable` };
