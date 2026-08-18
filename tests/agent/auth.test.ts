@@ -112,3 +112,27 @@ describe("jwtExpiry", () => {
     expect(jwtExpiry("a.!!!.c")).toBeUndefined();
   });
 });
+
+describe("claudeAuthStatus with a credential Nia owns", () => {
+  test("a configured oauth token has no expiry to police", () => {
+    const s = claudeAuthStatus(NOW, reader({}, { CLAUDE_CODE_OAUTH_TOKEN: "sk-ant-oat-x" }));
+    expect(s.state).toBe("ok");
+    expect(s.detail).toContain("no refresh needed");
+  });
+
+  test("a configured api key says it is metered, because that is a different bill", () => {
+    const s = claudeAuthStatus(NOW, reader({}, { ANTHROPIC_API_KEY: "sk-ant-api-x" }));
+    expect(s.state).toBe("ok");
+    expect(s.detail).toContain("metered");
+  });
+
+  test("an oauth token wins over an api key", () => {
+    const s = claudeAuthStatus(NOW, reader({}, { CLAUDE_CODE_OAUTH_TOKEN: "t", ANTHROPIC_API_KEY: "k" }));
+    expect(s.detail).toContain("oauth token");
+  });
+
+  test("falling back to the CLI's login says so, since that is the fragile case", () => {
+    const s = claudeAuthStatus(NOW, reader({ ".credentials.json": creds({}) }));
+    expect(s.detail).toContain("renewed only when the CLI is used here");
+  });
+});

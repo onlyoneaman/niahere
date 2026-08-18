@@ -90,6 +90,7 @@ function attribute(modelUsage: unknown): Record<string, unknown> | undefined {
  * stay backend-agnostic.
  */
 export class SdkNormalizer implements Normalizer {
+  private apiKeySource: string | undefined;
   private accumulatedThinking = "";
   private lastThinkingLine = "";
 
@@ -97,6 +98,10 @@ export class SdkNormalizer implements Normalizer {
     const msg = message as any;
 
     if (msg.type === "system" && msg.subtype === "init") {
+      // apiKeySource names which credential served the session ('oauth' is
+      // Claude Code's own login). Recording it is what makes a silent switch
+      // of credential visible after the fact.
+      if (typeof msg.apiKeySource === "string") this.apiKeySource = msg.apiKeySource;
       return [{ type: "session", backendSessionId: msg.session_id }];
     }
 
@@ -211,6 +216,7 @@ export class SdkNormalizer implements Normalizer {
           terminal_reason: msg.terminal_reason,
           session_id: msg.session_id,
           subtype: msg.subtype,
+          api_key_source: this.apiKeySource,
           usage: msg.usage,
           model_usage: attribute(msg.modelUsage),
         },

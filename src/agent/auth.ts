@@ -62,8 +62,13 @@ function ago(ms: number): string {
 export function claudeAuthStatus(now: number = Date.now(), reader: AuthReader = defaultReader): AuthStatus {
   const base = { provider: "claude" as const };
 
+  // A credential Nia was handed does not lapse because nobody logged in today,
+  // so there is no expiry to police — only which one is in play.
+  if (reader.env("CLAUDE_CODE_OAUTH_TOKEN")) {
+    return { ...base, state: "ok", detail: "configured oauth token (subscription, no refresh needed)" };
+  }
   if (reader.env("ANTHROPIC_API_KEY")) {
-    return { ...base, state: "ok", detail: "API key (no expiry)" };
+    return { ...base, state: "ok", detail: "configured API key (metered — billed per token)" };
   }
 
   const path = claudeCredentialsPath();
@@ -97,7 +102,11 @@ export function claudeAuthStatus(now: number = Date.now(), reader: AuthReader = 
     return { ...status, state: "stale", detail: `access token lapsed ${ago(now - access)} ago, renewable${plan}` };
   }
   if (access !== undefined) {
-    return { ...status, state: "ok", detail: `valid for ${ago(access - now)}${plan}` };
+    return {
+      ...status,
+      state: "ok",
+      detail: `Claude Code login, valid for ${ago(access - now)}${plan} — renewed only when the CLI is used here`,
+    };
   }
   return { ...status, state: "unknown", detail: "credentials file carries no expiry" };
 }

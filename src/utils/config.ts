@@ -15,6 +15,8 @@ const DEFAULTS: Config = {
   activeHours: { start: "00:00", end: "23:59" },
   database_url: DEFAULT_DATABASE_URL,
   log_level: "info",
+  anthropic_oauth_token: null,
+  anthropic_api_key: null,
   gemini_api_key: null,
   sessionFinalization: {
     enabled: true,
@@ -129,6 +131,11 @@ export function loadConfig(): Config {
   const log_level = process.env.LOG_LEVEL || (typeof raw.log_level === "string" ? raw.log_level : DEFAULTS.log_level);
 
   // Gemini API key — env var overrides config
+  const anthropic_oauth_token =
+    process.env.CLAUDE_CODE_OAUTH_TOKEN ||
+    (typeof raw.anthropic_oauth_token === "string" ? raw.anthropic_oauth_token : null);
+  const anthropic_api_key =
+    process.env.ANTHROPIC_API_KEY || (typeof raw.anthropic_api_key === "string" ? raw.anthropic_api_key : null);
   const gemini_api_key =
     process.env.GEMINI_API_KEY || (typeof raw.gemini_api_key === "string" ? raw.gemini_api_key : null);
 
@@ -256,6 +263,8 @@ export function loadConfig(): Config {
     activeHours: { start, end },
     database_url,
     log_level,
+    anthropic_oauth_token,
+    anthropic_api_key,
     gemini_api_key,
     sessionFinalization,
     channels: {

@@ -11,6 +11,7 @@ import { MessageStream } from "../message-stream";
 import { getSdkSkillsSetting } from "../../core/skills";
 import { getSdkHooks } from "../../core/sdk-hooks";
 import { getConfig } from "../../utils/config";
+import { resolveClaudeCredential, credentialEnv } from "../credentials";
 import { sleep } from "../../utils/retry";
 
 /** The shape of the SDK `query()` handle the session consumes. Injected so the
@@ -105,6 +106,14 @@ class ClaudeSession implements AgentSession {
       // Interactive sessions also forbid auto-continue of a prior session in the
       // same cwd; jobs always run with a unique id and never auto-continued.
       if (this.ctx.interactive) options.continue = false;
+    }
+    // Hand the CLI a credential Nia owns when one is configured. Without this
+    // it inherits ~/.claude/.credentials.json, which only refreshes when a
+    // human runs `claude` on this machine — the coupling that had Nia
+    // answering as codex for sixteen days.
+    const credential = resolveClaudeCredential(getConfig());
+    if (credential.envVar) {
+      options.env = credentialEnv(credential, process.env as Record<string, string>);
     }
     if (this.ctx.outputSchema) options.outputFormat = { type: "json_schema", schema: this.ctx.outputSchema };
     if (this.ctx.mcpServers) options.mcpServers = this.ctx.mcpServers;

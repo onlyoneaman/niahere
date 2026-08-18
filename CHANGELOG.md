@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **Nia can hold its own Claude credential** — `anthropic_oauth_token` (from `claude setup-token`) or `anthropic_api_key` in config.yaml, passed to the SDK's spawned CLI via `options.env`. Without one, Nia inherits `~/.claude/.credentials.json`, which is only renewed when a human runs `claude` on that machine — the coupling that had Nia answering as codex for sixteen days while its owner's terminal quietly kept it alive. The oauth token is preferred and keeps the subscription; an API key is accepted but reported as metered, because that is a different bill. Switching credentials clears the other variable so a removed one stops working immediately rather than at the next restart, and the `auth` check names which is in play. Turns also record the SDK's `apiKeySource`, so a silent change of credential is visible after the fact.
+
 ## [0.5.6] - 2026-08-17
 
 ### Fixed

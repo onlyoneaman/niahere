@@ -112,6 +112,11 @@ export interface Config {
   activeHours: { start: string; end: string };
   database_url: string;
   log_level: string;
+  /** Long-lived token from `claude setup-token`. Preferred: it keeps the
+   *  subscription and does not depend on anyone logging in on this machine. */
+  anthropic_oauth_token: string | null;
+  /** Metered per-token billing — a different bill from the subscription. */
+  anthropic_api_key: string | null;
   gemini_api_key: string | null;
   sessionFinalization: SessionFinalizationConfig;
   channels: ChannelsConfig;
