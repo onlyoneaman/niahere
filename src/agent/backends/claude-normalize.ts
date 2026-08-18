@@ -90,6 +90,15 @@ function attribute(modelUsage: unknown): Record<string, unknown> | undefined {
  * stay backend-agnostic.
  */
 export class SdkNormalizer implements Normalizer {
+  /**
+   * The SDK's `apiKeySource` only describes where an *API key* came from: it
+   * reports "none" for every OAuth path, so it cannot tell a configured token
+   * from the CLI's inherited login. Nia resolved the credential itself, so it
+   * records that too — the SDK's value is kept because it is genuinely
+   * informative when an API key is in play.
+   */
+  constructor(private readonly credential?: string) {}
+
   private apiKeySource: string | undefined;
   private accumulatedThinking = "";
   private lastThinkingLine = "";
@@ -217,6 +226,7 @@ export class SdkNormalizer implements Normalizer {
           session_id: msg.session_id,
           subtype: msg.subtype,
           api_key_source: this.apiKeySource,
+          credential: this.credential,
           usage: msg.usage,
           model_usage: attribute(msg.modelUsage),
         },

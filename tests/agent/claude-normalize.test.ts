@@ -316,3 +316,37 @@ describe("terminal reasons the SDK grew", () => {
     );
   });
 });
+
+describe("which credential served the turn", () => {
+  // The SDK's apiKeySource reports "none" for every OAuth path — inherited
+  // login and configured token alike — so it cannot answer the question it
+  // looks like it answers. Nia records what it resolved itself.
+  test("records the credential Nia chose, not just the SDK's field", () => {
+    const n = new SdkNormalizer("oauth_token");
+    const [ev] = n.consume({ type: "result", is_error: false, result: "ok", session_id: "s1" });
+    if (ev?.type !== "result") throw new Error("expected result");
+    expect(ev.metadata?.credential).toBe("oauth_token");
+  });
+
+  test("keeps the SDK's apiKeySource too — it is informative for an API key", () => {
+    const n = new SdkNormalizer("api_key");
+    n.consume({ type: "system", subtype: "init", session_id: "s1", apiKeySource: "ANTHROPIC_API_KEY" });
+    const [ev] = n.consume({ type: "result", is_error: false, result: "ok", session_id: "s1" });
+    if (ev?.type !== "result") throw new Error("expected result");
+    expect(ev.metadata?.api_key_source).toBe("ANTHROPIC_API_KEY");
+    expect(ev.metadata?.credential).toBe("api_key");
+  });
+
+  test("distinguishes the two OAuth paths the SDK collapses into 'none'", () => {
+    const configured = new SdkNormalizer("oauth_token");
+    const inherited = new SdkNormalizer("claude_code_login");
+    for (const n of [configured, inherited]) {
+      n.consume({ type: "system", subtype: "init", session_id: "s", apiKeySource: "none" });
+    }
+    const a = configured.consume({ type: "result", is_error: false, result: "", session_id: "s" })[0];
+    const b = inherited.consume({ type: "result", is_error: false, result: "", session_id: "s" })[0];
+    if (a?.type !== "result" || b?.type !== "result") throw new Error("expected results");
+    expect(a.metadata?.api_key_source).toBe(b.metadata?.api_key_source); // SDK cannot tell them apart
+    expect(a.metadata?.credential).not.toBe(b.metadata?.credential); // Nia can
+  });
+});

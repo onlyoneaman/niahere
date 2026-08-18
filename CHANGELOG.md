@@ -1,10 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Turns recorded a credential field that could not tell credentials apart** — 0.5.7 stored the SDK's `apiKeySource` as the record of which credential served a turn. Probing it directly shows it only describes *API key* provenance: it returns `"none"` for the inherited CLI login and for a configured oauth token alike, so it can never distinguish the two — which was the whole reason for storing it. (It also emits values outside its own declared union, `"none"` and `"ANTHROPIC_API_KEY"`.) Turns now record the credential Nia resolved itself, which it knows authoritatively; the SDK field is kept alongside because it is genuinely informative when an API key is in play.
+
 ## [0.5.7] - 2026-08-18
 
 ### Added
 
-- **Nia can hold its own Claude credential** — `anthropic_oauth_token` (from `claude setup-token`) or `anthropic_api_key` in config.yaml, passed to the SDK's spawned CLI via `options.env`. Without one, Nia inherits `~/.claude/.credentials.json`, which is only renewed when a human runs `claude` on that machine — the coupling that had Nia answering as codex for sixteen days while its owner's terminal quietly kept it alive. The oauth token is preferred and keeps the subscription; an API key is accepted but reported as metered, because that is a different bill. Switching credentials clears the other variable so a removed one stops working immediately rather than at the next restart, and the `auth` check names which is in play. Turns also record the SDK's `apiKeySource`, so a silent change of credential is visible after the fact. The `auth` check resolves the credential through the same code path as the backend, so it can never report one credential while another serves the turn.
+- **Nia can hold its own Claude credential** — `anthropic_oauth_token` (from `claude setup-token`) or `anthropic_api_key` in config.yaml, passed to the SDK's spawned CLI via `options.env`. Without one, Nia inherits `~/.claude/.credentials.json`, which is only renewed when a human runs `claude` on that machine — the coupling that had Nia answering as codex for sixteen days while its owner's terminal quietly kept it alive. The oauth token is preferred and keeps the subscription; an API key is accepted but reported as metered, because that is a different bill. Switching credentials clears the other variable so a removed one stops working immediately rather than at the next restart, and the `auth` check names which is in play. The `auth` check resolves the credential through the same code path as the backend, so it can never report one credential while another serves the turn.
 
 ## [0.5.6] - 2026-08-17
 

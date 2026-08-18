@@ -128,7 +128,7 @@ class ClaudeSession implements AgentSession {
     while (true) {
       if (!this.iterator || !this.stream) this.startQuery();
       this.stream!.push(text, attachments);
-      const normalizer = new SdkNormalizer();
+      const normalizer = new SdkNormalizer(resolveClaudeCredential(getConfig()).kind);
       let retry = false;
 
       while (true) {
