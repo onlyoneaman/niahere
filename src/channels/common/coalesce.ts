@@ -37,9 +37,51 @@ export interface CoalescerOptions {
   maxBatch?: number;
   /** Defaults to serializing internally, which suits a caller with no lock. */
   schedule?: Schedule;
+  /**
+   * Consecutive turns whose reply may be folded forward before one is sent
+   * regardless. A room that never goes quiet must still get an answer.
+   */
+  maxDeferrals?: number;
 }
 
 const DEFAULT_MAX_BATCH = 10;
+const DEFAULT_MAX_DEFERRALS = 2;
+
+/**
+ * What a running turn can ask about its own standing.
+ *
+ * Coalescing answers the question "which messages share a turn". It cannot
+ * answer "is this reply still worth sending", because the message that
+ * obsoletes a reply arrives while the turn that produces it is still running.
+ * Roughly one in eight messages to the Slack DM lands mid-turn, and the ones
+ * that do are corrections — "i meant browser" sat 49 seconds behind an answer
+ * to the question it replaced, and that answer went out first.
+ */
+export interface TurnControl {
+  /**
+   * True when a newer message for this room is already queued, so this reply
+   * answers a superseded question. Fold it forward instead of sending: the
+   * text stays in the session, so the next turn can restate whatever still
+   * matters and answer both in one reply.
+   *
+   * Decided on first call and stable thereafter — a message landing during
+   * delivery must not retroactively unsend a reply.
+   */
+  superseded(): boolean;
+
+  /**
+   * True when the turn before this one folded its reply forward. That text is
+   * in the session, so without being told otherwise the model reads its own
+   * undelivered answer and writes "as I said above" about something nobody
+   * saw. This turn's reply has to cover both.
+   */
+  readonly previousReplyWithheld: boolean;
+}
+
+interface TurnControlInternal extends TurnControl {
+  /** Whether `superseded()` was both asked and answered yes. */
+  readonly deferred: boolean;
+}
 
 export interface Coalescer {
   /** Offer a message. Runs now, or joins the next batch. */
@@ -49,12 +91,28 @@ export interface Coalescer {
 }
 
 export function createCoalescer(
-  process: (batch: Pending[]) => Promise<void>,
+  process: (batch: Pending[], turn: TurnControl) => Promise<void>,
   options: CoalescerOptions = {},
 ): Coalescer {
   const maxBatch = Math.max(1, options.maxBatch ?? DEFAULT_MAX_BATCH);
+  const maxDeferrals = Math.max(0, options.maxDeferrals ?? DEFAULT_MAX_DEFERRALS);
   const queue: Pending[] = [];
   let scheduled = false;
+  let deferrals = 0;
+
+  function control(canDefer: boolean, previousReplyWithheld: boolean): TurnControlInternal {
+    let decided: boolean | null = null;
+    return {
+      previousReplyWithheld,
+      superseded() {
+        if (decided === null) decided = canDefer && queue.length > 0;
+        return decided;
+      },
+      get deferred() {
+        return decided === true;
+      },
+    };
+  }
 
   // Two chains, deliberately separate. `lockChain` is the fallback scheduler for
   // a caller with no lock of its own; `idleChain` only tracks completion so
@@ -78,8 +136,14 @@ export function createCoalescer(
         scheduled = false;
         const batch = queue.splice(0, maxBatch);
         if (batch.length === 0) return;
+        // `deferrals` resets whenever a turn replies, so a non-zero count means
+        // the turn immediately before this one withheld its reply.
+        const turn = control(deferrals < maxDeferrals, deferrals > 0);
         // A turn that throws must not strand the messages queued behind it.
-        await process(batch).catch(() => {});
+        await process(batch, turn).catch(() => {});
+        // A turn that replied clears the run; only folded-forward ones count
+        // toward the cap.
+        deferrals = turn.deferred ? deferrals + 1 : 0;
         if (queue.length > 0) kick();
       } finally {
         settle();
@@ -108,17 +172,26 @@ export function createCoalescer(
  * three redundant replies into one *incomplete* reply would be worse than the
  * behaviour it replaces.
  */
-export function mergeMessages(items: Pending[]): Pending {
+export function mergeMessages(items: Pending[], previousReplyWithheld = false): Pending {
   const attachments = items.flatMap((i) => i.attachments ?? []);
   const parts = items.map((i) => i.text.trim()).filter((t) => t.length > 0);
 
-  if (items.length === 1) return { text: items[0]!.text, attachments };
-  if (parts.length === 0) return { text: "", attachments };
-  if (parts.length === 1) return { text: parts[0]!, attachments };
+  const notes: string[] = [];
+  if (previousReplyWithheld) notes.push(WITHHELD_NOTE);
+  if (parts.length > 1) {
+    notes.push(`[${parts.length} messages arrived together while you were working. Answer all of them.]`);
+  }
 
-  const header = `[${parts.length} messages arrived together while you were working. Answer all of them.]`;
-  return { text: `${header}\n\n${parts.join("\n\n")}`, attachments };
+  const body =
+    items.length === 1 ? items[0]!.text : parts.length === 0 ? "" : parts.length === 1 ? parts[0]! : parts.join("\n\n");
+
+  if (notes.length === 0) return { text: body, attachments };
+  return { text: `${notes.join("\n")}\n\n${body}`, attachments };
 }
+
+const WITHHELD_NOTE =
+  "[Your last reply was not sent — this arrived before it went out, so the user has never seen it. " +
+  "Cover anything from it that still matters.]";
 
 /** An inbound message plus whatever the channel needs to answer it. */
 export interface Inbound<C> extends Pending {
@@ -145,7 +218,7 @@ export interface TurnPump<K, C> {
  */
 export function createTurnPump<K, C>(
   lockFor: (key: K) => Schedule,
-  run: (key: K, batch: Inbound<C>[], merged: Pending) => Promise<void>,
+  run: (key: K, batch: Inbound<C>[], merged: Pending, turn: TurnControl) => Promise<void>,
   options: CoalescerOptions = {},
 ): TurnPump<K, C> {
   const queues = new Map<K, Coalescer>();
@@ -154,8 +227,8 @@ export function createTurnPump<K, C>(
     let q = queues.get(key);
     if (!q) {
       q = createCoalescer(
-        async (batch) => {
-          await run(key, batch as Inbound<C>[], mergeMessages(batch));
+        async (batch, turn) => {
+          await run(key, batch as Inbound<C>[], mergeMessages(batch, turn.previousReplyWithheld), turn);
         },
         { ...options, schedule: lockFor(key) },
       );

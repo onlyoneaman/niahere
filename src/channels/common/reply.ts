@@ -1,3 +1,5 @@
+import type { TurnControl } from "./coalesce";
+
 /**
  * What counts as a reply, and what is just the model talking to itself.
  *
@@ -76,4 +78,40 @@ export function decideWatchReply(structured: unknown, raw: string): WatchDecisio
     return { send: false, text: "", source: "sentinel", ambiguous: !exact };
   }
   return { send: true, text: trimmed, source: "sentinel" };
+}
+
+export interface Delivery {
+  /** Whether to put the text in front of the reader now. */
+  post: boolean;
+  /** The reply text. Kept even when held back, so the caller can log it. */
+  text: string;
+  /** Which path judged the reply. */
+  source: WatchDecision["source"];
+  /** Why it is not being posted. */
+  reason?: "silent" | "ambiguous" | "superseded";
+}
+
+/**
+ * The whole judgement on a finished turn's reply: is there anything to say,
+ * and is it still worth saying.
+ *
+ * Order matters. A turn that chose silence is never asked whether it was
+ * superseded — it withheld nothing, and most watch-channel turns are silent,
+ * so charging them a deferral would exhaust the cap on rooms that never
+ * deferred anything.
+ */
+export function decideDelivery(structured: unknown, raw: string, turn: Pick<TurnControl, "superseded">): Delivery {
+  const decision = decideWatchReply(structured, raw);
+  if (!decision.send) {
+    return {
+      post: false,
+      text: decision.text,
+      source: decision.source,
+      reason: decision.ambiguous ? "ambiguous" : "silent",
+    };
+  }
+  if (turn.superseded()) {
+    return { post: false, text: decision.text, source: decision.source, reason: "superseded" };
+  }
+  return { post: true, text: decision.text, source: decision.source };
 }

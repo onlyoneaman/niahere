@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { decideWatchReply, shouldSuppressReply, cleanControlReply, WATCH_JUDGEMENT_SCHEMA } from "../../src/channels/common/reply";
+import { decideWatchReply, decideDelivery, shouldSuppressReply, cleanControlReply, WATCH_JUDGEMENT_SCHEMA } from "../../src/channels/common/reply";
 
 describe("decideWatchReply — structured", () => {
   test("a null reply is a decision to stay quiet, not a missing answer", () => {
@@ -154,5 +154,55 @@ describe("the two matchers differ on purpose", () => {
 
   test("a watch turn also drops CLI artifacts, and does not call them ambiguous", () => {
     expect(decideWatchReply(undefined, "--help")).toMatchObject({ send: false, ambiguous: false });
+  });
+});
+
+describe("decideDelivery", () => {
+  /** A turn control that records whether it was consulted at all. */
+  function turn(superseded: boolean) {
+    let asked = 0;
+    return {
+      superseded() {
+        asked++;
+        return superseded;
+      },
+      asked: () => asked,
+    };
+  }
+
+  test("a reply with nothing queued behind it is posted", () => {
+    expect(decideDelivery({ reply: "on it" }, "", turn(false))).toMatchObject({ post: true, text: "on it" });
+  });
+
+  test("a reply a newer message has overtaken is held back", () => {
+    // The prod case: the answer to the question the user already replaced must
+    // not go out on its own ahead of the correction.
+    expect(decideDelivery({ reply: "checked prod" }, "", turn(true))).toMatchObject({
+      post: false,
+      reason: "superseded",
+    });
+  });
+
+  test("a held-back reply keeps its text, so the caller can still log it", () => {
+    expect(decideDelivery({ reply: "checked prod" }, "", turn(true)).text).toBe("checked prod");
+  });
+
+  test("a turn that chose silence is never asked whether it was superseded", () => {
+    // Most watch-channel turns stay quiet. A silent turn withheld nothing, so
+    // charging it a deferral would exhaust the cap on rooms that never
+    // deferred anything.
+    const t = turn(true);
+    expect(decideDelivery({ reply: null }, "", t)).toMatchObject({ post: false, reason: "silent" });
+    expect(t.asked()).toBe(0);
+  });
+
+  test("a sentinel tangled up with content is still reported as ambiguous", () => {
+    const d = decideDelivery(undefined, "[NO_REPLY] but here is the answer anyway", turn(false));
+    expect(d).toMatchObject({ post: false, reason: "ambiguous" });
+  });
+
+  test("the decision's source survives, so the existing log lines keep their detail", () => {
+    expect(decideDelivery({ reply: "hi" }, "", turn(false)).source).toBe("structured");
+    expect(decideDelivery(undefined, "hi", turn(false)).source).toBe("sentinel");
   });
 });

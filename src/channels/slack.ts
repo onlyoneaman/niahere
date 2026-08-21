@@ -12,7 +12,7 @@ import { ChatSessions, chainLock } from "./common/chat-session";
 import { SlackAttachmentCache } from "./slack/attachments";
 import { SlackWatchReloader } from "./slack/watch";
 
-import { decideWatchReply, shouldSuppressReply } from "./common/reply";
+import { decideDelivery, shouldSuppressReply } from "./common/reply";
 import { createTurnPump } from "./common/coalesce";
 
 const logActivity = (status: string) => log.debug({ status }, "slack engine activity");
@@ -155,7 +155,7 @@ class SlackChannel implements Channel {
      */
     const slackPump = createTurnPump<string, SlackTurnCtx>(
       (key) => (fn) => withLock(key, fn),
-      async (key, batch, merged) => {
+      async (key, batch, merged, turn) => {
         // The newest message decides where the reply goes; every message in the
         // batch needs its own reaction cleared.
         const last = batch[batch.length - 1]!.ctx;
@@ -222,17 +222,23 @@ class SlackChannel implements Channel {
             return;
           }
 
-          const decision = decideWatchReply(structured, result);
-          const reply = decision.text;
+          const delivery = decideDelivery(structured, result, turn);
+          const reply = delivery.text;
 
-          if (!decision.send) {
-            if (decision.ambiguous) {
+          if (!delivery.post) {
+            if (delivery.reason === "ambiguous") {
               log.warn(
-                { channel: msg.channel, key, reply: result.trim(), source: decision.source },
+                { channel: msg.channel, key, reply: result.trim(), source: delivery.source },
                 "slack: [NO_REPLY] sentinel mixed with content; suppressing send",
               );
+            } else if (delivery.reason === "superseded") {
+              // The text stays in the session, so the next turn answers both.
+              log.info(
+                { channel: msg.channel, key, chars: reply.length },
+                "slack: reply superseded by a newer message; folding into the next turn",
+              );
             } else {
-              log.info({ channel: msg.channel, key, source: decision.source }, "slack: agent chose not to reply");
+              log.info({ channel: msg.channel, key, source: delivery.source }, "slack: agent chose not to reply");
             }
             if (messageId) await ignore(Message.updateDeliveryStatus(messageId, "sent"), "record sent delivery status");
             return;

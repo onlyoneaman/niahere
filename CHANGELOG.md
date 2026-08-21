@@ -1,6 +1,10 @@
 # Changelog
 
-## [0.5.11] - 2026-08-18
+## [0.5.12] - 2026-08-22
+
+### Fixed
+
+- **A reply the next message had already made pointless went out first** — coalescing settles which messages share a turn, but the correction that obsoletes an answer arrives while the turn writing it is still running, so it could only ever queue behind that answer. On the mini, one in eight Slack DM messages lands mid-turn and the ones that do are corrections: "i meant browser" sat 49 seconds behind a full reply to the question it replaced, and that reply was the one read first. A finished turn now asks whether a newer message is already waiting and, if so, folds its reply into the next turn instead of sending it. Nothing is thrown away — the text stays in the session, and the next turn is told it never reached the reader, so one reply covers both rather than the model referring back to something nobody saw. Only turns with something to post ask, so the watch channel's many silent turns cannot spend the two-deferral cap that keeps a busy room from waiting forever. Slack only; telegram/sms/whatsapp do not use the pump.
 
 ### Fixed
 

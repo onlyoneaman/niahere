@@ -340,3 +340,194 @@ describe("createTurnPump", () => {
     expect(h.turns.map((t) => t.key)).toEqual(["gone", "kept"]);
   });
 });
+
+describe("supersede signal", () => {
+  /** A processor that records what the turn was told about its own staleness. */
+  function recording(maxDeferrals?: number) {
+    const seen: Array<{ texts: string[]; superseded: boolean }> = [];
+    const releases: Array<() => void> = [];
+    const c = createCoalescer(
+      async (batch, turn) => {
+        await new Promise<void>((r) => releases.push(r));
+        seen.push({ texts: batch.map((b) => b.text), superseded: turn.superseded() });
+      },
+      maxDeferrals === undefined ? {} : { maxDeferrals },
+    );
+    const release = async () => {
+      const r = releases.shift();
+      if (!r) throw new Error("nothing in flight to release");
+      r();
+      await tick();
+    };
+    return { c, seen, release };
+  }
+
+  test("a turn nobody interrupted is not superseded", async () => {
+    const r = recording();
+    r.c.push(msg("only one"));
+    await tick();
+    await r.release();
+    expect(r.seen).toEqual([{ texts: ["only one"], superseded: false }]);
+  });
+
+  test("a turn whose reply arrives after a newer message is superseded", async () => {
+    // The case from prod: "i meant browser" lands mid-turn, so the answer to
+    // the question it replaces must not be sent on its own.
+    const r = recording();
+    r.c.push(msg("check the file"));
+    await tick();
+    r.c.push(msg("i meant browser"));
+    await r.release();
+    expect(r.seen[0]).toEqual({ texts: ["check the file"], superseded: true });
+  });
+
+  test("the follow-up turn is not itself superseded when nothing more arrived", async () => {
+    const r = recording();
+    r.c.push(msg("first"));
+    await tick();
+    r.c.push(msg("second"));
+    await r.release();
+    await r.release();
+    expect(r.seen.map((s) => s.superseded)).toEqual([true, false]);
+  });
+
+  test("deferral is capped so a steady stream still gets an answer", async () => {
+    // Without a cap, a room that never goes quiet would never see a reply.
+    const r = recording(2);
+    r.c.push(msg("t1"));
+    await tick();
+    r.c.push(msg("t2"));
+    await r.release();
+    r.c.push(msg("t3"));
+    await r.release();
+    r.c.push(msg("t4"));
+    await r.release();
+    expect(r.seen.map((s) => s.superseded)).toEqual([true, true, false]);
+  });
+
+  test("the cap resets once a turn actually replies", async () => {
+    const r = recording(1);
+    r.c.push(msg("a"));
+    await tick();
+    r.c.push(msg("b"));
+    await r.release(); // superseded (1st deferral, at the cap)
+    await r.release(); // nothing pending → replies, resetting the count
+    r.c.push(msg("c"));
+    await tick();
+    r.c.push(msg("d"));
+    await r.release(); // free to defer again
+    expect(r.seen.map((s) => s.superseded)).toEqual([true, false, true]);
+  });
+
+  test("the answer is decided once, so a late arrival cannot flip a sent reply", async () => {
+    // The channel asks once and then sends. A message landing during delivery
+    // must not retroactively turn that into a deferral.
+    let control: { superseded(): boolean } | null = null;
+    const releases: Array<() => void> = [];
+    const c = createCoalescer(async (_batch, turn) => {
+      control = turn;
+      await new Promise<void>((r) => releases.push(r));
+    });
+    c.push(msg("x"));
+    await tick();
+    expect(control!.superseded()).toBe(false);
+    c.push(msg("late"));
+    expect(control!.superseded()).toBe(false);
+    releases.shift()!();
+    await tick();
+  });
+
+  test("the pump hands each room's turn its own supersede signal", async () => {
+    const locks = new Map<string, Promise<void>>();
+    const lockFor = (key: string) => (fn: () => Promise<void>) => {
+      locks.set(key, (locks.get(key) ?? Promise.resolve()).then(fn, fn));
+    };
+    const seen: Array<{ key: string; superseded: boolean }> = [];
+    const pump = createTurnPump<string, string>(lockFor, async (key, _batch, _merged, turn) => {
+      await new Promise((r) => setTimeout(r, 5));
+      seen.push({ key, superseded: turn.superseded() });
+    });
+
+    pump.push("busy", { text: "q", attachments: [], ctx: "c" });
+    pump.push("quiet", { text: "q", attachments: [], ctx: "c" });
+    await tick();
+    pump.push("busy", { text: "correction", attachments: [], ctx: "c" });
+    await pump.idle();
+
+    expect(seen.find((s) => s.key === "quiet")!.superseded).toBe(false);
+    expect(seen.filter((s) => s.key === "busy").map((s) => s.superseded)).toEqual([true, false]);
+  });
+});
+
+describe("carrying a withheld reply forward", () => {
+  test("a turn following a withheld reply is told the reader never saw it", async () => {
+    // Without this the model reads its own undelivered answer in the
+    // transcript and writes "as I mentioned above" about text nobody saw.
+    const seen: boolean[] = [];
+    const releases: Array<() => void> = [];
+    const c = createCoalescer(async (_batch, turn) => {
+      seen.push(turn.previousReplyWithheld);
+      await new Promise<void>((r) => releases.push(r));
+      turn.superseded();
+    });
+    c.push(msg("first"));
+    await tick();
+    c.push(msg("correction"));
+    releases.shift()!();
+    await tick();
+    expect(seen).toEqual([false, true]);
+  });
+
+  test("a turn following a delivered reply carries no such flag", async () => {
+    const seen: boolean[] = [];
+    const c = createCoalescer(async (_batch, turn) => {
+      seen.push(turn.previousReplyWithheld);
+      turn.superseded();
+    });
+    c.push(msg("one"));
+    await c.idle();
+    c.push(msg("two"));
+    await c.idle();
+    expect(seen).toEqual([false, false]);
+  });
+
+  test("the pump folds the warning into the text the agent actually reads", async () => {
+    const locks = new Map<string, Promise<void>>();
+    const lockFor = (key: string) => (fn: () => Promise<void>) => {
+      locks.set(key, (locks.get(key) ?? Promise.resolve()).then(fn, fn));
+    };
+    const merged: string[] = [];
+    const pump = createTurnPump<string, string>(lockFor, async (_key, _batch, m, turn) => {
+      await new Promise((r) => setTimeout(r, 5));
+      merged.push(m.text);
+      turn.superseded();
+    });
+    pump.push("r", { text: "check prod", attachments: [], ctx: "c" });
+    await tick();
+    pump.push("r", { text: "i meant staging", attachments: [], ctx: "c" });
+    await pump.idle();
+
+    expect(merged[0]).toBe("check prod");
+    expect(merged[1]).toContain("i meant staging");
+    expect(merged[1]!.toLowerCase()).toContain("not sent");
+  });
+});
+
+describe("mergeMessages with a withheld reply", () => {
+  test("says the previous reply never reached the reader", () => {
+    const out = mergeMessages([msg("i meant staging")], true);
+    expect(out.text.toLowerCase()).toContain("not sent");
+    expect(out.text).toContain("i meant staging");
+  });
+
+  test("a lone message after a delivered reply is still byte-identical", () => {
+    expect(mergeMessages([msg("just one")], false).text).toBe("just one");
+    expect(mergeMessages([msg("just one")]).text).toBe("just one");
+  });
+
+  test("a burst that also follows a withheld reply reports both", () => {
+    const out = mergeMessages([msg("one"), msg("two")], true);
+    expect(out.text).toContain("2 messages");
+    expect(out.text.toLowerCase()).toContain("not sent");
+  });
+});
