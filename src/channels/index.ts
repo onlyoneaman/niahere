@@ -1,6 +1,7 @@
 import type { Channel } from "../types";
-import { registerChannel, getFactories, trackStarted, clearStarted, getStarted } from "./registry";
+import { registerChannel, getFactories, trackStarted, clearStarted, getStarted, untrackStarted } from "./registry";
 import { log } from "../utils/log";
+import { ignore } from "../utils/errors";
 import { getConfig } from "../utils/config";
 import { createTelegramChannel } from "./telegram";
 import { createSlackChannel } from "./slack";
@@ -19,6 +20,8 @@ export function registerAllChannels(): void {
   registerChannel(() => createSmsChannel());
   registerChannel(() => createWhatsAppChannel());
 }
+
+let reconciling = false;
 
 export interface StartResult {
   started: Channel[];
@@ -72,8 +75,26 @@ export async function startChannels(only?: readonly string[]): Promise<StartResu
  * `startChannels` abandons the failed channels with no retry, so without
  * reconciliation Nia stays alive but deaf on every channel until a manual
  * restart. The alive monitor calls this every healthy heartbeat.
+ *
+ * It also covers the reverse case, where a channel is tracked as running but
+ * its transport has died underneath it. Being in the registry was the only
+ * liveness anyone checked, so such a channel was never retried; `healthy()`
+ * lets a channel say otherwise and get rebuilt.
  */
 export async function reconcileChannels(): Promise<StartResult> {
+  // Bringing a channel up can block for as long as its transport takes to
+  // connect. Without this, a slow start would let the next heartbeat reconcile
+  // the same channel again and leave two of them running.
+  if (reconciling) return { started: [], failed: [] };
+  reconciling = true;
+  try {
+    return await reconcile();
+  } finally {
+    reconciling = false;
+  }
+}
+
+async function reconcile(): Promise<StartResult> {
   const wanted = getConfiguredChannelNames();
   const running = getStarted();
   const runningNames = new Set(running.map((ch) => ch.name));
@@ -81,9 +102,11 @@ export async function reconcileChannels(): Promise<StartResult> {
 
   const missing = wanted.filter((name) => !runningNames.has(name));
   const extra = running.filter((ch) => !wantedSet.has(ch.name));
-  if (missing.length === 0 && extra.length === 0) return { started: [], failed: [] };
+  const dead = running.filter((ch) => wantedSet.has(ch.name) && ch.healthy?.() === false);
+  if (missing.length === 0 && extra.length === 0 && dead.length === 0) return { started: [], failed: [] };
 
-  log.warn({ missing, extra: extra.map((ch) => ch.name) }, "channels out of sync, reconciling");
+  const deadNames = dead.map((ch) => ch.name);
+  log.warn({ missing, extra: extra.map((ch) => ch.name), dead: deadNames }, "channels out of sync, reconciling");
 
   // A channel was removed from config. stopChannels() tears down the whole
   // registry (it stops the shared Twilio server and clears all tracking), so a
@@ -93,9 +116,16 @@ export async function reconcileChannels(): Promise<StartResult> {
     return wanted.length > 0 ? startChannels() : { started: [], failed: [] };
   }
 
-  // Only additions: start just the missing channels so healthy ones stay
-  // connected and one persistently-failing channel can't thrash the rest.
-  return startChannels(missing);
+  // Tear the dead ones down individually so healthy channels stay connected. A
+  // stop that fails must not block the restart — the point is to replace them.
+  for (const channel of dead) {
+    await ignore(channel.stop(), `stopping dead channel ${channel.name}`);
+    untrackStarted(channel.name);
+  }
+
+  // Start just the channels that need it so healthy ones stay connected and one
+  // persistently-failing channel can't thrash the rest.
+  return startChannels([...missing, ...deadNames]);
 }
 
 export function getConfiguredChannelNames(): string[] {

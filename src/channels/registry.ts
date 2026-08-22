@@ -11,6 +11,10 @@ export function getFactories(): readonly ChannelFactory[] {
   return factories;
 }
 
+export function clearFactories(): void {
+  factories.length = 0;
+}
+
 export function trackStarted(channel: Channel): void {
   started.set(channel.name, channel);
 }
@@ -21,6 +25,10 @@ export function getChannel(name: string): Channel | undefined {
 
 export function getStarted(): Channel[] {
   return [...started.values()];
+}
+
+export function untrackStarted(name: string): void {
+  started.delete(name);
 }
 
 export function clearStarted(): void {

@@ -14,6 +14,7 @@ import {
   getStarted,
   registerChannel,
   trackStarted,
+  clearFactories,
 } from "../../src/channels/registry";
 import { resetConfig } from "../../src/utils/config";
 import type { Channel } from "../../src/types";
@@ -184,6 +185,60 @@ describe("reconcileChannels", () => {
     expect(stopped).toBe(true);
     expect(result.started).toEqual([]);
     expect(getStarted()).toEqual([]);
+  });
+
+  test("restarts a running channel whose transport has died", async () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, ["channels:", "  telegram:", "    bot_token: test-token"].join("\n"));
+    resetConfig();
+    clearFactories();
+
+    let stopped = false;
+    let started = false;
+    registerChannel(() => ({
+      name: "telegram",
+      start: async () => {
+        started = true;
+      },
+      stop: async () => {},
+      deliver: async () => {},
+    }));
+    trackStarted({
+      name: "telegram",
+      start: async () => {},
+      stop: async () => {
+        stopped = true;
+      },
+      healthy: () => false,
+      deliver: async () => {},
+    });
+
+    const result = await reconcileChannels();
+
+    expect(stopped).toBe(true);
+    expect(started).toBe(true);
+    expect(result.started.map((c) => c.name)).toEqual(["telegram"]);
+    expect(getStarted().map((c) => c.name)).toEqual(["telegram"]);
+  });
+
+  test("leaves a channel that reports itself healthy alone", async () => {
+    writeFileSync(`${TEST_DIR}/config.yaml`, ["channels:", "  telegram:", "    bot_token: test-token"].join("\n"));
+    resetConfig();
+
+    let stopped = false;
+    trackStarted({
+      name: "telegram",
+      start: async () => {},
+      stop: async () => {
+        stopped = true;
+      },
+      healthy: () => true,
+      deliver: async () => {},
+    });
+
+    const result = await reconcileChannels();
+
+    expect(stopped).toBe(false);
+    expect(result.started).toEqual([]);
   });
 });
 

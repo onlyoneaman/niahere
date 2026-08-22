@@ -1,4 +1,4 @@
-import { App } from "@slack/bolt";
+import { App, SocketModeReceiver } from "@slack/bolt";
 import type { WebClient } from "@slack/web-api";
 import type { Channel, ChatState, Attachment, Outbound, Recipient } from "../types";
 import { getConfig, updateRawConfig } from "../utils/config";
@@ -16,6 +16,45 @@ import { decideDelivery, shouldSuppressReply } from "./common/reply";
 import { createTurnPump } from "./common/coalesce";
 
 const logActivity = (status: string) => log.debug({ status }, "slack engine activity");
+
+/** A healthy reconnect lands in seconds, so a gap this long is not one in progress. */
+const SOCKET_STALL_MS = 3 * 60_000;
+
+/** Every Socket Mode state that is not "carrying events right now". */
+const DISCONNECTED_STATES = ["connecting", "reconnecting", "disconnecting", "disconnected"] as const;
+
+interface SocketStateEmitter {
+  on(event: string, listener: () => void): unknown;
+}
+
+/**
+ * Whether Socket Mode is actually carrying events, as opposed to merely having
+ * been started.
+ *
+ * Socket Mode can stop trying without saying so: a transport-level failure of
+ * `apps.connections.open` is classed unrecoverable, and the resulting rejection
+ * escapes an unawaited reconnect chain. The process stays up and the tokens stay
+ * valid, so nothing outside the socket can tell it is never coming back.
+ */
+export class SocketLiveness {
+  private downSince: number | null = null;
+
+  constructor(client: SocketStateEmitter) {
+    client.on("connected", () => {
+      if (this.downSince !== null) log.info("slack: socket connected");
+      this.downSince = null;
+    });
+    for (const state of DISCONNECTED_STATES) {
+      client.on(state, () => {
+        this.downSince ??= Date.now();
+      });
+    }
+  }
+
+  stalled(now = Date.now()): boolean {
+    return this.downSince !== null && now - this.downSince >= SOCKET_STALL_MS;
+  }
+}
 
 /** What answering a Slack message needs, carried per message so a coalesced
  *  turn can still reply in the right thread and clear every reaction. */
@@ -51,6 +90,11 @@ class SlackChannel implements Channel {
   private dmUserId: string | null = null;
   /** Timestamps of messages Nia posted proactively (used to detect replies to our own messages) */
   private outboundTs = new Set<string>();
+  private liveness: SocketLiveness | null = null;
+
+  healthy(): boolean {
+    return !this.liveness?.stalled();
+  }
 
   async deliver(out: Outbound): Promise<void> {
     if (!this.app) throw new Error("Slack not started");
@@ -275,10 +319,14 @@ class SlackChannel implements Channel {
 
     const self = this;
 
+    const receiver = new SocketModeReceiver({ appToken });
+    this.liveness = new SocketLiveness(receiver.client);
+
     const app = new App({
       token: botToken,
       appToken,
       socketMode: true,
+      receiver,
     });
 
     let botUserId: string | undefined;
@@ -572,6 +620,7 @@ class SlackChannel implements Channel {
     if (this.app) {
       await this.app.stop();
       this.app = null;
+      this.liveness = null;
     }
   }
 }

@@ -32,6 +32,13 @@ export interface Channel {
   start(): Promise<void>;
   stop(): Promise<void>;
   /**
+   * Whether the channel can still receive. Implement it wherever having started
+   * is not the same as being connected — a transport can die under a process
+   * that stays up, and no caller above this seam can tell. Omit it and the
+   * channel is assumed healthy for as long as it is running.
+   */
+  healthy?(): boolean;
+  /**
    * Deliver an outbound payload. Channels are expected to handle either
    * a text-only, media-only, or text+media payload; format details (chunking,
    * markdown, attachment shape) are channel-specific.
