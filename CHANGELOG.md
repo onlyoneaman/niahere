@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.13] - 2026-08-22
+
+### Fixed
+
+- **Slack went deaf for nine hours after its socket stopped reconnecting** — a dead channel is now detected and rebuilt within minutes instead of needing a manual restart.
+
 ## [0.5.12] - 2026-08-22
 
 ### Fixed
