@@ -13,6 +13,7 @@ import { classifyMime, validateAttachment, prepareImage } from "../utils/attachm
 import { getNiaHome } from "../utils/paths";
 import { ChatSessions, chainLock } from "./common/chat-session";
 import { shouldSuppressReply } from "./common/reply";
+import { transcribeAudio } from "./twilio/transcribe";
 
 function safeExtension(filename?: string): string {
   const ext = filename?.split(".").pop();
@@ -51,8 +52,22 @@ class TelegramChannel implements Channel {
     bot.on("message:text", (ctx) => this.handleText(ctx));
     bot.on("message:photo", (ctx) => this.handlePhoto(ctx));
     bot.on("message:document", (ctx) => this.handleDocument(ctx));
+    bot.on(["message:voice", "message:audio"], (ctx) => this.handleVoice(ctx));
+
+    // Without a handler grammY rethrows, and an error thrown while polling
+    // takes the whole loop down rather than the one update that caused it.
+    bot.catch((err) => log.error({ err: err.error, chatId: err.ctx.chatId }, "telegram handler failed"));
 
     bot.start({ onStart: () => log.info("telegram bot polling started") });
+  }
+
+  /**
+   * grammY stops polling for good if the loop crashes, and the process carries
+   * on regardless. `isRunning()` is its own account of whether that has
+   * happened, so ask it rather than inferring from the outside.
+   */
+  healthy(): boolean {
+    return !this.bot || this.bot.isRunning();
   }
 
   async stop(): Promise<void> {
@@ -164,6 +179,39 @@ class TelegramChannel implements Channel {
       } catch (err) {
         log.error({ err, chatId }, "failed to process document");
         await ignore(ctx.reply("Failed to process document."), "reply document failure");
+      }
+    });
+  }
+
+  private async handleVoice(ctx: Context): Promise<void> {
+    const media = ctx.message?.voice ?? ctx.message?.audio;
+    if (!ctx.chatId || !media || !this.gate(ctx)) return;
+    this.registerOutbound(ctx.chatId);
+    const state = await this.chats.get(ctx.chatId);
+    const chatId = ctx.chatId;
+    this.withLock(chatId, async () => {
+      try {
+        const apiKey = getConfig().channels.phone.openai_api_key;
+        if (!apiKey) {
+          await ctx.reply("Can't transcribe voice notes — channels.phone.openai_api_key isn't set.");
+          return;
+        }
+        const data = await this.downloadFile(media.file_id);
+        const error = validateAttachment(data);
+        if (error) {
+          await ctx.reply(error);
+          return;
+        }
+        const transcript = await transcribeAudio({ apiKey, data, mime: media.mime_type || "audio/ogg" });
+        if (!transcript) {
+          await ctx.reply("Couldn't make out anything in that voice note.");
+          return;
+        }
+        const caption = ctx.message!.caption;
+        await this.processMessage(ctx, state, caption ? `${caption}\n\n${transcript}` : transcript);
+      } catch (err) {
+        log.error({ err, chatId }, "failed to process voice note");
+        await ignore(ctx.reply(`Failed to transcribe that voice note — ${errMsg(err)}`), "reply voice failure");
       }
     });
   }
