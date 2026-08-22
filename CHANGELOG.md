@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.14] - 2026-08-22
+
+### Fixed
+
+- **Telegram voice notes were silently ignored** — they now transcribe through the same path WhatsApp uses.
+- **Telegram polling could die unnoticed** — it now has an error boundary and reports liveness, so a stopped bot gets rebuilt.
+
 ## [0.5.13] - 2026-08-22
 
 ### Fixed
